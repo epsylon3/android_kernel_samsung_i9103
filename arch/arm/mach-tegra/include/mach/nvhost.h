@@ -85,6 +85,7 @@ struct nvhost_submit_hdr {
 	__u32 num_waitchks;
 	__u32 waitchk_mask;
 #endif
+	__u32 null_kickoff;
 };
 
 struct nvhost_cmdbuf {

@@ -32,8 +32,9 @@
 #include "dev.h"
 
 #define MAX_ACM_TIMEOUT 2*HZ
-#define ACM_TIMEOUT 4
 #define SUSPEND_TIMEOUT 6*HZ // As per __device_suspend timer.expires
+#define ACM_TIMEOUT 1*HZ
+
 #define DISABLE_3D_POWERGATING
 #define DISABLE_MPE_POWERGATING
 
@@ -156,6 +157,7 @@ int nvhost_module_init(struct nvhost_module *mod, const char *name,
 		struct device *dev)
 {
 	int i = 0;
+
 	mod->name = name;
 
 	while (mod->clk_rate_has_set == 0 && i < NVHOST_MODULE_MAX_CLOCKS) {
@@ -169,8 +171,11 @@ int nvhost_module_init(struct nvhost_module *mod, const char *name,
 				__func__, name);
 			break;
 		}
-		if (rate != clk_get_rate(mod->clk[i]))
+		if (rate != clk_get_rate(mod->clk[i])) {
+			clk_enable(mod->clk[i]);
 			clk_set_rate(mod->clk[i], rate);
+			clk_disable(mod->clk[i]);
+		}
 		i++;
 	}
 

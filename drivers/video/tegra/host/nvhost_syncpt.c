@@ -246,7 +246,7 @@ int nvhost_syncpt_wait_timeout(struct nvhost_syncpt *sp, u32 id,
 			debug_done++;
             
 		}
-	};
+	}
 	nvhost_intr_put_ref(&(syncpt_to_dev(sp)->intr), ref);
 
 done:
