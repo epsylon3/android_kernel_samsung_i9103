@@ -1326,6 +1326,7 @@ config THUMB2_KERNEL
 	depends on CPU_V7 && EXPERIMENTAL
 	select AEABI
 	select ARM_ASM_UNIFIED
+	select ARM_UNWIND
 	help
 	  By enabling this option, the kernel will be compiled in
 	  Thumb-2 mode. A compiler/assembler that understand the unified
@@ -1384,7 +1385,7 @@ config AEABI
 
 config OABI_COMPAT
 	bool "Allow old ABI binaries to run with this kernel (EXPERIMENTAL)"
-	depends on AEABI && EXPERIMENTAL
+	depends on AEABI && EXPERIMENTAL && !THUMB2_KERNEL
 	default y
 	help
 	  This option preserves the old syscall interface along with the
@@ -1782,7 +1783,7 @@ comment "At least one emulation must be selected"
 
 config FPE_NWFPE
 	bool "NWFPE math emulation"
-	depends on !AEABI || OABI_COMPAT
+	depends on (!AEABI || OABI_COMPAT) && !THUMB2_KERNEL
 	---help---
 	  Say Y to include the NWFPE floating point emulator in the kernel.
 	  This is necessary to run most binaries. Linux does not currently
