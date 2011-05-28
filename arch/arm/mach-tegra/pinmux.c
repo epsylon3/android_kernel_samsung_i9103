@@ -140,6 +140,9 @@ static const char *func_name(enum tegra_mux_func func)
 	if (func == TEGRA_MUX_NONE)
 		return "NONE";
 
+	if (func == TEGRA_MUX_INVALID)
+		return "INVALID";
+
 	if (func < 0 || func >=  TEGRA_MAX_MUX)
 		return "<UNKNOWN>";
 
@@ -198,6 +201,13 @@ static int tegra_pinmux_set_func(const struct tegra_pingroup_config *config)
 
 	if (pingroups[pg].mux_reg < 0)
 		return -EINVAL;
+
+	if (func == TEGRA_MUX_INVALID) {
+		pr_err("The pingroup %s is not recommended for option %s\n",
+				pingroup_name(pg), func_name(func));
+		WARN_ON(1);
+		return -EINVAL;
+	}
 
 	if (func < 0)
 		return -ERANGE;
@@ -752,7 +762,7 @@ static int dbg_pinmux_show(struct seq_file *s, void *unused)
 
 		seq_printf(s, "\t{TEGRA_PINGROUP_%s", pingroups[i].name);
 		len = strlen(pingroups[i].name);
-		dbg_pad_field(s, 5 - len);
+		dbg_pad_field(s, 15 - len);
 
 		if (pingroups[i].mux_reg < 0) {
 			seq_printf(s, "TEGRA_MUX_NONE");
@@ -760,10 +770,15 @@ static int dbg_pinmux_show(struct seq_file *s, void *unused)
 		} else {
 			mux = (pg_readl(pingroups[i].mux_reg) >>
 			       pingroups[i].mux_bit) & 0x3;
-			if (pingroups[i].funcs[mux] == TEGRA_MUX_RSVD) {
+			BUG_ON(pingroups[i].funcs[mux] == 0);
+			if (pingroups[i].funcs[mux] ==  TEGRA_MUX_INVALID) {
+				seq_printf(s, "TEGRA_MUX_INVALID");
+				len = 7;
+			} else if (pingroups[i].funcs[mux] & TEGRA_MUX_RSVD) {
 				seq_printf(s, "TEGRA_MUX_RSVD%1lu", mux+1);
 				len = 5;
 			} else {
+				BUG_ON(!tegra_mux_names[pingroups[i].funcs[mux]]);
 				seq_printf(s, "TEGRA_MUX_%s",
 					   tegra_mux_names[pingroups[i].funcs[mux]]);
 				len = strlen(tegra_mux_names[pingroups[i].funcs[mux]]);
