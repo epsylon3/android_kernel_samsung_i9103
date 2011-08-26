@@ -28,38 +28,55 @@
 #include <linux/slab.h>
 #include <linux/err.h>
 #include <linux/gpio.h>
-
+#include <linux/device.h>
 #include <linux/nct1008.h>
+#include <linux/delay.h>
+#include <linux/regulator/consumer.h>
 #if defined(CONFIG_MACH_N1)
 #include <linux/hwmon.h>
+#endif
+
+#ifdef CONFIG_MACH_N1
+#include <linux/regulator/driver.h>
+#include <linux/regulator/machine.h>
 #endif
 
 #define DRIVER_NAME "nct1008"
 
 /* Register Addresses */
-#define LOCAL_TEMP_RD				0x00
-#define EXTERNAL_TEMP_RD			0x01
-#define STATUS_RD					0x02
-#define CONFIG_RD					0x03
+#define LOCAL_TEMP_RD			0x00
+#define EXT_TEMP_RD_HI			0x01
+#define EXT_TEMP_RD_LO			0x10
+#define STATUS_RD			0x02
+#define CONFIG_RD			0x03
 
-#define CONFIG_WR					0x09
-#define CONV_RATE_WR				0x0A
+#define LOCAL_TEMP_HI_LIMIT_RD		0x05
+#define LOCAL_TEMP_LO_LIMIT_RD		0x06
+
+#define EXT_TEMP_HI_LIMIT_HI_BYTE_RD	0x07
+
+#define CONFIG_WR			0x09
+#define CONV_RATE_WR			0x0A
 #define LOCAL_TEMP_HI_LIMIT_WR		0x0B
-#define EXT_TEMP_HI_LIMIT_HI_BYTE	0x0D
-#define OFFSET_WR					0x11
-#define EXT_THERM_LIMIT_WR			0x19
+#define LOCAL_TEMP_LO_LIMIT_WR		0x0C
+#define EXT_TEMP_HI_LIMIT_HI_BYTE_WR	0x0D
+#define EXT_TEMP_LO_LIMIT_HI_BYTE_WR	0x0E
+#define OFFSET_WR			0x11
+#define OFFSET_QUARTER_WR		0x12
+#define EXT_THERM_LIMIT_WR		0x19
 #define LOCAL_THERM_LIMIT_WR		0x20
-#define THERM_HYSTERESIS_WR			0x21
+#define THERM_HYSTERESIS_WR		0x21
 
 /* Configuration Register Bits */
-#define EXTENDED_RANGE_BIT			(0x1 << 2)
-#define THERM2_BIT					(0x1 << 5)
-#define STANDBY_BIT					(0x1 << 6)
+#define EXTENDED_RANGE_BIT		BIT(2)
+#define THERM2_BIT			BIT(5)
+#define STANDBY_BIT			BIT(6)
+#define ALERT_BIT			BIT(7)
 
 /* Max Temperature Measurements */
 #define EXTENDED_RANGE_OFFSET		64U
-#define STANDARD_RANGE_MAX			127U
-#define EXTENDED_RANGE_MAX			(150U + EXTENDED_RANGE_OFFSET)
+#define STANDARD_RANGE_MAX		127U
+#define EXTENDED_RANGE_MAX		(150U + EXTENDED_RANGE_OFFSET)
 
 #define NCT1008_DELAY 1000
 
@@ -68,19 +85,13 @@ struct nct1008_data {
 	struct i2c_client *client;
 	struct mutex mutex;
 #if defined(CONFIG_MACH_N1)
-    struct device *hwmon_dev;
+	struct device *hwmon_dev;
 #endif
 	u8 config;
 	void (*alarm_fn)(bool raised);
 	struct nct1008_temp_data *pdata;
 	struct nct1008_temp_callbacks callbacks;
 };
-
-#ifdef CONFIG_MACH_N1
-#include <linux/regulator/driver.h>
-#include <linux/regulator/machine.h>
-#include <linux/delay.h>
-#endif
 
 #if defined(CONFIG_MACH_N1)
 static struct i2c_client *g_client;
@@ -93,7 +104,7 @@ static ssize_t nct1008_show_temp(struct device *dev,
 	if (!dev || !buf || !attr)
 		return -EINVAL;
 
-    data = i2c_smbus_read_byte_data(g_client, STATUS_RD);
+	data = i2c_smbus_read_byte_data(g_client, STATUS_RD);
 	if (data < 0) {
 		dev_err(&g_client->dev, "%s: failed to read "
 			"temperature\n", __func__);
@@ -114,7 +125,7 @@ static ssize_t nct1008_show_temp(struct device *dev,
 
 	printk(KERN_DEBUG "[TM] local temp : %d\n", temp_value);
 
-    data = i2c_smbus_read_byte_data(g_client, EXTERNAL_TEMP_RD);
+	data = i2c_smbus_read_byte_data(g_client, EXT_TEMP_RD_HI);
 	if (data < 0) {
 		dev_err(&g_client->dev, "%s: failed to read "
 			"temperature\n", __func__);
@@ -135,7 +146,6 @@ static int nct1008_update_local_temp(struct nct1008_temp_callbacks *ptr)
 {
 	u8 raw_temp_value = 0, external_temp;
 	u8 config_reg;
-	u8 status_reg;
 	int temp_value = 0;
 	int extended_range_offset = 64;
 	int err;
@@ -175,7 +185,7 @@ static int nct1008_update_local_temp(struct nct1008_temp_callbacks *ptr)
 		return -EINVAL;
 	}
 
-	external_temp = i2c_smbus_read_byte_data(client, EXTERNAL_TEMP_RD);
+	external_temp = i2c_smbus_read_byte_data(client, EXT_TEMP_RD_HI);
 	if (external_temp < 0) {
 		dev_err(&client->dev, "%s: failed to read "
 			"temperature (%d), (%d)\n", __func__, raw_temp_value, external_temp);
@@ -227,7 +237,7 @@ static void nct1008_disable(struct i2c_client *client)
 
 	i2c_smbus_write_byte_data(client, CONFIG_WR,
 				  data->config | STANDBY_BIT);
-	
+
 	ret = i2c_smbus_read_byte_data(client, CONFIG_RD);
 
 	regulator_disable(reg);
@@ -324,7 +334,7 @@ static int nct1008_configure_sensor(struct nct1008_data* data)
 
 	/* External Temperature Throttling limit */
 	value = temperature_to_value(pdata->ext_range, pdata->throttling_ext_limit);
-	err = i2c_smbus_write_byte_data(client, EXT_TEMP_HI_LIMIT_HI_BYTE, value);
+	err = i2c_smbus_write_byte_data(client, EXT_TEMP_HI_LIMIT_HI_BYTE_WR, value);
 	if (err < 0)
 		goto error;
 
@@ -335,7 +345,13 @@ static int nct1008_configure_sensor(struct nct1008_data* data)
 		goto error;
 
 	/* Remote channel offset */
-	err = i2c_smbus_write_byte_data(client, OFFSET_WR, pdata->offset);
+	err = i2c_smbus_write_byte_data(client, OFFSET_WR, pdata->offset / 4);
+	if (err < 0)
+		goto error;
+
+	/* Remote channel offset fraction (quarters) */
+	err = i2c_smbus_write_byte_data(client, OFFSET_QUARTER_WR,
+					(pdata->offset % 4) << 6);
 	if (err < 0)
 		goto error;
 
@@ -391,16 +407,16 @@ static int __devinit nct1008_probe(struct i2c_client *client, const struct i2c_d
 			data->pdata->register_callbacks(&data->callbacks);
 
 #if defined(CONFIG_MACH_N1)
-    g_client = client;
-    data->hwmon_dev = hwmon_device_register(&client->dev);
-    if (IS_ERR(data->hwmon_dev)) {
+	g_client = client;
+	data->hwmon_dev = hwmon_device_register(&client->dev);
+	if (IS_ERR(data->hwmon_dev)) {
 		err = PTR_ERR(data->hwmon_dev);
 		dev_err(&client->dev, "%s: hwmon_device_register "
 			"failed\n", __func__);
 		goto error;
-    }
+	}
 
-    if (device_create_file(data->hwmon_dev, &dev_attr_temp) < 0) {
+	if (device_create_file(data->hwmon_dev, &dev_attr_temp) < 0) {
 		pr_err("Failed to create device file(%s)!\n", dev_attr_temp.attr.name);
 		goto error;
 	}
@@ -477,5 +493,5 @@ static void __exit nct1008_exit(void)
 MODULE_DESCRIPTION("Temperature sensor driver for OnSemi NCT1008");
 MODULE_LICENSE("GPL");
 
-module_init (nct1008_init);
-module_exit (nct1008_exit);
+module_init(nct1008_init);
+module_exit(nct1008_exit);
