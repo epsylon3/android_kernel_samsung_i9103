@@ -1,6 +1,4 @@
 /*
- * arch/arm/mach-tegra/fuse.c
- *
  * Copyright (C) 2010 Google, Inc.
  *
  * Author:
@@ -17,22 +15,49 @@
  *
  */
 
+#ifndef __MACH_TEGRA_FUSE_H
+#define __MACH_TEGRA_FUSE_H
+
 enum tegra_revision {
 	TEGRA_REVISION_UNKNOWN = 0,
+	TEGRA_REVISION_A01,
 	TEGRA_REVISION_A02,
 	TEGRA_REVISION_A03,
 	TEGRA_REVISION_A03p,
+	TEGRA_REVISION_A04,
 	TEGRA_REVISION_MAX,
 };
 
+#define SKU_ID_T20	8
+#define SKU_ID_T25SE	20
+#define SKU_ID_AP25	23
+#define SKU_ID_T25	24
+#define SKU_ID_AP25E	27
+#define SKU_ID_T25E	28
+
+#define TEGRA20		0x20
+#define TEGRA30		0x30
+
+extern int tegra_sku_id;
+extern int tegra_cpu_process_id;
+extern int tegra_core_process_id;
+extern int tegra_chip_id;
+extern enum tegra_revision tegra_revision;
+
+#define tegra_sku_id() tegra_sku_id
+#define tegra_cpu_process_id() tegra_cpu_process_id
+#define tegra_core_process_id() tegra_core_process_id
+#define tegra_chip_id() tegra_chip_id
+#define tegra_revision() tegra_revision
+
+extern int tegra_bct_strapping;
+
 unsigned long long tegra_chip_uid(void);
 unsigned int tegra_spare_fuse(int bit);
-int tegra_sku_id(void);
-int tegra_cpu_process_id(void);
-int tegra_core_process_id(void);
-int tegra_soc_speedo_id(void);
 void tegra_init_fuse(void);
+int tegra_soc_speedo_id(void);
 void tegra_init_speedo_data(void);
 u32 tegra_fuse_readl(unsigned long offset);
 void tegra_fuse_writel(u32 value, unsigned long offset);
-enum tegra_revision tegra_get_revision(void);
+
+#endif
