@@ -39,6 +39,23 @@
 #include "clock.h"
 #include "fuse.h"
 
+/*
+ * Storage for debug-macro.S's state.
+ *
+ * This must be in .data not .bss so that it gets initialized each time the
+ * kernel is loaded. The data is declared here rather than debug-macro.S so
+ * that multiple inclusions of debug-macro.S point at the same data.
+ */
+#define TEGRA_DEBUG_UART_OFFSET (TEGRA_DEBUG_UART_BASE & 0xFFFF)
+u32 tegra_uart_config[3] = {
+	/* Debug UART initialization required */
+	1,
+	/* Debug UART physical address */
+	(u32)(IO_APB_PHYS + TEGRA_DEBUG_UART_OFFSET),
+	/* Debug UART virtual address */
+	(u32)(IO_APB_VIRT + TEGRA_DEBUG_UART_OFFSET),
+};
+
 #define MC_SECURITY_CFG2 0x7c
 
 unsigned long tegra_bootloader_fb_start;
