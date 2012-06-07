@@ -1641,9 +1641,16 @@ static irqreturn_t sdhci_irq(int irq, void *dev_id)
 	u32 intmask;
 	int cardint = 0;
 
+	unsigned int cmd = 0;
 	spin_lock(&host->lock);
 
 	intmask = sdhci_readl(host, SDHCI_INT_STATUS);
+    /*check error situation*/
+	if (intmask & SDHCI_INT_ERROR_MASK) {
+	   cmd = sdhci_readl(host, SDHCI_COMMAND);
+	   cmd = ((cmd>>24)&0x3f);
+	   printk("[MMC] STATUS = %08x for cmd = %d \n", intmask, cmd);
+		}
 
 	if (!intmask || intmask == 0xffffffff) {
 		result = IRQ_NONE;

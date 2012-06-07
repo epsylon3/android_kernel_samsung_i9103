@@ -333,6 +333,9 @@ static const char *fm_vol_control[] = {"0", "1", "2", "3", "4", "5",
 						"11", "12", "13", "14", "15"};
 static const char *wb_voice_mode_control[] = {"OFF", "ON"};
 
+// SYS_AUDIO - csc_tuning : apply tuning values by checking CSC
+static const char *customer_select[] = {"CMD_CUSTOMER_COMMON", "CMD_CUSTOMER_SWA"};
+
 static int wm8994_get_voip_call(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
@@ -407,6 +410,35 @@ static int wm8994_set_loopback_path(struct snd_kcontrol *kcontrol, struct snd_ct
 	return 0;
 }
 #endif
+
+// SYS_AUDIO - csc_tuning : apply tuning values by checking CSC
+static int wm8994_get_customer(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	return 0;
+}
+
+static int wm8994_set_customer(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+	struct wm8994_priv *wm8994 = codec->drvdata;
+	int control_data = ucontrol->value.integer.value[0];
+	
+	DEBUG_LOG("kds // control_data = %d", control_data);	
+	
+	switch (control_data) {
+	case CMD_CUSTOMER_SWA:
+		DEBUG_LOG("kds // Customer SWA set onl!!");
+		wm8994->customer = CUSTOMER_SWA;
+		break; 
+	default:
+		break;
+	}
+
+	return 0;
+}
+// SYS_AUDIO - csc_tuning ]]
 
 static int wm8994_get_codec_tuning(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
 {
@@ -1327,6 +1359,9 @@ static const struct soc_enum path_control_enum[] = {
 #ifdef WM8994_FACTORY_LOOPBACK
 	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(loopback_path), loopback_path),
 #endif
+// SYS_AUDIO - csc_tuning : apply tuning values by checking CSC
+	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(customer_select), customer_select),
+
 };
 
 static const struct snd_kcontrol_new wm8994_snd_controls[] = {
@@ -1398,6 +1433,15 @@ static const struct snd_kcontrol_new wm8994_snd_controls[] = {
 	SOC_ENUM_EXT("factory_test_loopback", path_control_enum[10],
 		wm8994_get_loopback_path, wm8994_set_loopback_path),
 #endif
+#endif
+
+// SYS_AUDIO - csc_tuning : apply tuning values by checking CSC
+#if defined(WM8994_FACTORY_LOOPBACK)
+	SOC_ENUM_EXT("Set_Customer", path_control_enum[11],
+		wm8994_get_customer, wm8994_set_customer)
+#else
+	SOC_ENUM_EXT("Set_Customer", path_control_enum[10],
+		wm8994_get_customer, wm8994_set_customer)
 #endif
 
 };
@@ -3794,6 +3838,9 @@ static int wm8994_init(struct wm8994_priv *wm8994,
 	wm8994->mute_pop = 0;
 	wm8994->boot_state = 1;
 	wm8994->dap_state = dap_connection_codec_slave;
+
+// SYS_AUDIO - csc_tuning : apply tuning values by checking CSC
+	wm8994->customer = CUSTOMER_COMMON;
 
 	INIT_DELAYED_WORK(&codec->delayed_work, wm8994_reset_analog_vol_work);
 	wm8994_workq = create_workqueue("wm8994");

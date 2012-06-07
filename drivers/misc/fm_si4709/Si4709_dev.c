@@ -161,7 +161,7 @@ int Si4709_dev_init(struct i2c_client *client)
 
 	Si4709_dev.state.power_state = RADIO_POWERDOWN;
 	Si4709_dev.state.seek_state = RADIO_SEEK_OFF;
-
+	Si4709_dev.settings.channel_spacing =CHAN_SPACING_100_kHz;   //110812 hm83.cho change init point of spacing
 	ret = i2c_read(BOOTCONFIG);
 	if (ret < 0)
 		debug("i2c_read failed");
@@ -258,7 +258,7 @@ int Si4709_dev_powerup(void)
 {
 	int ret = 0;
 	u32 value = 100;
-
+	
 	debug("Si4709_dev_powerup called");
 
 	mutex_lock(&(Si4709_dev.lock));
@@ -321,11 +321,28 @@ int Si4709_dev_powerup(void)
 			Si4709_dev.settings.band = BAND_87500_108000_kHz;
 			Si4709_dev.settings.bottom_of_band = FREQ_87500_kHz;
 
-			SYSCONFIG2_BITSET_SPACE_100_KHz(&Si4709_dev.
-							registers[SYSCONFIG2]);
-			Si4709_dev.settings.channel_spacing =
-			    CHAN_SPACING_100_kHz;
+			//SYSCONFIG2_BITSET_SPACE_100_KHz(&Si4709_dev.
+			//				registers[SYSCONFIG2]);
+			//Si4709_dev.settings.channel_spacing =
+			//    CHAN_SPACING_100_kHz;
+			switch (Si4709_dev.settings.channel_spacing) {
+				case CHAN_SPACING_200_kHz:
+					SYSCONFIG2_BITSET_SPACE_200_KHz(&Si4709_dev.
+									registers[SYSCONFIG2]);
+					break;
 
+				case CHAN_SPACING_100_kHz:
+					SYSCONFIG2_BITSET_SPACE_100_KHz(&Si4709_dev.
+									registers[SYSCONFIG2]);
+					break;
+
+				case CHAN_SPACING_50_kHz:
+					SYSCONFIG2_BITSET_SPACE_50_KHz(&Si4709_dev.
+								       registers[SYSCONFIG2]);
+					break;
+				default:
+					ret = -1;
+			}
 			/* SYSCONFIG3_BITSET_SKSNR( */
 			/*      &Si4709_dev.registers[SYSCONFIG3],3); */
 /*VNVS:18-NOV'09 : modified for detecting more stations of good quality*/
