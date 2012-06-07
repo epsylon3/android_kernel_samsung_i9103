@@ -245,6 +245,8 @@ static struct tegra_dc_out ventana_disp2_out = {
 	.dcc_bus	= 1,
 	.hotplug_gpio	= ventana_hdmi_hpd,
 
+	.max_pixclock	= KHZ2PICOS(148500),
+
 	.align		= TEGRA_DC_ALIGN_MSB,
 	.order		= TEGRA_DC_ORDER_RED_BLUE,
 
@@ -332,14 +334,16 @@ struct early_suspend ventana_panel_early_suspender;
 
 static void ventana_panel_early_suspend(struct early_suspend *h)
 {
-	if (num_registered_fb > 0)
-		fb_blank(registered_fb[0], FB_BLANK_POWERDOWN);
+	unsigned i;
+	for (i = 0; i < num_registered_fb; i++)
+		fb_blank(registered_fb[i], FB_BLANK_POWERDOWN);
 }
 
 static void ventana_panel_late_resume(struct early_suspend *h)
 {
-	if (num_registered_fb > 0)
-		fb_blank(registered_fb[0], FB_BLANK_UNBLANK);
+	unsigned i;
+	for (i = 0; i < num_registered_fb; i++)
+		fb_blank(registered_fb[i], FB_BLANK_UNBLANK);
 }
 #endif
 

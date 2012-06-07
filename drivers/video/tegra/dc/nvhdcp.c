@@ -36,6 +36,8 @@
 #include "hdmi_reg.h"
 #include "hdmi.h"
 
+DECLARE_WAIT_QUEUE_HEAD(wq_worker);
+
 /* for 0x40 Bcaps */
 #define BCAPS_REPEATER (1 << 6)
 #define BCAPS_READY (1 << 5)
@@ -108,8 +110,9 @@ static inline bool nvhdcp_is_plugged(struct tegra_nvhdcp *nvhdcp)
 
 static inline bool nvhdcp_set_plugged(struct tegra_nvhdcp *nvhdcp, bool plugged)
 {
-	return nvhdcp->plugged = plugged;
+	nvhdcp->plugged = plugged;
 	wmb();
+	return plugged;
 }
 
 static int nvhdcp_i2c_read(struct tegra_nvhdcp *nvhdcp, u8 reg,
@@ -139,7 +142,7 @@ static int nvhdcp_i2c_read(struct tegra_nvhdcp *nvhdcp, u8 reg,
 		}
 		status = i2c_transfer(nvhdcp->client->adapter,
 			msg, ARRAY_SIZE(msg));
-		if (retries > 1)
+		if ((status < 0) && (retries > 1))
 			msleep(250);
 	} while ((status < 0) && retries--);
 
@@ -176,7 +179,7 @@ static int nvhdcp_i2c_write(struct tegra_nvhdcp *nvhdcp, u8 reg,
 		}
 		status = i2c_transfer(nvhdcp->client->adapter,
 			msg, ARRAY_SIZE(msg));
-		if (retries > 1)
+		if ((status < 0) && (retries > 1))
 			msleep(250);
 	} while ((status < 0) && retries--);
 
@@ -962,14 +965,6 @@ static void nvhdcp_downstream_worker(struct work_struct *work)
 		goto failure;
 	}
 
-	tmp = tegra_hdmi_readl(hdmi, HDMI_NV_PDISP_RG_HDCP_CTRL);
-	tmp |= CRYPT_ENABLED;
-	if (b_caps & BCAPS_11) /* HDCP 1.1 ? */
-		tmp |= ONEONE_ENABLED;
-	tegra_hdmi_writel(hdmi, tmp, HDMI_NV_PDISP_RG_HDCP_CTRL);
-
-	nvhdcp_vdbg("CRYPT enabled\n");
-
 	/* if repeater then get repeater info */
 	if (b_caps & BCAPS_REPEATER) {
 		e = get_repeater_info(nvhdcp);
@@ -978,6 +973,14 @@ static void nvhdcp_downstream_worker(struct work_struct *work)
 			goto failure;
 		}
 	}
+
+	tmp = tegra_hdmi_readl(hdmi, HDMI_NV_PDISP_RG_HDCP_CTRL);
+	tmp |= CRYPT_ENABLED;
+	if (b_caps & BCAPS_11) /* HDCP 1.1 ? */
+		tmp |= ONEONE_ENABLED;
+	tegra_hdmi_writel(hdmi, tmp, HDMI_NV_PDISP_RG_HDCP_CTRL);
+
+	nvhdcp_vdbg("CRYPT enabled\n");
 
 	nvhdcp->state = STATE_LINK_VERIFY;
 	nvhdcp_info("link verified!\n");
@@ -995,7 +998,8 @@ static void nvhdcp_downstream_worker(struct work_struct *work)
 			goto failure;
 		}
 		mutex_unlock(&nvhdcp->lock);
-		msleep(1500);
+		wait_event_interruptible_timeout(wq_worker, 0,
+				msecs_to_jiffies(1500));
 		mutex_lock(&nvhdcp->lock);
 
 	}
@@ -1037,6 +1041,7 @@ static int tegra_nvhdcp_off(struct tegra_nvhdcp *nvhdcp)
 	nvhdcp->state = STATE_OFF;
 	nvhdcp_set_plugged(nvhdcp, false);
 	mutex_unlock(&nvhdcp->lock);
+	wake_up_interruptible(&wq_worker);
 	flush_workqueue(nvhdcp->downstream_wq);
 	return 0;
 }

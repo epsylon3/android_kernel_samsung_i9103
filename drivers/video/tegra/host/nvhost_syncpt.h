@@ -25,10 +25,13 @@
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <mach/nvhost.h>
+#include <mach/nvmap.h>
 #include <asm/atomic.h>
 
 #include "nvhost_hardware.h"
 
+#define NVSYNCPT_GRAPHICS_HOST		     (0)
 #define NVSYNCPT_VI_ISP_0		     (12)
 #define NVSYNCPT_VI_ISP_1		     (13)
 #define NVSYNCPT_VI_ISP_2		     (14)
@@ -98,6 +101,12 @@ static inline u32 nvhost_syncpt_read_max(struct nvhost_syncpt *sp, u32 id)
 	return (u32)atomic_read(&sp->max_val[id]);
 }
 
+static inline u32 nvhost_syncpt_read_min(struct nvhost_syncpt *sp, u32 id)
+{
+	smp_rmb();
+	return (u32)atomic_read(&sp->min_val[id]);
+}
+
 /**
  * Returns true if syncpoint has reached threshold
  */
@@ -135,13 +144,17 @@ u32 nvhost_syncpt_read(struct nvhost_syncpt *sp, u32 id);
 void nvhost_syncpt_incr(struct nvhost_syncpt *sp, u32 id);
 
 int nvhost_syncpt_wait_timeout(struct nvhost_syncpt *sp, u32 id, u32 thresh,
-			u32 timeout);
+			u32 timeout, u32 *value);
 
 static inline int nvhost_syncpt_wait(struct nvhost_syncpt *sp, u32 id, u32 thresh)
 {
-	return nvhost_syncpt_wait_timeout(sp, id, thresh, MAX_SCHEDULE_TIMEOUT);
+	return nvhost_syncpt_wait_timeout(sp, id, thresh,
+	                                  MAX_SCHEDULE_TIMEOUT, NULL);
 }
 
+int nvhost_syncpt_wait_check(struct nvmap_client *nvmap,
+			struct nvhost_syncpt *sp, u32 mask,
+			struct nvhost_waitchk *waitp, u32 num_waits);
 
 const char *nvhost_syncpt_name(u32 id);
 

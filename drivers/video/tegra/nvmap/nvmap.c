@@ -27,6 +27,7 @@
 #include <linux/smp_lock.h>
 #include <linux/vmalloc.h>
 #include <linux/wait.h>
+#include <linux/slab.h>
 
 #include <asm/pgtable.h>
 #include <asm/tlbflush.h>
@@ -698,6 +699,7 @@ void nvmap_munmap(struct nvmap_handle_ref *ref, void *addr)
 		addr -= (h->carveout->base & ~PAGE_MASK);
 		vm = remove_vm_area(addr);
 		BUG_ON(!vm);
+		kfree(vm);
 		nvmap_usecount_dec(h);
 	}
 	nvmap_handle_put(h);
@@ -729,4 +731,54 @@ struct nvmap_handle_ref *nvmap_alloc(struct nvmap_client *client, size_t size,
 void nvmap_free(struct nvmap_client *client, struct nvmap_handle_ref *r)
 {
 	nvmap_free_handle_id(client, nvmap_ref_to_id(r));
+}
+
+/*
+ * create a mapping to the user's buffer and write it
+ * (uses similar logic from nvmap_reloc_pin_array to map the cmdbuf)
+ */
+int nvmap_patch_wait(struct nvmap_client *client,
+				struct nvmap_handle *patch,
+				u32 patch_offset, u32 patch_value)
+{
+	unsigned long phys;
+	unsigned int pfn, last_pfn = 0;
+	void *addr;
+	pte_t **pte;
+
+	if (patch_offset >= patch->size) {
+		nvmap_warn(client, "read/write outside of handle\n");
+		return -EFAULT;
+	}
+
+	pte = nvmap_alloc_pte(client->dev, &addr);
+	if (IS_ERR(pte))
+		return PTR_ERR(pte);
+
+	/* derive physaddr of cmdbuf WAIT to patch */
+	if (patch->heap_pgalloc) {
+		unsigned int page = patch_offset >> PAGE_SHIFT;
+		phys = page_to_phys(patch->pgalloc.pages[page]);
+		phys += (patch_offset & ~PAGE_MASK);
+	} else {
+		phys = patch->carveout->base + patch_offset;
+	}
+
+	pfn = __phys_to_pfn(phys);
+
+	/* write PTE, so addr points to cmdbuf PFN */
+	if (pfn != last_pfn) {
+		pgprot_t prot = nvmap_pgprot(patch, pgprot_kernel);
+		unsigned long kaddr = (unsigned long)addr;
+		set_pte_at(&init_mm, kaddr, *pte, pfn_pte(pfn, prot));
+		flush_tlb_kernel_page(kaddr);
+		last_pfn = pfn;
+	}
+
+	/* write patch_value to addr + page offset */
+	__raw_writel(patch_value, addr + (phys & ~PAGE_MASK));
+
+	nvmap_free_pte(client->dev, pte);
+	wmb();
+	return 0;
 }

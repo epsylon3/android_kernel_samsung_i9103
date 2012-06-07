@@ -161,17 +161,23 @@ void nvhost_syncpt_incr(struct nvhost_syncpt *sp, u32 id)
  * Main entrypoint for syncpoint value waits.
  */
 int nvhost_syncpt_wait_timeout(struct nvhost_syncpt *sp, u32 id,
-			u32 thresh, u32 timeout)
+			u32 thresh, u32 timeout, u32 *value)
 {
 	DECLARE_WAIT_QUEUE_HEAD_ONSTACK(wq);
 	void *ref;
 	int err = 0;
 
+	if (value)
+		*value = 0;
+
 	BUG_ON(!check_max(sp, id, thresh));
 
 	/* first check cache */
-	if (nvhost_syncpt_min_cmp(sp, id, thresh))
+	if (nvhost_syncpt_min_cmp(sp, id, thresh)) {
+		if (value)
+			*value = nvhost_syncpt_read_min(sp, id);
 		return 0;
+	}
 
 	/* keep host alive */
 	nvhost_module_busy(&syncpt_to_dev(sp)->mod);
@@ -179,8 +185,11 @@ int nvhost_syncpt_wait_timeout(struct nvhost_syncpt *sp, u32 id,
 	if (client_managed(id) || !nvhost_syncpt_min_eq_max(sp, id)) {
 		/* try to read from register */
 		u32 val = nvhost_syncpt_update_min(sp, id);
-		if ((s32)(val - thresh) >= 0)
+		if ((s32)(val - thresh) >= 0) {
+			if (value)
+				*value = val;
 			goto done;
+		}
 	}
 
 	if (!timeout) {
@@ -202,6 +211,8 @@ int nvhost_syncpt_wait_timeout(struct nvhost_syncpt *sp, u32 id,
 						nvhost_syncpt_min_cmp(sp, id, thresh),
 						check);
 		if (remain > 0 || nvhost_syncpt_min_cmp(sp, id, thresh)) {
+			if (value)
+				*value = nvhost_syncpt_read_min(sp, id);
 			err = 0;
 			break;
 		}
@@ -226,7 +237,7 @@ done:
 }
 
 static const char *s_syncpt_names[32] = {
-	"", "", "", "", "", "", "", "", "", "", "", "",
+	"gfx_host", "", "", "", "", "", "", "", "", "", "", "",
 	"vi_isp_0", "vi_isp_1", "vi_isp_2", "vi_isp_3", "vi_isp_4", "vi_isp_5",
 	"2d_0", "2d_1",
 	"", "",
@@ -236,7 +247,7 @@ static const char *s_syncpt_names[32] = {
 
 const char *nvhost_syncpt_name(u32 id)
 {
-	BUG_ON(id > ARRAY_SIZE(s_syncpt_names));
+	BUG_ON(id >= ARRAY_SIZE(s_syncpt_names));
 	return s_syncpt_names[id];
 }
 
@@ -253,4 +264,64 @@ void nvhost_syncpt_debug(struct nvhost_syncpt *sp)
 			nvhost_syncpt_update_min(sp, i), max);
 
 	}
+}
+
+/* returns true, if a <= b < c using wrapping comparison */
+static inline bool nvhost_syncpt_is_between(u32 a, u32 b, u32 c)
+{
+	return b-a < c-a;
+}
+
+/* returns true, if x >= y (mod 1 << 32) */
+static bool nvhost_syncpt_wrapping_comparison(u32 x, u32 y)
+{
+	return nvhost_syncpt_is_between(y, x, (1UL<<31UL)+y);
+}
+
+/* check for old WAITs to be removed (avoiding a wrap) */
+int nvhost_syncpt_wait_check(struct nvmap_client *nvmap,
+			struct nvhost_syncpt *sp, u32 waitchk_mask,
+			struct nvhost_waitchk *waitp, u32 waitchks)
+{
+	u32 idx;
+	int err = 0;
+
+	/* get current syncpt values */
+	for (idx = 0; idx < NV_HOST1X_SYNCPT_NB_PTS; idx++) {
+		if (BIT(idx) & waitchk_mask) {
+			nvhost_syncpt_update_min(sp, idx);
+		}
+	}
+
+	BUG_ON(!waitp);
+
+	/* compare syncpt vs wait threshold */
+	while (waitchks) {
+		u32 syncpt, override;
+
+		BUG_ON(waitp->syncpt_id >= NV_HOST1X_SYNCPT_NB_PTS);
+
+		syncpt = atomic_read(&sp->min_val[waitp->syncpt_id]);
+		if (nvhost_syncpt_wrapping_comparison(syncpt, waitp->thresh)) {
+
+			/* wait has completed already, so can be removed */
+			dev_dbg(&syncpt_to_dev(sp)->pdev->dev,
+					"drop WAIT id %d (%s) thresh 0x%x, syncpt 0x%x\n",
+					waitp->syncpt_id,  nvhost_syncpt_name(waitp->syncpt_id),
+					waitp->thresh, syncpt);
+
+			/* move wait to a kernel reserved syncpt (that's always 0) */
+			override = nvhost_class_host_wait_syncpt(NVSYNCPT_GRAPHICS_HOST, 0);
+
+			/* patch the wait */
+			err = nvmap_patch_wait(nvmap,
+						(struct nvmap_handle *)waitp->mem,
+						waitp->offset, override);
+			if (err)
+				break;
+		}
+		waitchks--;
+		waitp++;
+	}
+	return err;
 }

@@ -206,13 +206,6 @@ static struct param_info fuse_info_tbl[] = {
 	[SBK_DEVKEY_STATUS] = {
 		.sz = SBK_DEVKEY_STATUS_SZ,
 	},
-	[MASTER_ENB] = {
-		.addr = &master_enable,
-		.sz = sizeof(u8),
-		.start_off = 0x0,
-		.start_bit = 0,
-		.nbits = 1,
-	},
 };
 
 static void wait_for_idle(void)
@@ -233,6 +226,7 @@ static u32 fuse_cmd_read(u32 addr)
 {
 	u32 reg;
 
+	wait_for_idle();
 	tegra_fuse_writel(addr, FUSE_REG_ADDR);
 	reg = tegra_fuse_readl(FUSE_CTRL);
 	reg &= ~FUSE_CMD_MASK;
@@ -248,6 +242,7 @@ static void fuse_cmd_write(u32 value, u32 addr)
 {
 	u32 reg;
 
+	wait_for_idle();
 	tegra_fuse_writel(addr, FUSE_REG_ADDR);
 	tegra_fuse_writel(value, FUSE_REG_WRITE);
 
@@ -262,6 +257,7 @@ static void fuse_cmd_sense(void)
 {
 	u32 reg;
 
+	wait_for_idle();
 	reg = tegra_fuse_readl(FUSE_CTRL);
 	reg &= ~FUSE_CMD_MASK;
 	reg |= FUSE_SENSE;
@@ -400,10 +396,6 @@ static void populate_fuse_arrs(struct fuse_data *info, u32 flags)
 
 	memset(fuse_pgm_data, 0, sizeof(fuse_pgm_data));
 	memset(fuse_pgm_mask, 0, sizeof(fuse_pgm_mask));
-
-	/* enable program bit */
-	data = 1;
-	set_fuse(MASTER_ENB, &data);
 
 	if ((flags & FLAGS_ODMRSVD)) {
 		set_fuse(ODM_RSVD, info->odm_rsvd);
@@ -610,10 +602,6 @@ int tegra_fuse_program(struct fuse_data *pgm_data, u32 flags)
 	pr_debug("%s: use %d programming cycles\n", __func__, fuse_pgm_cycles[index]);
 	fuse_program_array(fuse_pgm_cycles[index]);
 
-	/* disable program bit */
-	reg = 0;
-	set_fuse(MASTER_ENB, &reg);
-
 	memset(&fuse_info, 0, sizeof(fuse_info));
 	regulator_disable(vdd_fuse);
 	mutex_unlock(&fuse_lock);
@@ -663,8 +651,10 @@ static ssize_t fuse_store(struct kobject *kobj, struct kobj_attribute *attr,
 {
 	enum fuse_io_param param = fuse_name_to_param(attr->attr.name);
 	int ret, i = 0;
+	int orig_count = count;
 	struct fuse_data data = {0};
 	u32 *raw_data = ((u32 *)&data) + fuse_info_tbl[param].data_offset;
+	u8 *raw_byte_data = (u8 *)raw_data;
 	struct wake_lock fuse_wk_lock;
 
 	if ((param == -1) || (param == -ENODATA)) {
@@ -672,10 +662,8 @@ static ssize_t fuse_store(struct kobject *kobj, struct kobj_attribute *attr,
 		return -EINVAL;
 	}
 
-	if (!isxdigit(*buf)) {
-		pr_err("%s: isxdigit fail\n", __func__);
+	if (!isxdigit(*buf))
 		return count;
-	}
 
 	if (fuse_odm_prod_mode()) {
 		pr_err("%s: device locked. odm fuse already blown\n", __func__);
@@ -684,7 +672,7 @@ static ssize_t fuse_store(struct kobject *kobj, struct kobj_attribute *attr,
 
 	count--;
 	if (DIV_ROUND_UP(count, 2) > fuse_info_tbl[param].sz) {
-		pr_err("%s: fuse parameter too long, should be %d bytes\n",
+		pr_err("%s: fuse parameter too long, should be %d character(s)\n",
 			__func__, fuse_info_tbl[param].sz * 2);
 		return -EINVAL;
 	}
@@ -693,16 +681,23 @@ static ssize_t fuse_store(struct kobject *kobj, struct kobj_attribute *attr,
 	wake_lock_init(&fuse_wk_lock, WAKE_LOCK_SUSPEND, "fuse_wk_lock");
 	wake_lock(&fuse_wk_lock);
 
-	raw_data += (count / CHARS_PER_WORD);
-	*raw_data = 0;
-	while (isxdigit(*buf)) {
-		*raw_data <<= 4;
-		*raw_data += char_to_xdigit(*buf);
+	/* we need to fit each character into a single nibble */
+	raw_byte_data += DIV_ROUND_UP(count, 2) - 1;
+
+	if (count % 2) {
+		*raw_byte_data = char_to_xdigit(*buf);
 		buf++;
-		if (++i == 8) {
-			raw_data--;
-			*raw_data = 0;
-			i = 0;
+		raw_byte_data--;
+		count--;
+	}
+
+	for (i = 1; i <= count; i++, buf++) {
+		if (i % 2) {
+			*raw_byte_data = char_to_xdigit(*buf);
+		} else {
+			*raw_byte_data <<= 4;
+			*raw_byte_data |= char_to_xdigit(*buf);
+			raw_byte_data--;
 		}
 	}
 
@@ -729,7 +724,7 @@ static ssize_t fuse_store(struct kobject *kobj, struct kobj_attribute *attr,
 
 	wake_unlock(&fuse_wk_lock);
 	wake_lock_destroy(&fuse_wk_lock);
-	return count;
+	return orig_count;
 }
 
 static ssize_t fuse_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
@@ -757,7 +752,7 @@ static ssize_t fuse_show(struct kobject *kobj, struct kobj_attribute *attr, char
 	}
 
 	strcpy(buf, "");
-	for (i = 0; i < (fuse_info_tbl[param].sz/sizeof(u32)) ; i++) {
+	for (i = (fuse_info_tbl[param].sz/sizeof(u32)) - 1; i >= 0 ; i--) {
 		sprintf(str, "%08x", data[i]);
 		strcat(buf, str);
 	}

@@ -113,7 +113,7 @@ static struct tegra_audio_platform_data tegra_spdif_pdata = {
 
 static struct tegra_utmip_config utmi_phy_config[] = {
 	[0] = {
-			.hssync_start_delay = 0,
+			.hssync_start_delay = 9,
 			.idle_wait_delay = 17,
 			.elastic_limit = 16,
 			.term_range_adj = 6,
@@ -122,7 +122,7 @@ static struct tegra_utmip_config utmi_phy_config[] = {
 			.xcvr_lsrslew = 2,
 	},
 	[1] = {
-			.hssync_start_delay = 0,
+			.hssync_start_delay = 9,
 			.idle_wait_delay = 17,
 			.elastic_limit = 16,
 			.term_range_adj = 6,
@@ -237,6 +237,7 @@ static __initdata struct tegra_clk_init_table ventana_clk_init_table[] = {
 	{ "pwm",	"clk_32k",	32768,		false},
 	{ "pll_a",	NULL,		56448000,	false},
 	{ "pll_a_out0",	NULL,		11289600,	false},
+	{ "clk_dev1",	"pll_a_out0",	0,		true},
 	{ "i2s1",	"pll_a_out0",	11289600,	false},
 	{ "i2s2",	"pll_a_out0",	11289600,	false},
 	{ "audio",	"pll_a_out0",	11289600,	false},
@@ -417,6 +418,7 @@ static struct tegra_audio_platform_data tegra_audio_pdata[] = {
 		.bit_size	= I2S_BIT_SIZE_16,
 		.i2s_bus_width = 32,
 		.dsp_bus_width = 16,
+		.en_dmic = false, /* by default analog mic is used */
 	},
 	/* For I2S2 */
 	[1] = {
@@ -774,6 +776,7 @@ error:
 static void tegra_usb_otg_host_unregister(struct platform_device *pdev)
 {
 	kfree(pdev->dev.platform_data);
+	pdev->dev.platform_data = NULL;
 	platform_device_unregister(pdev);
 }
 
