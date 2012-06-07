@@ -64,7 +64,9 @@ static struct clk **graphics_clks;
 static struct clk **graphics_restore_clks;
 static unsigned long  *graphics_restore_clk_rates;
 static struct tegra_camera_clk_config *graphics_clk_cfg;
+extern void nvhost_set_max_acm_timeout(bool enable);
 #endif
+extern void nvhost_set_max_acm_timeout(bool enable);
 static struct regulator *tegra_camera_regulator_csi;
 
 static int tegra_camera_enable_isp(void)
@@ -294,6 +296,7 @@ static long tegra_camera_ioctl(struct file *file,
 		int ret = 0;
 
 		mutex_lock(&tegra_camera_lock);
+		nvhost_set_max_acm_timeout(true);
 		if (!tegra_camera_block[id].is_enabled) {
 			ret = tegra_camera_block[id].enable();
 			tegra_camera_block[id].is_enabled = true;
@@ -330,6 +333,7 @@ static long tegra_camera_ioctl(struct file *file,
 			schedule_delayed_work(&scaling_gov_work, 0);
 		}
 #endif
+		nvhost_set_max_acm_timeout(false);
 		mutex_unlock(&tegra_camera_lock);
 		return ret;
 	}

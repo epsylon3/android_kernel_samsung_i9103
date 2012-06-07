@@ -173,6 +173,8 @@ static enum tegra_suspend_mode current_suspend_mode;
 
 static unsigned int tegra_time_in_suspend[32];
 
+enum tegra_suspend_mode current_suspended_state;
+
 static inline unsigned int time_to_bin(unsigned int time)
 {
 	return fls(time);
@@ -200,6 +202,14 @@ enum tegra_suspend_mode tegra_get_suspend_mode(void)
 		return TEGRA_SUSPEND_NONE;
 
 	return pdata->suspend_mode;
+}
+
+enum tegra_suspend_mode tegra_get_current_suspend_mode(void)
+{
+	if (!pdata)
+		return TEGRA_SUSPEND_NONE;
+
+	return current_suspended_state;
 }
 
 static void set_power_timers(unsigned long us_on, unsigned long us_off,
@@ -722,6 +732,7 @@ void tegra_ahbgizmo_resume(void)
 
 #ifdef CONFIG_MACH_N1
 extern int Is_call_active(void);
+extern int Is_proximitysensor_active(void);
 #endif
 static int tegra_suspend_enter(suspend_state_t state)
 {
@@ -744,7 +755,7 @@ static int tegra_suspend_enter(suspend_state_t state)
 
 #ifdef CONFIG_MACH_N1
 	/* Set LP2 for audio path when the device is in call */
-	if (Is_call_active() || !gpio_get_value(GPIO_ALC_INT)) {
+	if (Is_call_active() || !gpio_get_value(GPIO_ALC_INT) || Is_proximitysensor_active()) {
 		do_lp0 = 0;
 		do_lp1 = 1;
 		do_lp2 = 0;
@@ -756,12 +767,16 @@ static int tegra_suspend_enter(suspend_state_t state)
 		gpio_set_value(GPIO_PDA_ACTIVE, 0);
 #endif
 
-	if (do_lp2)
+	if (do_lp2) {
 		lp_state = 2;
-	else if (do_lp0)
+		current_suspended_state = TEGRA_SUSPEND_LP2;
+	} else if (do_lp0) {
 		lp_state = 0;
-	else
+		current_suspended_state = TEGRA_SUSPEND_LP0;
+	} else {
 		lp_state = 1;
+		current_suspended_state = TEGRA_SUSPEND_LP1;
+	}
 
 	local_irq_save(flags);
 	local_fiq_disable();

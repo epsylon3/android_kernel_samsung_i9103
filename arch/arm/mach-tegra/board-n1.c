@@ -257,6 +257,7 @@ static int write_bootloader_message(char *cmd, int mode)
 		strcpy(bootmsg.command, "boot-recovery");
 		kernel_sec_set_path(SEC_PORT_USB, SEC_PORT_PATH_AP);
 		kernel_sec_set_path(SEC_PORT_UART, SEC_PORT_PATH_CP);		
+        kernel_sec_set_debug_level(KERNEL_SEC_DEBUG_LEVEL_LOW);
 	}
 	else if (mode == REBOOT_MODE_FASTBOOT)
 		strcpy(bootmsg.command, "boot-fastboot");

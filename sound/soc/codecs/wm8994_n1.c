@@ -321,6 +321,20 @@ struct gain_info_t playback_gain_table[] = {
 	},
 };
 
+struct gain_info_t playback_gain_table_swa[] = {
+	 { /* SPK */
+		.mode = PLAYBACK_SPK,
+		.reg  = WM8994_SPEAKER_VOLUME_LEFT,	/* 26h */
+		.mask = WM8994_SPKOUTL_VOL_MASK,
+		.gain = WM8994_SPKOUT_VU | 0x3F
+	}, {
+		.mode = PLAYBACK_SPK,
+		.reg  = WM8994_SPEAKER_VOLUME_RIGHT,	/* 27h */
+		.mask = WM8994_SPKOUTR_VOL_MASK,
+		.gain = WM8994_SPKOUT_VU | 0x3F
+	},
+};
+
 struct gain_info_t voicecall_gain_table[] = {
 	{ /* COMMON */
 		.mode = COMMON_SET_BIT,
@@ -1511,6 +1525,27 @@ void wm8994_filter_voip_other(struct snd_soc_codec *codec)
 	wm8994_write(codec, 0x442, 0x0828);
 	wm8994_write(codec, 0x443, 0x0288);
 	wm8994_write(codec, 0x444, 0x0358);
+}
+
+// SYS_AUDIO - csc_tuning : apply tuning values by checking CSC
+void wm8994_filter_voice_spk(struct snd_soc_codec *codec)
+{
+	DEBUG_LOG("wm8994_filter_voice_spk");
+
+	wm8994_write(codec, 0x480, 0x0019);
+	wm8994_write(codec, 0x481, 0x3000);
+	wm8994_write(codec, 0x485, 0x1F8C);
+	wm8994_write(codec, 0x48A, 0xF373);
+	wm8994_write(codec, 0x486, 0xF073);
+	wm8994_write(codec, 0x48B, 0x0A54);
+	wm8994_write(codec, 0x48C, 0x0558);
+	wm8994_write(codec, 0x48D, 0x100A);
+	wm8994_write(codec, 0x488, 0x01C8);
+	wm8994_write(codec, 0x48E, 0xF95B);
+	wm8994_write(codec, 0x48F, 0x040A);
+	wm8994_write(codec, 0x490, 0x250D);
+	wm8994_write(codec, 0x491, 0x05FC);
+	wm8994_write(codec, 0x492, 0x057F);	
 }
 
 void wm8994_filter_off(struct snd_soc_codec *codec)
@@ -4831,7 +4866,9 @@ int wm8994_set_codec_gain(struct snd_soc_codec *codec, u32 mode, u16 device)
 	u32 gain_set_bits = COMMON_SET_BIT;
 	u16 val;
 	struct gain_info_t *default_gain_table_p = NULL;
+	struct gain_info_t *default_gain_table_p_swa = NULL;
 	int table_num = 0;
+	int table_num_swa = 0;
 
 	if (wm8994->codecgain_reserve) {
 		DEBUG_LOG("Tuning mode is On, Skip gain setting");
@@ -5013,6 +5050,15 @@ int wm8994_set_codec_gain(struct snd_soc_codec *codec, u32 mode, u16 device)
 	else if (mode == VOIPCALL_MODE &&
 			(device == VOIPCALL_SPK_OTHER || device == VOIPCALL_SUBMIC_OTHER))
 		wm8994_filter_voip_other(codec);
+	// SYS_AUDIO - csc_tuning : apply tuning values by checking CSC
+	else if ((mode == VOICECALL_MODE) && (device == VOICECALL_SPK))
+	{
+		DEBUG_LOG("customer = %d", wm8994->customer);
+		if (wm8994->customer == CUSTOMER_SWA)
+		{
+			wm8994_filter_voice_spk(codec);
+		}
+	}
 	else
 		wm8994_filter_off(codec);
 
@@ -5023,6 +5069,23 @@ int wm8994_set_codec_gain(struct snd_soc_codec *codec, u32 mode, u16 device)
 			val &= ~((default_gain_table_p + i)->mask);
 			val |= (default_gain_table_p + i)->gain;
 			wm8994_write(codec, (default_gain_table_p + i)->reg, val);
+		}
+	}
+
+	printk("[IJ] CSC = %d\n", wm8994->customer);
+
+	if (mode == PLAYBACK_MODE && wm8994->customer == CUSTOMER_SWA){
+		printk("[IJ] Set as SWA gain for mp3\n");
+		
+		default_gain_table_p_swa = playback_gain_table_swa;
+		table_num_swa = sizeof(playback_gain_table_swa)/sizeof(*playback_gain_table_swa);;
+		for (i = 0; i < table_num_swa; i++) {
+			if ((default_gain_table_p_swa + i)->mode & gain_set_bits) {
+				val = wm8994_read(codec, (default_gain_table_p_swa + i)->reg);
+				val &= ~((default_gain_table_p_swa + i)->mask);
+				val |= (default_gain_table_p_swa + i)->gain;
+				wm8994_write(codec, (default_gain_table_p_swa + i)->reg, val);
+			}
 		}
 	}
 

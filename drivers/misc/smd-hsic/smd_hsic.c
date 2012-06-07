@@ -481,6 +481,11 @@ static void smdhsic_disconnect(struct usb_interface *intf)
 		pr_warn("%s:Undefined Callback Function\n",
 		       __func__);
 	}
+	/* to prevent sleep at connection recover
+	* when, usb suspend and recover routine overlap
+	* it makes huge delay on modem reset
+	*/
+	wake_lock_timeout(&g_usbdev.txwake, 20*HZ);
 
 	kfree(intfpriv);
 	usb_set_intfdata(intf, NULL);
@@ -918,7 +923,7 @@ void add_head_txurb(struct list_head *list, struct urb *urb)
 {
 	unsigned long flags;
 	struct smd_usbdev *usbdev = &g_usbdev;
-	
+
 	spin_lock_irqsave(&usbdev->lock, flags);
 	list_add(&urb->urb_list, list);
 	spin_unlock_irqrestore(&usbdev->lock, flags);

@@ -663,6 +663,31 @@ static int xmm6260_on(struct str_smdctl *smdctl)
 	return 0;
 }
 
+static int xmm6260_reset(struct str_smdctl *smdctl)
+{
+	int ret;
+	struct str_ctl_gpio *gpio = smdctl->gpio;
+	if (!gpio) {
+		pr_err("%s:gpio not allocated\n", __func__);
+		return -EINVAL;
+	}
+	pr_info("%s Start\n", __func__);
+
+	/* set low AP-CP GPIO befor warm reset */
+	gpio_set_value(gpio[SMD_GPIO_CP_ACT].num, LOW);
+	gpio_set_value(gpio[SMD_GPIO_HSIC_ACT].num, LOW);
+	gpio_set_value(gpio[SMD_GPIO_HSIC_SUS].num, LOW);
+	msleep(100);
+
+	pr_info("cp warm reset\n");
+	gpio_set_value(gpio[SMD_GPIO_CP_REQ].num, LOW);
+	msleep(10);
+	gpio_set_value(gpio[SMD_GPIO_CP_RST].num, HIGH);
+	usleep_range(160, 1000);
+	gpio_set_value(gpio[SMD_GPIO_CP_REQ].num, HIGH);
+	return 0;
+}
+
 #ifdef CONFIG_KERNEL_DEBUG_SEC
 /*
  * HSIC CP uploas scenario -
@@ -772,6 +797,11 @@ static long smdctl_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			       r);
 		}
 		break;
+
+	case IOCTL_CP_RESET:
+		pr_info("IOCTL_CP_RESET\n");
+		xmm6260_reset(smdctl);
+		break;	
 
 	case IOCTL_ON_HSIC_ACT:
 		pr_info("IOCTL_ON_HSIC_ACT\n");
