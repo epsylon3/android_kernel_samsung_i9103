@@ -5,6 +5,7 @@ config TEGRA_ALSA
     select TEGRA_IEC
     select TEGRA_GENERIC_CODEC
     select TEGRA_JACK
+    select SND_SOC_WM8994
     help
        Say Y if you for ALSA SoC support
 

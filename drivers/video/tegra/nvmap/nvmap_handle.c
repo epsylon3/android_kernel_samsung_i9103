@@ -35,6 +35,9 @@
 #include <mach/iovmm.h>
 #include <mach/nvmap.h>
 
+#include <linux/vmstat.h>
+#include <linux/swap.h>
+
 #include "nvmap.h"
 #include "nvmap_mru.h"
 #include "nvmap_common.h"
@@ -286,6 +289,10 @@ static const unsigned int heap_policy_large[] = {
 	0,
 };
 
+/* Do not override single page policy if there is not much space to
+avoid invoking system oom killer. */
+#define NVMAP_SMALL_POLICY_SYSMEM_THRESHOLD 50000000
+
 int nvmap_alloc_handle_id(struct nvmap_client *client,
 			  unsigned long id, unsigned int heap_mask,
 			  size_t align, unsigned int flags)
@@ -297,10 +304,6 @@ int nvmap_alloc_handle_id(struct nvmap_client *client,
 
 	align = max_t(size_t, align, L1_CACHE_BYTES);
 
-	/* can't do greater than page size alignment with page alloc */
-	if (align > PAGE_SIZE)
-		heap_mask &= NVMAP_HEAP_CARVEOUT_MASK;
-
 	h = nvmap_get_handle_id(client, id);
 
 	if (!h)
@@ -309,9 +312,40 @@ int nvmap_alloc_handle_id(struct nvmap_client *client,
 	if (h->alloc)
 		goto out;
 
+	if (h->size > 8000000) {
+		heap_mask |= NVMAP_HEAP_CARVEOUT_GENERIC;
+		heap_mask &= ~NVMAP_HEAP_IOVMM;
+	}
+
 	nr_page = ((h->size + PAGE_SIZE - 1) >> PAGE_SHIFT);
 	h->secure = !!(flags & NVMAP_HANDLE_SECURE);
 	h->flags = (flags & NVMAP_HANDLE_CACHE_FLAG);
+
+#ifdef CONFIG_NVMAP_ALLOW_SYSMEM
+	/* Allow single pages allocations in system memory to save
+	 * carveout space and avoid extra iovm mappings */
+	if (nr_page == 1) {
+		if (heap_mask & NVMAP_HEAP_IOVMM)
+			heap_mask |= NVMAP_HEAP_SYSMEM;
+		else if (heap_mask & NVMAP_HEAP_CARVEOUT_GENERIC) {
+			/* Calculate size of free physical pages
+			 * managed by kernel */
+			unsigned long freeMem =
+				(global_page_state(NR_FREE_PAGES) +
+				global_page_state(NR_FILE_PAGES) -
+				total_swapcache_pages) << PAGE_SHIFT;
+
+			if (freeMem > NVMAP_SMALL_POLICY_SYSMEM_THRESHOLD)
+				heap_mask |= NVMAP_HEAP_SYSMEM;
+		}
+	}
+#endif
+
+	/* This restriction is deprecated as alignments greater than
+	   PAGE_SIZE are now correctly handled, but it is retained for
+	   AP20 compatibility. */
+	if (align > PAGE_SIZE)
+		heap_mask &= NVMAP_HEAP_CARVEOUT_MASK;
 
 	/* secure allocations can only be served from secure heaps */
 	if (h->secure)

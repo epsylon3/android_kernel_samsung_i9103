@@ -420,10 +420,16 @@ int mmc_sd_get_cid(struct mmc_host *host, u32 ocr, u32 *cid)
 	err = mmc_send_if_cond(host, ocr);
 	if (!err)
 		ocr |= 1 << 30;
+	else
+		printk(KERN_ERR"err mmc_send_if_cond\n");
 
 	err = mmc_send_app_op_cond(host, ocr, NULL);
 	if (err)
+	{
+		printk(KERN_ERR"mmc_send_app_op_cond\n");
 		return err;
+	}
+	
 
 	if (mmc_host_is_spi(host))
 		err = mmc_send_cid(host, cid);
@@ -580,7 +586,10 @@ static int mmc_sd_init_card(struct mmc_host *host, u32 ocr,
 
 	err = mmc_sd_get_cid(host, ocr, cid);
 	if (err)
+	{
+		printk(KERN_ERR"error mmc_sd_get_cid\n");
 		return err;
+	}
 
 	if (oldcard) {
 		if (memcmp(cid, oldcard->raw_cid, sizeof(cid)) != 0)

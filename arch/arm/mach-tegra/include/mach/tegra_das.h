@@ -51,7 +51,17 @@
 #define APB_MISC_DAS_DAC_INPUT_DATA_CLK_SEL_0		(0xc40)
 #define APB_MISC_DAS_DAC_INPUT_DATA_CLK_SEL_1		(0xc44)
 #define APB_MISC_DAS_DAC_INPUT_DATA_CLK_SEL_2		(0xc48)
+#ifdef CONFIG_MACH_N1
+#define APB_MISC_DAS_DAC_INPUT_DATA_CLK_SEL_3		(0xc4c)
 
+/*DAP control register bit*/
+#define DAP_MS_SEL_SLAVE	(0<<31)
+#define DAP_MS_SEL_MASTER	(1<<31)
+#define DAP_SDATA1_TX		(0<<30)
+#define DAP_SDATA1_RX		(1<<30)
+#define DAP_SDATA2_TX		(0<<29)
+#define DAP_SDATA2_RX		(1<<29)
+#endif
 #define DAP_MS_SEL_SHIFT		(31)
 #define DAP_MS_SEL_DEFAULT_MASK		(0x1)
 #define DAP_SDATA1_TX_RX_SHIFT		(30)
@@ -67,7 +77,25 @@
 #define DAC_SDATA1_SEL_DEFAULT_MASK	(0xf)
 #define DAC_CLK_SEL_SHIFT		(0)
 #define DAC_CLK_SEL_DEFAULT_MASK	(0xf)
+#ifdef CONFIG_MACH_N1
+/*DAC input data selection bit*/
+#define DAC_SDATA2_SEL_DAP1	(0<<28)
+#define DAC_SDATA2_SEL_DAP2	(1<<28)
+#define DAC_SDATA2_SEL_DAP3	(2<<28)
+#define DAC_SDATA2_SEL_DAP4	(3<<28)
+#define DAC_SDATA2_SEL_DAP5	(4<<28)
+#define DAC_SDATA1_SEL_DAP1	(0<<24)
+#define DAC_SDATA1_SEL_DAP2	(1<<24)
+#define DAC_SDATA1_SEL_DAP3	(2<<24)
+#define DAC_SDATA1_SEL_DAP4	(3<<24)
+#define DAC_SDATA1_SEL_DAP5	(4<<24)
 
+#define DAC_CLK_SEL_DAP1	0
+#define DAC_CLK_SEL_DAP2	1
+#define DAC_CLK_SEL_DAP3	2
+#define DAC_CLK_SEL_DAP4	3
+#define DAC_CLK_SEL_DAP5	4
+#endif
 
 #define DAP_CTRL_SEL_DAC1		(0)
 #define DAP_CTRL_SEL_DAC2		(1)
@@ -119,6 +147,28 @@ enum tegra_das_port_con_id {
 
 	tegra_das_port_con_id_max
 };
+
+/* possible list of input/output devices */
+#define audio_dev_none			(0x0)
+#define audio_dev_all			(0xffffffff)
+
+/* Inputs */
+#define audio_dev_builtin_mic		(0x1)
+#define audio_dev_mic			(0x2)
+#define audio_dev_lineIn		(0x4)
+
+/* Outputs */
+#define audio_dev_speaker		(0x100)
+#define audio_dev_earpiece		(0x200)
+#define audio_dev_lineout		(0x400)
+#define audio_dev_headphone		(0x800)
+#define audio_dev_bt_a2dp		(0x1000)
+
+/* Both */
+#define audio_dev_aux			(0x10000)
+#define audio_dev_headset		(0x20000)
+#define audio_dev_radio			(0x40000)
+#define audio_dev_bt_sco		(0x80000)
 
 /* data format supported */
 enum dac_dap_data_format {
@@ -192,6 +242,14 @@ struct das_regs_cache {
 	u32 das_dac_input_data_clk_0;
 	u32 das_dac_input_data_clk_1;
 	u32 das_dac_input_data_clk_2;
+};
+
+enum  dap_connection_status{
+	dap_connection_codec_slave,
+	dap_connection_codec_master,
+	dap_connection_bt_call,
+	dap_connection_bt_voip,
+	dap_connection_bt_call_nomix,
 };
 
 

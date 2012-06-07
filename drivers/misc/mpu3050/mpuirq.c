@@ -42,6 +42,7 @@
 #include "mpuirq.h"
 #include "mldl_cfg.h"
 #include "mpu-i2c.h"
+#include "mpu-accel.h"
 
 #define MPUIRQ_NAME "mpuirq"
 
@@ -89,10 +90,11 @@ static int mpuirq_release(struct inode *inode, struct file *file)
 static ssize_t mpuirq_read(struct file *file,
 			   char *buf, size_t count, loff_t *ppos)
 {
+	
 	int len, err;
 	struct mpuirq_dev_data *p_mpuirq_dev_data = file->private_data;
 
-	if (!mpuirq_dev_data.data_ready) {
+	if (!mpuirq_dev_data.data_ready && (mpuirq_dev_data.timeout > 0)) {
 		wait_event_interruptible_timeout(mpuirq_wait,
 						 mpuirq_dev_data.
 						 data_ready,

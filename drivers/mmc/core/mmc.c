@@ -116,6 +116,11 @@ static void mmc_set_erase_size(struct mmc_card *card)
 		card->erase_size = card->csd.erase_size;
 
 	mmc_init_erase(card);
+
+#ifdef CONFIG_MMC_DISCARD_MOVINAND
+	if (mmc_can_trim(card) && card->cid.manfid == MMC_CSD_MANFID_MOVINAND)
+		mmc_send_trimsize(card, &card->pref_trim);
+#endif /* CONFIG_MMC_DISCARD_MOVINAND */
 }
 
 /*
@@ -263,6 +268,9 @@ static int mmc_read_ext_csd(struct mmc_card *card)
 	}
 
 	switch (ext_csd[EXT_CSD_CARD_TYPE] & EXT_CSD_CARD_TYPE_MASK) {
+#ifdef CONFIG_MMC_DISCARD_MOVINAND
+	case EXT_CSD_CARD_TYPE_TEMP | EXT_CSD_CARD_TYPE_52 | EXT_CSD_CARD_TYPE_26:
+#endif
 	case EXT_CSD_CARD_TYPE_52 | EXT_CSD_CARD_TYPE_26:
 		card->ext_csd.hs_max_dtr = 52000000;
 		break;
@@ -320,6 +328,9 @@ MMC_DEV_ATTR(csd, "%08x%08x%08x%08x\n", card->raw_csd[0], card->raw_csd[1],
 MMC_DEV_ATTR(date, "%02d/%04d\n", card->cid.month, card->cid.year);
 MMC_DEV_ATTR(erase_size, "%u\n", card->erase_size << 9);
 MMC_DEV_ATTR(preferred_erase_size, "%u\n", card->pref_erase << 9);
+#ifdef CONFIG_MMC_DISCARD_MOVINAND
+MMC_DEV_ATTR(preferred_trim_size, "%u\n", card->pref_trim << 9);
+#endif /* CONFIG_MMC_DISCARD_MOVINAND */
 MMC_DEV_ATTR(fwrev, "0x%x\n", card->cid.fwrev);
 MMC_DEV_ATTR(hwrev, "0x%x\n", card->cid.hwrev);
 MMC_DEV_ATTR(manfid, "0x%06x\n", card->cid.manfid);
@@ -333,6 +344,9 @@ static struct attribute *mmc_std_attrs[] = {
 	&dev_attr_date.attr,
 	&dev_attr_erase_size.attr,
 	&dev_attr_preferred_erase_size.attr,
+#ifdef CONFIG_MMC_DISCARD_MOVINAND
+	&dev_attr_preferred_trim_size.attr,
+#endif /* CONFIG_MMC_DISCARD_MOVINAND */
 	&dev_attr_fwrev.attr,
 	&dev_attr_hwrev.attr,
 	&dev_attr_manfid.attr,

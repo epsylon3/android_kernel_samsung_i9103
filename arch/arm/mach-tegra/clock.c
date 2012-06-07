@@ -697,6 +697,7 @@ static void clock_tree_show_one(struct seq_file *s, struct clk *c, int level)
 	struct clk *child;
 	const char *state = "uninit";
 	char div[8] = {0};
+	unsigned long rate;
 
 	if (c->state == ON)
 		state = "on";
@@ -720,12 +721,17 @@ static void clock_tree_show_one(struct seq_file *s, struct clk *c, int level)
 		}
 	}
 
+	if (strstr(c->name, ".emc") || strstr(c->name, ".sclk"))
+		rate = c->u.shared_bus_user.rate;
+	else
+		rate = clk_get_rate_all_locked(c);
+
 	seq_printf(s, "%*s%c%c%-*s %-6s %-3d %-8s %-10lu\n",
 		level * 3 + 1, "",
 		c->rate > c->max_rate ? '!' : ' ',
 		!c->set ? '*' : ' ',
 		30 - level * 3, c->name,
-		state, c->refcnt, div, clk_get_rate_all_locked(c));
+		state, c->refcnt, div, rate);
 
 	if (c->dvfs)
 		dvfs_show_one(s, c->dvfs, level + 1);

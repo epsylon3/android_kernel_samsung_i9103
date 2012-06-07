@@ -1,7 +1,7 @@
 /*
  * tegra_pcm.c  --  ALSA Soc Audio Layer
  *
- * (c) 2010-2011 Nvidia Graphics Pvt. Ltd.
+ * (c) 2010 Nvidia Graphics Pvt. Ltd.
  *  http://www.nvidia.com
  *
  * (c) 2006 Wolfson Microelectronics PLC.
@@ -31,12 +31,12 @@ static void tegra_pcm_play(struct tegra_runtime_data *prtd)
 
 	if (runtime->dma_addr) {
 		prtd->size = frames_to_bytes(runtime, runtime->period_size);
-		if (prtd->dma_state != STATE_ABORT) {
+			if (prtd->dma_state != STATE_ABORT) {
 			prtd->dma_reqid_tail = (prtd->dma_reqid_tail + 1) % DMA_REQ_QCOUNT;
 			prtd->dma_req[prtd->dma_reqid_tail].source_addr = buf->addr +
-			frames_to_bytes(runtime,prtd->dma_pos);
+				frames_to_bytes(runtime,prtd->dma_pos);
 			prtd->dma_req[prtd->dma_reqid_tail].size = prtd->size;
-			tegra_dma_enqueue_req(prtd->dma_chan,
+				tegra_dma_enqueue_req(prtd->dma_chan,
 						&prtd->dma_req[prtd->dma_reqid_tail]);
 		}
 	}
@@ -56,12 +56,12 @@ static void tegra_pcm_capture(struct tegra_runtime_data *prtd)
 
 	if (runtime->dma_addr) {
 		prtd->size = frames_to_bytes(runtime, runtime->period_size);
-		if (prtd->dma_state != STATE_ABORT) {
+			if (prtd->dma_state != STATE_ABORT) {
 			prtd->dma_reqid_tail = (prtd->dma_reqid_tail + 1) % DMA_REQ_QCOUNT;
 			prtd->dma_req[prtd->dma_reqid_tail].dest_addr = buf->addr +
-			frames_to_bytes(runtime,prtd->dma_pos);
+				frames_to_bytes(runtime,prtd->dma_pos);
 			prtd->dma_req[prtd->dma_reqid_tail].size = prtd->size;
-			tegra_dma_enqueue_req(prtd->dma_chan,
+				tegra_dma_enqueue_req(prtd->dma_chan,
 						&prtd->dma_req[prtd->dma_reqid_tail]);
 		}
 	}
@@ -112,6 +112,20 @@ static const struct snd_pcm_hardware tegra_pcm_hardware = {
 static int tegra_pcm_hw_params(struct snd_pcm_substream *substream,
 				struct snd_pcm_hw_params *params)
 {
+#ifdef CONFIG_MACH_N1
+	int chs = params_channels(params);
+
+	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
+		struct snd_pcm_runtime *runtime = substream->runtime;
+		struct tegra_runtime_data *prtd = runtime->private_data;
+		unsigned long bus_width = (chs == 1) ? 16 : 32;
+
+		prtd->dma_req[0].source_bus_width = bus_width;
+		prtd->dma_req[0].dest_bus_width = bus_width;
+		prtd->dma_req[1].source_bus_width = bus_width;
+		prtd->dma_req[1].dest_bus_width = bus_width;
+	}
+#endif
 	snd_pcm_set_runtime_buffer(substream, &substream->dma_buffer);
 	return 0;
 }
@@ -146,14 +160,14 @@ static int tegra_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 			prtd->state = STATE_INIT;
 			prtd->dma_state = STATE_INIT;
-			for (i = 0; i < DMA_REQ_QCOUNT; i++)
-				tegra_pcm_play(prtd); /* dma enqueue req */
+			tegra_pcm_play(prtd); /* dma enqueue req1 */
+			tegra_pcm_play(prtd); /* dma enqueue req2 */
 		} else if (prtd->state != STATE_INIT) {
 			/* start recording */
 			prtd->state = STATE_INIT;
 			prtd->dma_state = STATE_INIT;
-			for (i = 0; i < DMA_REQ_QCOUNT; i++)
-				tegra_pcm_capture(prtd); /* dma enqueue req */
+			tegra_pcm_capture(prtd); /* dma enqueue req1 */
+			tegra_pcm_capture(prtd); /* dma enqueue req2 */
 		}
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
@@ -165,7 +179,7 @@ static int tegra_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 			if (prtd->dma_chan) {
 				for (i = 0; i < DMA_REQ_QCOUNT; i++)
-					tegra_dma_dequeue_req(prtd->dma_chan,
+				tegra_dma_dequeue_req(prtd->dma_chan,
 							&prtd->dma_req[i]);
 				prtd->dma_reqid_head = 0;
 				prtd->dma_reqid_tail = DMA_REQ_QCOUNT - 1;
@@ -173,7 +187,7 @@ static int tegra_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 		} else {
 			if (prtd->dma_chan) {
 				for (i = 0; i < DMA_REQ_QCOUNT; i++)
-					tegra_dma_dequeue_req(prtd->dma_chan,
+				tegra_dma_dequeue_req(prtd->dma_chan,
 							&prtd->dma_req[i]);
 				prtd->dma_reqid_head = 0;
 				prtd->dma_reqid_tail = DMA_REQ_QCOUNT - 1;
@@ -236,19 +250,22 @@ static int tegra_pcm_open(struct snd_pcm_substream *substream)
 	runtime->private_data = prtd;
 	prtd->substream = substream;
 
-	prtd->state = STATE_INVALID;
+#ifdef CONFIG_MACH_N1
+	/* This code is intended to prevent pop noise when i2s port is closed */
+	/* set pins state to normal */
+	tegra_das_power_mode(true);
+#endif
 
-	if (strcmp(cpu_dai->name, "tegra-spdif") == 0)
-	{
+	prtd->state = STATE_INVALID;
+#ifndef CONFIG_MACH_BOSE_ATT
+	if (strcmp(cpu_dai->name, "tegra-spdif") == 0) {
 		for (i = 0; i < DMA_REQ_QCOUNT; i++) {
 			setup_spdif_dma_request(substream,
 					&prtd->dma_req[i],
 					dma_complete_callback,
 					prtd);
 		}
-	}
-	else
-	{
+	} else {
 		for (i = 0; i < DMA_REQ_QCOUNT; i++) {
 			setup_i2s_dma_request(substream,
 					&prtd->dma_req[i],
@@ -256,7 +273,14 @@ static int tegra_pcm_open(struct snd_pcm_substream *substream)
 					prtd);
 		}
 	}
-
+#else
+	for (i = 0; i < DMA_REQ_QCOUNT; i++) {
+	setup_i2s_dma_request(substream,
+				&prtd->dma_req[i],
+			dma_complete_callback,
+			prtd);
+	}
+#endif
 	prtd->dma_chan = tegra_dma_allocate_channel(TEGRA_DMA_MODE_CONTINUOUS_DOUBLE);
 	if (IS_ERR(prtd->dma_chan)) {
 		pr_err("%s: could not allocate DMA channel for I2S: %ld\n",
@@ -278,6 +302,13 @@ fail:
 			tegra_dma_flush(prtd->dma_chan);
 			tegra_dma_free_channel(prtd->dma_chan);
 		}
+
+#ifdef CONFIG_MACH_N1
+		/* This code is intended to prevent pop noise when i2s port is closed */
+		/* set pins state to tristate */
+		tegra_das_power_mode(false);
+#endif
+
 		kfree(prtd);
 	}
 
@@ -308,6 +339,13 @@ static int tegra_pcm_close(struct snd_pcm_substream *substream)
 		prtd->dma_reqid_head = 0;
 		prtd->dma_reqid_tail = DMA_REQ_QCOUNT - 1;
 	}
+
+#ifdef CONFIG_MACH_N1
+	/* This code is intended to prevent pop noise when i2s port is closed */
+	/* set pins state to tristate */
+	tegra_das_power_mode(false);
+#endif
+
 	kfree(prtd);
 
 	return 0;

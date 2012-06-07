@@ -51,6 +51,8 @@ struct nvhost_module {
 	wait_queue_head_t idle;
 	struct nvhost_module *parent;
 	int powergate_id;
+    int clk_rate_has_set;
+	bool force_suspend;
 };
 
 int nvhost_module_init(struct nvhost_module *mod, const char *name,

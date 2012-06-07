@@ -171,6 +171,9 @@ struct gendisk {
 	struct blk_integrity *integrity;
 #endif
 	int node_id;
+#ifdef CONFIG_MACH_N1
+	int media_present;
+#endif
 };
 
 static inline struct gendisk *part_to_disk(struct hd_struct *part)

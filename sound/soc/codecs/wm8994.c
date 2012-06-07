@@ -39,6 +39,10 @@
 static struct snd_soc_codec *wm8994_codec;
 struct snd_soc_codec_device soc_codec_dev_wm8994;
 
+#define SUBJECT "[WM8994.C]"
+#define DEBUG_LOG(format,...)\
+	printk (KERN_ERR "\n[ "SUBJECT " (%s,%d) ] " format "\n", __func__, __LINE__, ## __VA_ARGS__);
+
 struct fll_config {
 	int src;
 	int in;
@@ -1757,6 +1761,8 @@ static int configure_aif_clock(struct snd_soc_codec *codec, int aif)
 	int reg1 = 0;
 	int offset;
 
+	DEBUG_LOG("");
+
 	if (aif)
 		offset = 4;
 	else
@@ -1811,6 +1817,8 @@ static int configure_clock(struct snd_soc_codec *codec)
 {
 	struct wm8994_priv *wm8994 = snd_soc_codec_get_drvdata(codec);
 	int old, new;
+
+	DEBUG_LOG("");
 
 	/* Bring up the AIF clocks first */
 	configure_aif_clock(codec, 0);
@@ -2890,6 +2898,8 @@ static int wm8994_set_fll(struct snd_soc_dai *dai, int id, int src,
 	struct fll_div fll;
 	u16 reg, aif1, aif2;
 
+	DEBUG_LOG("");
+
 	aif1 = snd_soc_read(codec, WM8994_AIF1_CLOCKING_1)
 		& WM8994_AIF1CLK_ENA;
 
@@ -3004,6 +3014,8 @@ static int wm8994_set_dai_sysclk(struct snd_soc_dai *dai,
 	struct wm8994_priv *wm8994 = snd_soc_codec_get_drvdata(codec);
 	int i;
 
+	DEBUG_LOG("");
+
 	switch (dai->id) {
 	case 1:
 	case 2:
@@ -3072,6 +3084,8 @@ static int wm8994_set_bias_level(struct snd_soc_codec *codec,
 				 enum snd_soc_bias_level level)
 {
 	struct wm8994_priv *wm8994 = snd_soc_codec_get_drvdata(codec);
+
+	DEBUG_LOG("");
 
 	switch (level) {
 	case SND_SOC_BIAS_ON:
@@ -3174,6 +3188,8 @@ static int wm8994_set_dai_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 	int aif1_reg;
 	int ms = 0;
 	int aif1 = 0;
+
+	DEBUG_LOG("");
 
 	switch (dai->id) {
 	case 1:
@@ -3307,6 +3323,8 @@ static int wm8994_hw_params(struct snd_pcm_substream *substream,
 
 	int i, cur_val, best_val, bclk_rate, best;
 
+	DEBUG_LOG("");
+
 	switch (dai->id) {
 	case 1:
 		aif1_reg = WM8994_AIF1_CONTROL_1;
@@ -3436,6 +3454,7 @@ static int wm8994_aif_mute(struct snd_soc_dai *codec_dai, int mute)
 	struct snd_soc_codec *codec = codec_dai->codec;
 	int mute_reg;
 	int reg;
+	static int mute_state = 1;
 
 	switch (codec_dai->id) {
 	case 1:
@@ -3454,6 +3473,127 @@ static int wm8994_aif_mute(struct snd_soc_dai *codec_dai, int mute)
 		reg = 0;
 
 	snd_soc_update_bits(codec, mute_reg, WM8994_AIF1DAC1_MUTE, reg);
+
+	if(!mute)
+	{
+		if(mute_state != mute)
+		{	
+			mute_state = mute;
+			DEBUG_LOG("Mute = [%d]", mute);
+			snd_soc_write(codec, WM8994_POWER_MANAGEMENT_1, 0x1003);
+			
+			//Disable end point for preventing pop up noise.
+			reg = snd_soc_read(codec,WM8994_POWER_MANAGEMENT_1);
+			reg &= ~(WM8994_SPKOUTL_ENA_MASK);
+			snd_soc_write(codec, WM8994_POWER_MANAGEMENT_1, reg);
+
+			reg = snd_soc_read(codec, WM8994_POWER_MANAGEMENT_3);
+			reg &= ~(WM8994_MIXOUTLVOL_ENA_MASK | WM8994_MIXOUTRVOL_ENA_MASK | WM8994_MIXOUTL_ENA_MASK | WM8994_MIXOUTR_ENA_MASK | 
+					WM8994_SPKRVOL_ENA_MASK | WM8994_SPKLVOL_ENA_MASK);	
+			reg |= (WM8994_SPKLVOL_ENA | WM8994_SPKRVOL_ENA);
+			snd_soc_write(codec, WM8994_POWER_MANAGEMENT_3, reg);
+
+			// Unmute the SPKMIXVOLUME
+			reg = snd_soc_read(codec, WM8994_SPKMIXL_ATTENUATION);
+			reg &= ~(WM8994_SPKMIXL_VOL_MASK);
+			reg |= 0x0;	
+			snd_soc_write(codec, WM8994_SPKMIXL_ATTENUATION, reg);
+			
+			reg = snd_soc_read(codec,WM8994_SPKMIXR_ATTENUATION);
+			reg &= ~(WM8994_SPKMIXR_VOL_MASK);
+			snd_soc_write(codec, WM8994_SPKMIXR_ATTENUATION, reg);
+		
+			reg = snd_soc_read(codec,WM8994_SPEAKER_VOLUME_LEFT);
+//			reg |= (WM8994_SPKOUT_VU | WM8994_SPKOUTL_MUTE_N | 0x3E);
+			reg = 0x17E;
+			snd_soc_write(codec, WM8994_SPEAKER_VOLUME_LEFT, reg);
+		
+			reg = snd_soc_read(codec,WM8994_SPEAKER_VOLUME_RIGHT);
+			reg &= ~(WM8994_SPKOUTR_MUTE_N_MASK | WM8994_SPKOUTR_VOL_MASK);
+//			reg |= (WM8994_SPKOUT_VU | WM8994_SPKOUTR_MUTE_N | 0x3E);
+			reg = 0x17E;
+			snd_soc_write(codec, WM8994_SPEAKER_VOLUME_RIGHT, reg);
+		
+			reg = snd_soc_read(codec,WM8994_CLASSD);
+			reg &= ~(WM8994_SPKOUTL_BOOST_MASK);
+			reg |= 0x168;
+			snd_soc_write(codec, WM8994_CLASSD, reg);
+		
+			//Unmute DAC1 left
+			reg = snd_soc_read(codec,WM8994_DAC1_LEFT_VOLUME );
+			reg &= ~(WM8994_DAC1L_MUTE_MASK | WM8994_DAC1L_VOL_MASK);
+			reg |= 0xC0; 
+			snd_soc_write(codec,WM8994_DAC1_LEFT_VOLUME ,reg);
+		
+			//Unmute and volume ctrl RightDAC
+			reg = snd_soc_read(codec, WM8994_DAC1_RIGHT_VOLUME ); 
+			reg &= ~(WM8994_DAC1R_MUTE_MASK | WM8994_DAC1R_VOL_MASK);
+			reg |= 0xC0; //0 db volume	
+			snd_soc_write(codec,WM8994_DAC1_RIGHT_VOLUME,reg);
+			
+			reg = snd_soc_read(codec, WM8994_AIF1_DAC1_LEFT_VOLUME);
+			reg &= ~(WM8994_AIF1DAC1L_VOL_MASK);
+			reg |= (WM8994_AIF1DAC1_VU | 0xC0);
+			snd_soc_write(codec, WM8994_AIF1_DAC1_LEFT_VOLUME, reg);
+		
+			reg = snd_soc_read(codec, WM8994_AIF1_DAC1_RIGHT_VOLUME);
+			reg &= ~(WM8994_AIF1DAC1R_VOL_MASK);
+			reg |= (WM8994_AIF1DAC1_VU |0xC0);
+			snd_soc_write(codec, WM8994_AIF1_DAC1_RIGHT_VOLUME, reg);
+		
+			reg = snd_soc_read(codec,WM8994_SPKOUT_MIXERS);
+			reg &= ~(WM8994_SPKMIXL_TO_SPKOUTL_MASK | 
+			WM8994_SPKMIXR_TO_SPKOUTL_MASK | WM8994_SPKMIXR_TO_SPKOUTR_MASK);
+			reg |= (WM8994_SPKMIXL_TO_SPKOUTL | WM8994_SPKMIXR_TO_SPKOUTR);
+			snd_soc_write(codec, WM8994_SPKOUT_MIXERS, reg);
+		
+			//Unmute the DAC path
+			reg = snd_soc_read(codec,WM8994_SPEAKER_MIXER);
+			reg &= ~(WM8994_DAC1L_TO_SPKMIXL_MASK);
+			reg |= (WM8994_DAC1L_TO_SPKMIXL | WM8994_DAC1R_TO_SPKMIXR);
+			snd_soc_write(codec, WM8994_SPEAKER_MIXER, reg);
+		
+			// Eable DAC1 Left and timeslot left
+			reg = snd_soc_read(codec,WM8994_POWER_MANAGEMENT_5);	
+			reg &= ~( WM8994_DAC1L_ENA_MASK | WM8994_AIF1DAC1R_ENA_MASK | WM8994_AIF1DAC1L_ENA_MASK);
+			reg |= (WM8994_AIF1DAC1L_ENA | WM8994_AIF1DAC1R_ENA | WM8994_DAC1L_ENA | WM8994_DAC1R_ENA);
+			snd_soc_write(codec, WM8994_POWER_MANAGEMENT_5, reg);	
+		
+			//Unmute
+			reg = snd_soc_read(codec, WM8994_AIF1_DAC1_FILTERS_1);
+			reg &= ~(WM8994_AIF1DAC1_MUTE_MASK | WM8994_AIF1DAC1_MONO_MASK);
+			reg |= (0x0 | WM8994_AIF1DAC1_MONO);
+			snd_soc_write(codec, WM8994_AIF1_DAC1_FILTERS_1, reg);
+		
+			//enable timeslot0 to left dac
+			reg = snd_soc_read(codec, WM8994_DAC1_LEFT_MIXER_ROUTING);
+			reg &= ~(WM8994_AIF1DAC1L_TO_DAC1L_MASK);
+			reg |= WM8994_AIF1DAC1L_TO_DAC1L;
+			snd_soc_write(codec, WM8994_DAC1_LEFT_MIXER_ROUTING, reg);
+			
+			reg = snd_soc_read(codec, WM8994_DAC1_RIGHT_MIXER_ROUTING);
+			reg &= ~(WM8994_AIF1DAC1R_TO_DAC1R_MASK);
+			reg |= WM8994_AIF1DAC1R_TO_DAC1R;
+			snd_soc_write(codec, WM8994_DAC1_RIGHT_MIXER_ROUTING, reg);
+		
+			//Enbale bias,vmid and Left speaker
+			reg = snd_soc_read(codec,WM8994_POWER_MANAGEMENT_1);
+			reg &= ~(WM8994_BIAS_ENA_MASK | WM8994_VMID_SEL_MASK |WM8994_HPOUT1L_ENA_MASK |WM8994_HPOUT1R_ENA_MASK | 
+			WM8994_SPKOUTR_ENA_MASK | WM8994_SPKOUTL_ENA_MASK);
+			reg |= (WM8994_BIAS_ENA | 0x02 | WM8994_SPKOUTL_ENA | WM8994_SPKOUTR_ENA);  
+			snd_soc_write(codec, WM8994_POWER_MANAGEMENT_1, reg);
+
+			
+			snd_soc_write(codec, WM8994_AIF1_DAC1_FILTERS_1, 0x0);
+			snd_soc_write(codec, WM8994_CLOCKING_1, 0xA);
+			snd_soc_write(codec, WM8994_AIF1_CLOCKING_1, 0x1);
+		}
+	}
+	else
+	{
+		DEBUG_LOG("Mute = [%d]", mute);
+		mute_state = mute;
+	}
 
 	return 0;
 }

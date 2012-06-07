@@ -46,7 +46,11 @@ static const int max8952_mode0_voltages[] = {
 };
 
 static const int max8952_mode1_voltages[] = {
+#ifdef CONFIG_MACH_N1
+	750000, 800000, 850000, 875000, 950000, 1000000, 1100000
+#else
 	750000, 760000, 1040000, 1050000, 1060000, 1370000, 1380000
+#endif
 };
 
 static const int max8952_mode2_voltages[] = {
@@ -199,6 +203,7 @@ static int max8952_set_voltage(struct regulator_dev *rdev, int min_uV,
 
 	for (i = 0; i < reg->desc.n_voltages; i++) {
 		voltage = reg->voltages_list[i];
+		pr_debug("%s: voltage=%d, i=%d\n", __func__, voltage, i);
 		if (min_uV <= voltage && voltage <= max_uV) {
 			val = VOLTAGE_TO_VALUE(voltage);
 			break;
@@ -206,6 +211,9 @@ static int max8952_set_voltage(struct regulator_dev *rdev, int min_uV,
 	}
 	if (val == -1)
 		return -EDOM;
+
+	pr_debug("%s: val=%d, voltage=%d, min=%d, max=%d\n",
+		__func__, val, voltage, min_uV, max_uV);
 
 	return max8952_set_bits(max8952, reg->reg_base, MAX8952_MASK_OUTMODE,
 				val);

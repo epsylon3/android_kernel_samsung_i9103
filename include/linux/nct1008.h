@@ -25,6 +25,14 @@
 
 #include <linux/types.h>
 
+struct nct1008_temp_callbacks {
+	int (*get_temperature)(struct nct1008_temp_callbacks *ptr);
+};
+
+struct nct1008_temp_data {
+	void (*register_callbacks)(struct nct1008_temp_callbacks *ptr);
+};
+
 struct nct1008_platform_data {
 	bool supported_hwrev;
 	bool ext_range;
@@ -35,6 +43,7 @@ struct nct1008_platform_data {
 	u8 shutdown_local_limit;
 	u8 throttling_ext_limit;
 	void (*alarm_fn)(bool raised);
+	struct nct1008_temp_data *temp;
 };
 
 #endif /* _LINUX_NCT1008_H */

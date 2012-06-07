@@ -127,7 +127,12 @@ static unsigned	n_ports;
 
 #define GS_CLOSE_TIMEOUT		15		/* seconds */
 
+#define ACM_ZLP		1
 
+#if ACM_ZLP
+static int acm_multiple = 0;
+static int acm_need_zlp = 0;
+#endif
 
 #ifdef VERBOSE_DEBUG
 #define pr_vdebug(fmt, arg...) \
@@ -365,10 +370,27 @@ __acquires(&port->port_lock)
 
 		req = list_entry(pool->next, struct usb_request, list);
 		len = gs_send_packet(port, req->buf, in->maxpacket);
+
+#if ACM_ZLP
+		if (len == 0) {
+			//printk("[%s] len == 0 ;\n", __func__);
+			if (acm_need_zlp == 0) {
+				req->zero = 0;
+			wake_up_interruptible(&port->drain_wait);
+			break;
+			} else {
+				//printk("[%s] zlp: => req.zero = true ;\n", __func__);
+				req->zero = 1;
+				acm_need_zlp = 0;
+				acm_multiple = 0;
+			}
+		}
+#else
 		if (len == 0) {
 			wake_up_interruptible(&port->drain_wait);
 			break;
 		}
+#endif
 		do_tty_wake = true;
 
 		req->length = len;
@@ -811,10 +833,49 @@ static int gs_writes_finished(struct gs_port *p)
 	return cond;
 }
 
+static int gs_chars_in_buffer(struct tty_struct *tty)
+{
+	struct gs_port	*port = tty->driver_data;
+	unsigned long	flags;
+	int		chars = 0;
+
+	spin_lock_irqsave(&port->port_lock, flags);
+	chars = gs_buf_data_avail(&port->port_write_buf);
+	spin_unlock_irqrestore(&port->port_lock, flags);
+
+//	printk("[%s] gs_chars_in_buffer: (%d,%p) chars=%d\n", __func__, 
+//		port->port_num, tty, chars);
+
+#if ACM_ZLP
+	if (chars == 0 && acm_multiple == 1) {
+
+		if (port->port_usb) {
+			int status;
+			//printk("%s: Need zlp.....\n", __func__);
+			acm_need_zlp = 1;
+
+			spin_lock_irqsave(&port->port_lock, flags);
+			status = gs_start_tx(port);
+			spin_unlock_irqrestore(&port->port_lock, flags);
+		}
+	}
+#endif
+
+	return chars;
+}
+
+
 static void gs_close(struct tty_struct *tty, struct file *file)
 {
 	struct gs_port *port = tty->driver_data;
 	struct gserial	*gser;
+
+#if ACM_ZLP
+	//int ret = gs_chars_in_buffer(tty);
+//	printk("[%s] gs_chars_in_buffer: %d\n", __func__, ret);
+	gs_chars_in_buffer(tty);
+
+#endif
 
 	spin_lock_irq(&port->port_lock);
 
@@ -877,6 +938,9 @@ static int gs_write(struct tty_struct *tty, const unsigned char *buf, int count)
 	struct gs_port	*port = tty->driver_data;
 	unsigned long	flags;
 	int		status;
+#if ACM_ZLP
+	struct usb_ep	*in;
+#endif
 
 	pr_vdebug("gs_write: ttyGS%d (%p) writing %d bytes\n",
 			port->port_num, tty, count);
@@ -884,6 +948,18 @@ static int gs_write(struct tty_struct *tty, const unsigned char *buf, int count)
 	spin_lock_irqsave(&port->port_lock, flags);
 	if (count)
 		count = gs_buf_put(&port->port_write_buf, buf, count);
+
+#if ACM_ZLP
+	if (port->port_usb) {
+		in = port->port_usb->in;
+
+		acm_multiple = 0;
+		if ( count != 0 && (count % in->maxpacket == 0)) {
+			acm_multiple = 1;
+			acm_need_zlp = 1;
+		}
+	}
+#endif
 	/* treat count == 0 as flush_chars() */
 	if (port->port_usb)
 		status = gs_start_tx(port);
@@ -936,22 +1012,6 @@ static int gs_write_room(struct tty_struct *tty)
 		port->port_num, tty, room);
 
 	return room;
-}
-
-static int gs_chars_in_buffer(struct tty_struct *tty)
-{
-	struct gs_port	*port = tty->driver_data;
-	unsigned long	flags;
-	int		chars = 0;
-
-	spin_lock_irqsave(&port->port_lock, flags);
-	chars = gs_buf_data_avail(&port->port_write_buf);
-	spin_unlock_irqrestore(&port->port_lock, flags);
-
-	pr_vdebug("gs_chars_in_buffer: (%d,%p) chars=%d\n",
-		port->port_num, tty, chars);
-
-	return chars;
 }
 
 /* undo side effects of setting TTY_THROTTLED */

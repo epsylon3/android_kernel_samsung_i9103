@@ -50,7 +50,7 @@ config USB_ULPI
 	  are likely found on embedded boards.
 
 config USB_ULPI_VIEWPORT
-	bool
+	bool "USB ULPI VIEW PORT"
 	depends on USB_ULPI
 	help
 	  Provides read/write operations to the ULPI phy register set for

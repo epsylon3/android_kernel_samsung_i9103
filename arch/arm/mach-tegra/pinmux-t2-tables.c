@@ -240,6 +240,17 @@ static inline void pg_writel(unsigned long value, unsigned long offset)
 	writel(value, IO_TO_VIRT(TEGRA_APB_MISC_BASE + offset));
 }
 
+#ifdef CONFIG_MACH_N1
+static struct tegra_sleep_pingroup_config n1_sleep_pinmux[] = {
+//	{TEGRA_PINGROUP_KBCF,	YES,	TEGRA_PUPD_PULL_DOWN,	NO,	TEGRA_TRI_NORMAL},
+//	{TEGRA_PINGROUP_ATC,	YES,	TEGRA_PUPD_PULL_DOWN,	NO,	TEGRA_TRI_NORMAL},
+//	{TEGRA_PINGROUP_LCSN,	YES,	TEGRA_PUPD_PULL_DOWN,	NO,	TEGRA_TRI_NORMAL},
+//	{TEGRA_PINGROUP_LPW1,	YES,	TEGRA_PUPD_PULL_DOWN,	NO,	TEGRA_TRI_NORMAL},
+//	{TEGRA_PINGROUP_LSCK,	YES,	TEGRA_PUPD_PULL_DOWN,	NO,	TEGRA_TRI_NORMAL},
+//	{TEGRA_PINGROUP_LSDA,	YES,	TEGRA_PUPD_PULL_DOWN,	NO,	TEGRA_TRI_NORMAL},
+};
+#endif
+
 void tegra_pinmux_suspend(void)
 {
 	unsigned int i;
@@ -256,6 +267,24 @@ void tegra_pinmux_suspend(void)
 
 	for (i = 0; i < ARRAY_SIZE(tegra_soc_drive_pingroups); i++)
 		*ctx++ = pg_readl(tegra_soc_drive_pingroups[i].reg);
+
+#ifdef CONFIG_MACH_N1
+	tegra_pinmux_sleep_config_table(n1_sleep_pinmux, ARRAY_SIZE(n1_sleep_pinmux));
+#endif
+#if 0
+	for (i = 0; i < PIN_MUX_CTL_REG_NUM; i++){
+		printk("[BOSE] pin mux ctl reg  %d : 0x%x \n", i, pg_readl(PIN_MUX_CTL_REG_A + i*4));
+	}
+	for (i = 0; i < PULLUPDOWN_REG_NUM; i++){
+		printk("[BOSE] after pullupdown_reg %d : 0x%x \n", i,pg_readl(PULLUPDOWN_REG_A + i*4) );
+	}
+	for (i = 0; i < TRISTATE_REG_NUM; i++){
+		printk("[BOSE] tristate_reg_  %d : 0x%x \n", i, pg_readl(TRISTATE_REG_A + i*4));
+	}	
+	for (i = 0; i < ARRAY_SIZE(tegra_soc_drive_pingroups); i++){
+		printk("[BOSE] tegra_soc_drive_pingroups %d : 0x%x \n", i, pg_readl(tegra_soc_drive_pingroups[i].reg));
+	}
+#endif
 }
 
 void tegra_pinmux_resume(void)

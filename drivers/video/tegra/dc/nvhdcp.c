@@ -24,6 +24,9 @@
 #include <linux/wait.h>
 #include <linux/workqueue.h>
 #include <asm/atomic.h>
+#ifdef CONFIG_MACH_N1
+#include <linux/wakelock.h>
+#endif
 
 #include <mach/dc.h>
 #include <mach/nvhost.h>
@@ -35,8 +38,6 @@
 #include "dc_priv.h"
 #include "hdmi_reg.h"
 #include "hdmi.h"
-
-DECLARE_WAIT_QUEUE_HEAD(wq_worker);
 
 /* for 0x40 Bcaps */
 #define BCAPS_REPEATER (1 << 6)
@@ -78,6 +79,10 @@ struct tegra_nvhdcp {
 	struct work_struct		work;
 	struct tegra_dc_hdmi_data	*hdmi;
 	struct workqueue_struct		*downstream_wq;
+#ifdef CONFIG_MACH_N1
+	struct wake_lock		wake_lock;
+	int				work_num;
+#endif
 	struct mutex			lock;
 	struct miscdevice		miscdev;
 	char				name[12];
@@ -142,7 +147,7 @@ static int nvhdcp_i2c_read(struct tegra_nvhdcp *nvhdcp, u8 reg,
 		}
 		status = i2c_transfer(nvhdcp->client->adapter,
 			msg, ARRAY_SIZE(msg));
-		if ((status < 0) && (retries > 1))
+		if (retries > 1)
 			msleep(250);
 	} while ((status < 0) && retries--);
 
@@ -179,7 +184,7 @@ static int nvhdcp_i2c_write(struct tegra_nvhdcp *nvhdcp, u8 reg,
 		}
 		status = i2c_transfer(nvhdcp->client->adapter,
 			msg, ARRAY_SIZE(msg));
-		if ((status < 0) && (retries > 1))
+		if (retries > 1)
 			msleep(250);
 	} while ((status < 0) && retries--);
 
@@ -840,6 +845,13 @@ static void nvhdcp_downstream_worker(struct work_struct *work)
 	mutex_lock(&nvhdcp->lock);
 	if (nvhdcp->state == STATE_OFF) {
 		nvhdcp_err("nvhdcp failure - giving up\n");
+#ifdef CONFIG_MACH_N1
+		if (nvhdcp->work_num > 0) {
+			nvhdcp->work_num--;
+			if (nvhdcp->work_num == 0)
+				wake_unlock(&nvhdcp->wake_lock);
+		}
+#endif
 		goto err;
 	}
 	nvhdcp->state = STATE_UNAUTHENTICATED;
@@ -965,6 +977,14 @@ static void nvhdcp_downstream_worker(struct work_struct *work)
 		goto failure;
 	}
 
+	tmp = tegra_hdmi_readl(hdmi, HDMI_NV_PDISP_RG_HDCP_CTRL);
+	tmp |= CRYPT_ENABLED;
+	if (b_caps & BCAPS_11) /* HDCP 1.1 ? */
+		tmp |= ONEONE_ENABLED;
+	tegra_hdmi_writel(hdmi, tmp, HDMI_NV_PDISP_RG_HDCP_CTRL);
+
+	nvhdcp_vdbg("CRYPT enabled\n");
+
 	/* if repeater then get repeater info */
 	if (b_caps & BCAPS_REPEATER) {
 		e = get_repeater_info(nvhdcp);
@@ -973,14 +993,6 @@ static void nvhdcp_downstream_worker(struct work_struct *work)
 			goto failure;
 		}
 	}
-
-	tmp = tegra_hdmi_readl(hdmi, HDMI_NV_PDISP_RG_HDCP_CTRL);
-	tmp |= CRYPT_ENABLED;
-	if (b_caps & BCAPS_11) /* HDCP 1.1 ? */
-		tmp |= ONEONE_ENABLED;
-	tegra_hdmi_writel(hdmi, tmp, HDMI_NV_PDISP_RG_HDCP_CTRL);
-
-	nvhdcp_vdbg("CRYPT enabled\n");
 
 	nvhdcp->state = STATE_LINK_VERIFY;
 	nvhdcp_info("link verified!\n");
@@ -998,8 +1010,7 @@ static void nvhdcp_downstream_worker(struct work_struct *work)
 			goto failure;
 		}
 		mutex_unlock(&nvhdcp->lock);
-		wait_event_interruptible_timeout(wq_worker, 0,
-				msecs_to_jiffies(1500));
+		msleep(1500);
 		mutex_lock(&nvhdcp->lock);
 
 	}
@@ -1019,7 +1030,13 @@ failure:
 lost_hdmi:
 	nvhdcp->state = STATE_UNAUTHENTICATED;
 	hdcp_ctrl_run(hdmi, 0);
-
+#ifdef CONFIG_MACH_N1
+	if (nvhdcp->work_num > 0) {
+		nvhdcp->work_num--;
+		if (nvhdcp->work_num == 0);
+			wake_unlock(&nvhdcp->wake_lock);
+	}
+#endif
 err:
 	mutex_unlock(&nvhdcp->lock);
 	return;
@@ -1031,6 +1048,11 @@ static int tegra_nvhdcp_on(struct tegra_nvhdcp *nvhdcp)
 	if (nvhdcp_is_plugged(nvhdcp)) {
 		nvhdcp->fail_count = 0;
 		queue_work(nvhdcp->downstream_wq, &nvhdcp->work);
+#ifdef CONFIG_MACH_N1
+		if (nvhdcp->work_num == 0)
+			wake_lock(&nvhdcp->wake_lock);
+		nvhdcp->work_num++;
+#endif
 	}
 	return 0;
 }
@@ -1041,8 +1063,12 @@ static int tegra_nvhdcp_off(struct tegra_nvhdcp *nvhdcp)
 	nvhdcp->state = STATE_OFF;
 	nvhdcp_set_plugged(nvhdcp, false);
 	mutex_unlock(&nvhdcp->lock);
-	wake_up_interruptible(&wq_worker);
+#ifndef CONFIG_MACH_N1
+	/* flush_workqueue() on suspend triggers kernel assertion
+	 * trying to grab mutex.
+	 */
 	flush_workqueue(nvhdcp->downstream_wq);
+#endif
 	return 0;
 }
 
@@ -1064,8 +1090,8 @@ int tegra_nvhdcp_set_policy(struct tegra_nvhdcp *nvhdcp, int pol)
 		nvhdcp_info("using \"always on\" policy.\n");
 		if (atomic_xchg(&nvhdcp->policy, pol) != pol) {
 			/* policy changed, start working */
-			tegra_nvhdcp_on(nvhdcp);
-		}
+		tegra_nvhdcp_on(nvhdcp);
+	}
 	} else {
 		/* unsupported policy */
 		return -EINVAL;
@@ -1225,6 +1251,11 @@ struct tegra_nvhdcp *tegra_nvhdcp_create(struct tegra_dc_hdmi_data *hdmi,
 	nvhdcp->downstream_wq = create_singlethread_workqueue(nvhdcp->name);
 	INIT_WORK(&nvhdcp->work, nvhdcp_downstream_worker);
 
+#ifdef CONFIG_MACH_N1
+	nvhdcp->work_num = 0;
+	wake_lock_init(&nvhdcp->wake_lock, WAKE_LOCK_SUSPEND, "HDCP");
+#endif
+
 	nvhdcp->miscdev.minor = MISC_DYNAMIC_MINOR;
 	nvhdcp->miscdev.name = nvhdcp->name;
 	nvhdcp->miscdev.fops = &nvhdcp_fops;
@@ -1238,6 +1269,9 @@ struct tegra_nvhdcp *tegra_nvhdcp_create(struct tegra_dc_hdmi_data *hdmi,
 	return nvhdcp;
 free_workqueue:
 	destroy_workqueue(nvhdcp->downstream_wq);
+#ifdef CONFIG_MACH_N1
+	wake_lock_destroy(&nvhdcp->wake_lock);
+#endif
 	i2c_release_client(nvhdcp->client);
 free_nvhdcp:
 	kfree(nvhdcp);
@@ -1250,6 +1284,9 @@ void tegra_nvhdcp_destroy(struct tegra_nvhdcp *nvhdcp)
 	misc_deregister(&nvhdcp->miscdev);
 	tegra_nvhdcp_off(nvhdcp);
 	destroy_workqueue(nvhdcp->downstream_wq);
+#ifdef CONFIG_MACH_N1
+	wake_lock_destroy(&nvhdcp->wake_lock);
+#endif
 	i2c_release_client(nvhdcp->client);
 	kfree(nvhdcp);
 }

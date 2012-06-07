@@ -19,6 +19,8 @@
 #include <linux/input.h>
 #include <linux/irq.h>
 #include <linux/slab.h>
+#include <linux/regulator/consumer.h>
+#include <linux/delay.h>
 
 /* MCS5000 Touchkey */
 #define MCS5000_TOUCHKEY_STATUS		0x04
@@ -47,11 +49,36 @@ struct mcs_touchkey_chip {
 struct mcs_touchkey_data {
 	struct i2c_client *client;
 	struct input_dev *input_dev;
+	struct regulator *regulator;
 	struct mcs_touchkey_chip chip;
 	unsigned int key_code;
 	unsigned int key_val;
 	unsigned short keycodes[];
 };
+
+static int mcs_touchkey_read(struct i2c_client *client, u8 reg, u8 * val, unsigned int len)
+{
+    int err = -1;
+    int retry = 10;
+    struct i2c_msg msg[1];
+
+    while (retry--)
+    {
+        msg->addr = client->addr;
+        msg->flags = I2C_M_RD;
+        msg->len = len;
+        msg->buf = val;
+        err = i2c_transfer(client->adapter, msg, 1);
+
+        if(err >= 0)
+        {
+            return 0;
+        }
+        mdelay(10);
+    }
+    return err;
+
+}
 
 static irqreturn_t mcs_touchkey_interrupt(int irq, void *dev_id)
 {
@@ -61,11 +88,12 @@ static irqreturn_t mcs_touchkey_interrupt(int irq, void *dev_id)
 	struct input_dev *input = data->input_dev;
 	unsigned int key_val;
 	unsigned int pressed;
-	int val;
+	u8 val;
+	int err;
 
-	val = i2c_smbus_read_byte_data(client, chip->status_reg);
-	if (val < 0) {
-		dev_err(&client->dev, "i2c read error [%d]\n", val);
+	err = mcs_touchkey_read(client, chip->status_reg, &val, 1);
+	if (err < 0) {
+		dev_err(&client->dev, "i2c read error [%d]\n", err);
 		goto out;
 	}
 
@@ -90,8 +118,14 @@ static irqreturn_t mcs_touchkey_interrupt(int irq, void *dev_id)
 	dev_dbg(&client->dev, "key %d %d %s\n", data->key_val, data->key_code,
 		pressed ? "pressed" : "released");
 
- out:
+out:
 	return IRQ_HANDLED;
+}
+
+static void mcs_touchkey_power_on(struct mcs_touchkey_data *data)
+{
+	regulator_enable(data->regulator);
+	regulator_set_voltage(data->regulator, 3300000, 3900000);
 }
 
 static int __devinit mcs_touchkey_probe(struct i2c_client *client,
@@ -101,7 +135,7 @@ static int __devinit mcs_touchkey_probe(struct i2c_client *client,
 	struct mcs_touchkey_data *data;
 	struct input_dev *input_dev;
 	unsigned int fw_reg;
-	int fw_ver;
+	u8 fw_ver;
 	int error;
 	int i;
 
@@ -123,6 +157,12 @@ static int __devinit mcs_touchkey_probe(struct i2c_client *client,
 
 	data->client = client;
 	data->input_dev = input_dev;
+	data->regulator = regulator_get(&client->dev, "vdd_mcs_touchkey");
+	if (IS_ERR(data->regulator)) {
+		data->regulator = NULL;
+	} else {
+		mcs_touchkey_power_on(data);
+	}
 
 	if (id->driver_data == MCS5000_TOUCHKEY) {
 		data->chip.status_reg = MCS5000_TOUCHKEY_STATUS;
@@ -137,9 +177,8 @@ static int __devinit mcs_touchkey_probe(struct i2c_client *client,
 		fw_reg = MCS5080_TOUCHKEY_FW;
 	}
 
-	fw_ver = i2c_smbus_read_byte_data(client, fw_reg);
-	if (fw_ver < 0) {
-		error = fw_ver;
+	error = mcs_touchkey_read(client, fw_reg, &fw_ver, 1);
+	if (error < 0) {
 		dev_err(&client->dev, "i2c read error[%d]\n", error);
 		goto err_free_mem;
 	}

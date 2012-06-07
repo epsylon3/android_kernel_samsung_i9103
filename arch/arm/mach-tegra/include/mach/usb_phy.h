@@ -21,7 +21,11 @@
 #include <linux/clk.h>
 #include <linux/regulator/consumer.h>
 #include <linux/usb/otg.h>
+#ifdef CONFIG_MACH_N1
+#include <linux/platform_device.h>
 
+#define USB_PHY_MAX_CONTEXT_REGS 10
+#endif
 struct tegra_utmip_config {
 	u8 hssync_start_delay;
 	u8 elastic_limit;
@@ -77,6 +81,9 @@ struct usb_phy_plat_data {
 	int instance;
 	int vbus_irq;
 	int vbus_gpio;
+#ifdef CONFIG_MACH_N1
+	void (*usb_ldo_en)(int, int);
+#endif
 };
 
 struct tegra_xtal_freq;
@@ -99,22 +106,29 @@ struct tegra_usb_phy {
 struct tegra_usb_phy *tegra_usb_phy_open(int instance, void __iomem *regs,
 			void *config, enum tegra_usb_phy_mode phy_mode);
 
-int tegra_usb_phy_power_on(struct tegra_usb_phy *phy, bool is_dpd);
+int tegra_usb_phy_power_on(struct tegra_usb_phy *phy);
 
 void tegra_usb_phy_clk_disable(struct tegra_usb_phy *phy);
 
 void tegra_usb_phy_clk_enable(struct tegra_usb_phy *phy);
 
-void tegra_usb_phy_power_off(struct tegra_usb_phy *phy, bool is_dpd);
+void tegra_usb_phy_power_off(struct tegra_usb_phy *phy);
 
-void tegra_usb_phy_preresume(struct tegra_usb_phy *phy, bool is_dpd);
+void tegra_usb_phy_preresume(struct tegra_usb_phy *phy);
 
-void tegra_usb_phy_postresume(struct tegra_usb_phy *phy, bool is_dpd);
+void tegra_usb_phy_postresume(struct tegra_usb_phy *phy);
 
 void tegra_ehci_phy_restore_start(struct tegra_usb_phy *phy,
 				 enum tegra_usb_phy_port_speed port_speed);
 
 void tegra_ehci_phy_restore_end(struct tegra_usb_phy *phy);
+
+int tegra_usb_set_phy_clock(struct tegra_usb_phy *phy, char clock_on);
+
+#ifdef CONFIG_MACH_N1
+void tegra_usb1_power(int active);
+int check_modem_alive(void);
+#endif
 
 void tegra_usb_phy_close(struct tegra_usb_phy *phy);
 

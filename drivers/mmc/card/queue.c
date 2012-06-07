@@ -18,6 +18,9 @@
 
 #include <linux/mmc/card.h>
 #include <linux/mmc/host.h>
+#ifdef CONFIG_MMC_DISCARD_MERGE
+#include <linux/mmc/discard.h>
+#endif
 #include "queue.h"
 
 #define MMC_QUEUE_BOUNCESZ	65536
@@ -46,6 +49,11 @@ static int mmc_queue_thread(void *d)
 {
 	struct mmc_queue *mq = d;
 	struct request_queue *q = mq->queue;
+#ifdef CONFIG_MMC_DISCARD_MERGE
+	int ret;
+	int state = DCS_NO_DISCARD_REQ;
+	int flag;
+#endif
 
 	current->flags |= PF_MEMALLOC;
 
@@ -65,11 +73,41 @@ static int mmc_queue_thread(void *d)
 				set_current_state(TASK_RUNNING);
 				break;
 			}
+#ifdef CONFIG_MMC_DISCARD_MERGE
+			if (mmc_card_mmc(mq->card)) {
+				flag = mmc_read_idle(mq->card);
+				if (flag == DCS_IDLE_OPS_TURNED_ON) {
+			mmc_claim_host(mq->card->host);
+			ret = mmc_do_idle_ops(mq->card);
+			mmc_release_host(mq->card->host);
+					if (ret) {
+						if (mq->flags & MMC_QUEUE_SUSPENDED)
+							goto sched;
+					} else {
+						state = DCS_NO_DISCARD_REQ;
+						mmc_clear_idle(mq->card);
+					}
+				continue;
+				} else if (flag == DCS_MMC_DEVICE_REMOVED) {
+					/* do nothing */
+				} else if (state == DCS_DISCARD_REQ) {
+					state = DCS_IDLE_TIMER_TRIGGERED;
+					mmc_trigger_idle_timer(mq->card);
+				}
+			}
+sched:
+#endif
 			up(&mq->thread_sem);
 			schedule();
 			down(&mq->thread_sem);
 			continue;
 		}
+#ifdef CONFIG_MMC_DISCARD_MERGE
+		else if (mmc_card_mmc(mq->card)) {
+			if (state == DCS_NO_DISCARD_REQ && req->cmd_flags & REQ_DISCARD)
+				state = DCS_DISCARD_REQ;
+		}
+#endif
 		set_current_state(TASK_RUNNING);
 
 		mq->issue_fn(mq, req);

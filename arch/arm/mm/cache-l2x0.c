@@ -431,6 +431,9 @@ void __init l2x0_init(void __iomem *base, __u32 aux_val, __u32 aux_mask)
 	outer_cache.clean_range = l2x0_clean_range;
 	outer_cache.flush_range = l2x0_flush_range;
 	outer_cache.sync = l2x0_cache_sync;
+#ifdef CONFIG_KERNEL_DEBUG_SEC
+	outer_cache.flush_all = l2x0_flush_all;
+#endif
 }
 
 static int __init l2x0_disable(char *unused)

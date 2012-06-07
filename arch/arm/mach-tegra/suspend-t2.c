@@ -355,7 +355,11 @@ void __init lp0_suspend_init(void)
 	}
 }
 
+#ifdef CONFIG_MACH_N1
+#define NUM_WAKE_EVENTS 32
+#else
 #define NUM_WAKE_EVENTS 31
+#endif
 
 static int tegra_wake_event_irq[NUM_WAKE_EVENTS] = {
 	TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_PO5),
@@ -389,6 +393,9 @@ static int tegra_wake_event_irq[NUM_WAKE_EVENTS] = {
 	TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_PQ6),
 	TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_PQ7),
 	TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_PN2),
+#ifdef CONFIG_MACH_N1
+	TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_PO1),
+#endif
 };
 
 int tegra_irq_to_wake(int irq)

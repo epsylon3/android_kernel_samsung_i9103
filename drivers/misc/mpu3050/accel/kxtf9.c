@@ -62,7 +62,7 @@
 #define KXTF9_WHO_AM_I                  (0x0F) /* 0000 1111 */
 #define KXTF9_TILT_POS_CUR              (0x10) /* 0001 0000 */
 #define KXTF9_TILT_POS_PRE              (0x11) /* 0001 0001 */
-#define KXTF9_INT_SRC_REG1              (0x15) /* 0001 0101 */
+#define KXTF9_INT_SRC_REG1            (0x15) /* 0001 0101 */
 #define KXTF9_INT_SRC_REG2              (0x16) /* 0001 0110 */
 #define KXTF9_STATUS_REG                (0x18) /* 0001 1000 */
 #define KXTF9_INT_REL                   (0x1A) /* 0001 1010 */
@@ -71,7 +71,7 @@
 #define KXTF9_CTRL_REG3                 (0x1D) /* 0001 1101 */
 #define KXTF9_INT_CTRL_REG1             (0x1E) /* 0001 1110 */
 #define KXTF9_INT_CTRL_REG2             (0x1F) /* 0001 1111 */
-#define KXTF9_INT_CTRL_REG3             (0x20) /* 0010 0000 */
+#define KXTF9_INT_CTRL_REG3           (0x20) /* 0010 0000 */
 #define KXTF9_DATA_CTRL_REG             (0x21) /* 0010 0001 */
 #define KXTF9_TILT_TIMER                (0x28) /* 0010 1000 */
 #define KXTF9_WUF_TIMER                 (0x29) /* 0010 1001 */
@@ -113,6 +113,7 @@ struct kxtf9_private_data {
 	struct kxtf9_config resume;
 };
 
+extern struct acc_data cal_data;
 /*****************************************
     Accelerometer Initialization Functions
 *****************************************/
@@ -321,47 +322,15 @@ static int kxtf9_set_fsr(void *mlsl_handle,
 	return result;
 }
 
+
 static int kxtf9_suspend(void *mlsl_handle,
-			 struct ext_slave_descr *slave,
-			 struct ext_slave_platform_data *pdata)
+             struct ext_slave_descr *slave,
+             struct ext_slave_platform_data *pdata)
 {
-	int result;
-	unsigned char data;
-	struct kxtf9_private_data *private_data = pdata->private_data;
-
-	/* Wake up */
-	result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
-				KXTF9_CTRL_REG1, 0x40);
-	ERROR_CHECK(result);
-	/* INT_CTRL_REG1: */
-	result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
-				KXTF9_INT_CTRL_REG1,
-				private_data->suspend.reg_int_cfg1);
-	ERROR_CHECK(result);
-	/* WUF_THRESH: */
-	result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
-				KXTF9_WUF_THRESH,
-				private_data->suspend.reg_ths);
-	ERROR_CHECK(result);
-	/* DATA_CTRL_REG */
-	result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
-				KXTF9_DATA_CTRL_REG,
-				private_data->suspend.reg_odr);
-	ERROR_CHECK(result);
-	/* WUF_TIMER */
-	result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
-				KXTF9_WUF_TIMER, private_data->suspend.reg_dur);
-	ERROR_CHECK(result);
-
-	/* Normal operation  */
-	result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
-				KXTF9_CTRL_REG1,
-				private_data->suspend.ctrl_reg1);
-	ERROR_CHECK(result);
-	result = MLSLSerialRead(mlsl_handle, pdata->address,
-				KXTF9_INT_REL, 1, &data);
-	ERROR_CHECK(result);
-
+    int result;
+    result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
+                                         KXTF9_CTRL_REG1, 0x0);
+    ERROR_CHECK(result);
 	return result;
 }
 
@@ -624,15 +593,25 @@ static int kxtf9_read(void *mlsl_handle,
 {
 	int result;
 	unsigned char reg;
-	result = MLSLSerialRead(mlsl_handle, pdata->address,
-				KXTF9_INT_SRC_REG2, 1, &reg);
-	ERROR_CHECK(result);
-
-	if (!(reg & 0x10))
-		return ML_ERROR_ACCEL_DATA_NOT_READY;
+	int x,y,z;
 
 	result = MLSLSerialRead(mlsl_handle, pdata->address,
 				slave->reg, slave->len, data);
+
+	if(slave->len == 6)
+	{
+		x = (s16)((data[1] << 4) | (data[0] >> 4)) + cal_data.x;
+		y = (s16)((data[3] << 4) | (data[2] >> 4)) + cal_data.y;
+		z = (s16)((data[5] << 4) | (data[4] >> 4)) + cal_data.z;
+
+		data[0] = (x & 0xf) << 4;
+		data[1] = (x & 0xff0) >> 4;
+		data[2] = (y & 0xf) << 4;
+		data[3] = (y & 0xff0) >> 4;
+		data[4] = (z & 0xf) << 4;
+		data[5] = (z & 0xff0) >> 4;
+	}
+
 	ERROR_CHECK(result);
 	return result;
 }

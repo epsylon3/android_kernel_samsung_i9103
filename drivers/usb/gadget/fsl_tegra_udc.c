@@ -35,15 +35,15 @@ int fsl_udc_clk_init(struct platform_device *pdev)
 
 	clk_enable(udc_clk);
 
-	sclk_clk = clk_get(&pdev->dev, "sclk");
-	if (IS_ERR(sclk_clk)) {
-		dev_err(&pdev->dev, "Can't get sclk clock\n");
-		err = PTR_ERR(sclk_clk);
-		goto err_sclk;
-	}
-
-	clk_set_rate(sclk_clk, 80000000);
-	clk_enable(sclk_clk);
+        sclk_clk = clk_get(&pdev->dev, "sclk");
+        if (IS_ERR(sclk_clk)) {
+                dev_err(&pdev->dev, "Can't get sclk clock\n"); 
+                err = PTR_ERR(sclk_clk);
+                goto err_sclk;
+        }
+        
+        clk_set_rate(sclk_clk, 80000000);
+        clk_enable(sclk_clk);
 
 	emc_clk = clk_get(&pdev->dev, "emc");
 	if (IS_ERR(emc_clk)) {
@@ -53,7 +53,11 @@ int fsl_udc_clk_init(struct platform_device *pdev)
 	}
 
 	clk_enable(emc_clk);
-	clk_set_rate(emc_clk, 400000000);
+#if defined (CONFIG_MACH_BOSE_ATT)
+	clk_set_rate(emc_clk, 150000000);
+#else
+	clk_set_rate(emc_clk, 150000000);
+#endif
 
 	/* we have to remap the registers ourselves as fsl_udc does not
 	 * export them for us.
@@ -80,7 +84,8 @@ int fsl_udc_clk_init(struct platform_device *pdev)
 		err = PTR_ERR(phy);
 		goto err1;
 	}
-	tegra_usb_phy_power_on(phy, true);
+
+	tegra_usb_phy_power_on(phy);
 
 	return 0;
 err1:
@@ -89,8 +94,8 @@ err0:
 	clk_disable(emc_clk);
 	clk_put(emc_clk);
 err_emc:
-	clk_disable(sclk_clk);
-	clk_put(sclk_clk);
+        clk_disable(sclk_clk);
+        clk_put(sclk_clk);
 err_sclk:
 	clk_disable(udc_clk);
 	clk_put(udc_clk);
@@ -110,25 +115,25 @@ void fsl_udc_clk_release(void)
 	clk_disable(udc_clk);
 	clk_put(udc_clk);
 
-	clk_disable(sclk_clk);
-	clk_put(sclk_clk);
+        clk_disable(sclk_clk);
+        clk_put(sclk_clk);
 
 	clk_disable(emc_clk);
 	clk_put(emc_clk);
 }
 
-void fsl_udc_clk_suspend(bool is_dpd)
+void fsl_udc_clk_suspend(void)
 {
-	tegra_usb_phy_power_off(phy, is_dpd);
+	tegra_usb_phy_power_off(phy);
 	clk_disable(udc_clk);
 	clk_disable(sclk_clk);
 	clk_disable(emc_clk);
 }
 
-void fsl_udc_clk_resume(bool is_dpd)
+void fsl_udc_clk_resume(void)
 {
 	clk_enable(emc_clk);
 	clk_enable(sclk_clk);
 	clk_enable(udc_clk);
-	tegra_usb_phy_power_on(phy,  is_dpd);
+	tegra_usb_phy_power_on(phy);
 }

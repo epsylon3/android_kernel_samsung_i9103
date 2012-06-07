@@ -38,6 +38,9 @@
 #include <linux/usb/android_composite.h>
 #include <linux/usb/f_accessory.h>
 
+extern void samsung_enable_function(int mode);
+
+
 #define BULK_BUFFER_SIZE    16384
 #define ACC_STRING_SIZE     256
 
@@ -620,6 +623,7 @@ static void acc_work(struct work_struct *data)
 	struct delayed_work *delayed = to_delayed_work(data);
 	struct acc_dev	*dev =
 		container_of(delayed, struct acc_dev, work);
+//	printk(KERN_ERR "[ACC_WORK] dev->function name : %s\n", dev->function.name);
 	android_enable_function(&dev->function, 1);
 }
 
@@ -635,12 +639,9 @@ static int acc_function_setup(struct usb_function *f,
 	u16	w_value = le16_to_cpu(ctrl->wValue);
 	u16	w_length = le16_to_cpu(ctrl->wLength);
 
-/*
-	printk(KERN_INFO "acc_function_setup "
-			"%02x.%02x v%04x i%04x l%u\n",
+	printk(KERN_ERR "[ACC_SETUP] Type:%02x REQ:%02d VALUE:%04x INDEX:%04x LEN:%u dev->function.disabled:%d\n",
 			b_requestType, b_request,
-			w_value, w_index, w_length);
-*/
+			w_value, w_index, w_length, dev->function.disabled);
 
 	if (dev->function.disabled) {
 		if (b_requestType == (USB_DIR_OUT | USB_TYPE_VENDOR)) {
@@ -696,6 +697,7 @@ static int acc_function_set_alt(struct usb_function *f,
 	int ret;
 
 	DBG(cdev, "acc_function_set_alt intf: %d alt: %d\n", intf, alt);
+
 	ret = usb_ep_enable(dev->ep_in,
 			ep_choose(cdev->gadget,
 				&acc_highspeed_in_desc,
@@ -712,7 +714,7 @@ static int acc_function_set_alt(struct usb_function *f,
 	}
 	if (!dev->function.disabled)
 		dev->online = 1;
-
+ 
 	/* readers may be blocked waiting for us to go online */
 	wake_up(&dev->read_wq);
 	return 0;

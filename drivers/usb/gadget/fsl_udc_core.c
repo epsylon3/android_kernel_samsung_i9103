@@ -33,6 +33,7 @@
 #include <linux/device.h>
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
+#include <linux/usb/composite.h>
 #include <linux/usb/otg.h>
 #include <linux/dma-mapping.h>
 #include <linux/platform_device.h>
@@ -47,6 +48,9 @@
 #include <asm/dma.h>
 
 #include "fsl_usb2_udc.h"
+#ifdef CONFIG_USB_ANDROID_ACCESSORY
+#include <linux/usb/f_accessory.h>
+#endif
 
 #ifdef CONFIG_ARCH_TEGRA
 #define	DRIVER_DESC	"NVidia Tegra High-Speed USB SOC Device Controller driver"
@@ -1200,12 +1204,49 @@ static int fsl_vbus_session(struct usb_gadget *gadget, int is_active)
 {
 	struct fsl_udc	*udc;
 	unsigned long	flags;
+	struct usb_composite_dev	*cdev;
 
 	udc = container_of(gadget, struct fsl_udc, gadget);
 
 	VDBG("VBUS %s", is_active ? "on" : "off");
 
 	if (udc->transceiver) {
+#ifdef CONFIG_MACH_N1
+		udc->vbus_active = (is_active != 0);
+		if (!udc->vbus_active) {
+			spin_lock_irqsave(&udc->lock, flags);
+			cdev = get_gadget_data(&udc->gadget);
+			if(udc->driver)
+			{
+				cdev->mute_switch = 0;
+				printk("%s : %d cdev->mute_switch is 0 and disconnect.\n", __func__, __LINE__);
+			}
+                        cdev->bMultiConfiguration = 0;
+                        cdev->MacPC = 0;
+			/* reset all internal Queues and inform client driver */
+			reset_queues(udc);
+			/* stop the controller and turn off the clocks */
+			dr_controller_stop(udc);
+			dr_controller_reset(udc);
+			spin_unlock_irqrestore(&udc->lock, flags);
+			fsl_udc_clk_suspend();
+			udc->vbus_active = 0;
+			udc->usb_state = USB_STATE_DEFAULT;
+		} else {
+			fsl_udc_clk_resume();
+			/* setup the controller in the device mode */
+			dr_controller_setup(udc);
+			/* setup EP0 for setup packet */
+			ep0_setup(udc);
+			/* initialize the USB and EP states */
+			udc->usb_state = USB_STATE_ATTACHED;
+			udc->ep0_state = WAIT_FOR_SETUP;
+			udc->ep0_dir = 0;
+				udc->vbus_active = 1;
+			/* start the controller */
+			dr_controller_run(udc);
+		}
+#else
 		if (udc->vbus_active && !is_active) {
 			spin_lock_irqsave(&udc->lock, flags);
 			/* reset all internal Queues and inform client driver */
@@ -1213,12 +1254,12 @@ static int fsl_vbus_session(struct usb_gadget *gadget, int is_active)
 			/* stop the controller and turn off the clocks */
 			dr_controller_stop(udc);
 			dr_controller_reset(udc);
+			spin_unlock_irqrestore(&udc->lock, flags);
+			fsl_udc_clk_suspend();
 			udc->vbus_active = 0;
 			udc->usb_state = USB_STATE_DEFAULT;
-			spin_unlock_irqrestore(&udc->lock, flags);
-			fsl_udc_clk_suspend(false);
 		} else if (!udc->vbus_active && is_active) {
-			fsl_udc_clk_resume(false);
+			fsl_udc_clk_resume();
 			/* setup the controller in the device mode */
 			dr_controller_setup(udc);
 			/* setup EP0 for setup packet */
@@ -1231,6 +1272,7 @@ static int fsl_vbus_session(struct usb_gadget *gadget, int is_active)
 			/* start the controller */
 			dr_controller_run(udc);
 		}
+#endif
 		return 0;
 	}
 
@@ -1406,23 +1448,6 @@ static void ch9getstatus(struct fsl_udc *udc, u8 request_type, u16 value,
 	req->req.complete = NULL;
 	req->dtd_count = 0;
 
-	/* map virtual address to hardware */
-	if (req->req.dma == DMA_ADDR_INVALID) {
-		req->req.dma = dma_map_single(ep->udc->gadget.dev.parent,
-					req->req.buf,
-					req->req.length, ep_is_in(ep)
-						? DMA_TO_DEVICE
-						: DMA_FROM_DEVICE);
-		req->mapped = 1;
-	} else {
-		dma_sync_single_for_device(ep->udc->gadget.dev.parent,
-					req->req.dma, req->req.length,
-					ep_is_in(ep)
-						? DMA_TO_DEVICE
-						: DMA_FROM_DEVICE);
-		req->mapped = 0;
-	}
-
 	/* prime the data phase */
 	if ((fsl_req_to_dtd(req, GFP_ATOMIC) == 0))
 		fsl_queue_td(ep, req);
@@ -1561,11 +1586,6 @@ static void setup_received_irq(struct fsl_udc *udc,
 		if (setup->bRequestType != (USB_DIR_OUT | USB_TYPE_STANDARD
 						| USB_RECIP_DEVICE))
 			break;
-#ifdef CONFIG_ARCH_TEGRA
-		/* This delay is necessary for some windows drivers to
-		 * properly recognize the device */
-		mdelay(1);
-#endif
 		ch9setaddress(udc, wValue, wIndex, wLength);
 		return;
 
@@ -1804,6 +1824,15 @@ static void dtd_complete_irq(struct fsl_udc *udc)
 	int i, ep_num, direction, bit_mask, status;
 	struct fsl_ep *curr_ep;
 	struct fsl_req *curr_req, *temp_req;
+#ifdef CONFIG_USB_ANDROID_ACCESSORY	
+	struct usb_ctrlrequest *setup = &udc->local_setup_buff;
+
+	// Delay for Accessory mode. by wookwang.lee
+	if(setup->bRequest==ACCESSORY_GET_PROTOCOL)
+	{
+		udelay(100);
+	}
+#endif
 
 	/* Clear the bits in the register */
 	bit_pos = fsl_readl(&dr_regs->endptcomplete);
@@ -2005,16 +2034,16 @@ static void reset_irq(struct fsl_udc *udc)
  */
 static void fsl_udc_restart(struct fsl_udc *udc)
 {
-	/* setup the controller in the device mode */
-	dr_controller_setup(udc);
-	/* setup EP0 for setup packet */
-	ep0_setup(udc);
-	/* start the controller */
-	dr_controller_run(udc);
-	/* initialize the USB and EP states */
-	udc->usb_state = USB_STATE_ATTACHED;
-	udc->ep0_state = WAIT_FOR_SETUP;
-	udc->ep0_dir = 0;
+       /* setup the controller in the device mode */
+       dr_controller_setup(udc);
+       /* setup EP0 for setup packet */
+       ep0_setup(udc);
+       /* start the controller */
+       dr_controller_run(udc);
+       /* initialize the USB and EP states */
+       udc->usb_state = USB_STATE_ATTACHED;
+       udc->ep0_state = WAIT_FOR_SETUP;
+       udc->ep0_dir = 0;
 	udc->vbus_active = 1;
 }
 #endif
@@ -2741,10 +2770,18 @@ static int __init fsl_udc_probe(struct platform_device *pdev)
 		struct_ep_setup(udc_controller, i * 2 + 1, name, 1);
 	}
 
+#if defined(CONFIG_ARCH_TEGRA) /* edited by khoonk. 2011.05.20 */
+	/* use dma_pool for TD management */
+	udc_controller->td_pool = dma_pool_create("udc_td", &pdev->dev,
+			sizeof(struct ep_td_struct) * 3,
+			DTD_ALIGNMENT, UDC_DMA_BOUNDARY);
+#else
 	/* use dma_pool for TD management */
 	udc_controller->td_pool = dma_pool_create("udc_td", &pdev->dev,
 			sizeof(struct ep_td_struct),
 			DTD_ALIGNMENT, UDC_DMA_BOUNDARY);
+#endif			
+
 	if (udc_controller->td_pool == NULL) {
 		ret = -ENOMEM;
 		goto err_unregister;
@@ -2756,7 +2793,7 @@ static int __init fsl_udc_probe(struct platform_device *pdev)
 	if (udc_controller->transceiver) {
 		dr_controller_stop(udc_controller);
 		dr_controller_reset(udc_controller);
-		fsl_udc_clk_suspend(false);
+		fsl_udc_clk_suspend();
 		udc_controller->vbus_active = 0;
 		udc_controller->usb_state = USB_STATE_DEFAULT;
 		otg_set_peripheral(udc_controller->transceiver, &udc_controller->gadget);
@@ -2765,7 +2802,7 @@ static int __init fsl_udc_probe(struct platform_device *pdev)
 #ifdef CONFIG_ARCH_TEGRA
 	/* Power down the phy if cable is not connected */
 	if (!(fsl_readl(&usb_sys_regs->vbus_wakeup) & USB_SYS_VBUS_STATUS))
-		fsl_udc_clk_suspend(false);
+		fsl_udc_clk_suspend();
 #endif
 #endif
 
@@ -2852,7 +2889,7 @@ static int fsl_udc_suspend(struct platform_device *pdev, pm_message_t state)
     if (udc_controller->transceiver) {
         udc_controller->transceiver->state = OTG_STATE_UNDEFINED;
     }
-    fsl_udc_clk_suspend(true);
+    fsl_udc_clk_suspend();
     return 0;
 }
 
@@ -2863,23 +2900,27 @@ static int fsl_udc_suspend(struct platform_device *pdev, pm_message_t state)
 static int fsl_udc_resume(struct platform_device *pdev)
 {
     if (udc_controller->transceiver) {
-
+        /* enable clock and check for VBUS */
+        fsl_udc_clk_resume();
         if (!(fsl_readl(&usb_sys_regs->vbus_wakeup) & USB_SYS_ID_PIN_STATUS)) {
             /* If ID status is low means host is connected, return */
-	    return 0;
+            fsl_udc_clk_suspend();
+            return 0;
         }
-        /* check for VBUS */
         if (!(fsl_readl(&usb_sys_regs->vbus_wakeup) & USB_SYS_VBUS_STATUS)) {
             /* if there is no VBUS then power down the clocks and return */
+            fsl_udc_clk_suspend();
             return 0;
         } else {
-		fsl_udc_clk_resume(true);
             /* Detected VBUS set the transceiver state to device mode */
-            udc_controller->transceiver->state = OTG_STATE_B_PERIPHERAL;
+#ifdef CONFIG_MACH_N1
+		udc_controller->vbus_active = 1;
+#endif
+		udc_controller->transceiver->state = OTG_STATE_B_PERIPHERAL;
         }
     } else {
         /* enable the clocks to the controller */
-        fsl_udc_clk_resume(true);
+        fsl_udc_clk_resume();
     }
 
 #if defined(CONFIG_ARCH_TEGRA)
@@ -2896,7 +2937,7 @@ static int fsl_udc_resume(struct platform_device *pdev)
 #endif
     /* Power down the phy if cable is not connected */
     if (!(fsl_readl(&usb_sys_regs->vbus_wakeup) & USB_SYS_VBUS_STATUS))
-        fsl_udc_clk_suspend(false);
+        fsl_udc_clk_suspend();
 
     return 0;
 }

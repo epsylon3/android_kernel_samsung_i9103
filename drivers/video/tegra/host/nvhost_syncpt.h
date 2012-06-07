@@ -31,7 +31,9 @@
 
 #include "nvhost_hardware.h"
 
+#ifdef CONFIG_MACH_N1
 #define NVSYNCPT_GRAPHICS_HOST		     (0)
+#endif
 #define NVSYNCPT_VI_ISP_0		     (12)
 #define NVSYNCPT_VI_ISP_1		     (13)
 #define NVSYNCPT_VI_ISP_2		     (14)
@@ -56,6 +58,14 @@
 /*#define NVSYNCPT_2D_TINYBLT_WAR		     (30)*/
 /*#define NVSYNCPT_2D_TINYBLT_RESTORE_CLASS_ID (30)*/
 
+#define NVSYNCPTS_VALID_MASK ( \
+	BIT(NVSYNCPT_GRAPHICS_HOST) | BIT(NVSYNCPT_VI_ISP_0) | BIT(NVSYNCPT_VI_ISP_1) | \
+	BIT(NVSYNCPT_VI_ISP_2) | BIT(NVSYNCPT_VI_ISP_3) | BIT(NVSYNCPT_VI_ISP_4) | \
+	BIT(NVSYNCPT_VI_ISP_5) | BIT(NVSYNCPT_2D_0) | BIT(NVSYNCPT_2D_1) | \
+	BIT(NVSYNCPT_3D) | BIT(NVSYNCPT_MPE) | BIT(NVSYNCPT_DISP0) | \
+	BIT(NVSYNCPT_DISP1) | BIT(NVSYNCPT_VBLANK0) | BIT(NVSYNCPT_VBLANK1) | \
+	BIT(NVSYNCPT_MPE_EBM_EOF) | BIT(NVSYNCPT_MPE_WR_SAFE) | BIT(NVSYNCPT_DSI))
+
 /* sync points that are wholly managed by the client */
 #define NVSYNCPTS_CLIENT_MANAGED ( \
 	BIT(NVSYNCPT_DISP0) | BIT(NVSYNCPT_DISP1) | BIT(NVSYNCPT_DSI) | \
@@ -63,6 +73,9 @@
 	BIT(NVSYNCPT_VI_ISP_3) | BIT(NVSYNCPT_VI_ISP_4) | BIT(NVSYNCPT_VI_ISP_5) | \
 	BIT(NVSYNCPT_MPE_EBM_EOF) | BIT(NVSYNCPT_MPE_WR_SAFE) | \
 	BIT(NVSYNCPT_2D_1))
+
+/* Non-client-managed syncpoints */
+#define NVSYNCPTS_HOST_MANAGED (NVSYNCPTS_VALID_MASK & ~(NVSYNCPTS_CLIENT_MANAGED))
 
 #define NVWAITBASE_2D_0 (1)
 #define NVWAITBASE_2D_1 (2)
@@ -73,6 +86,9 @@ struct nvhost_syncpt {
 	atomic_t min_val[NV_HOST1X_SYNCPT_NB_PTS];
 	atomic_t max_val[NV_HOST1X_SYNCPT_NB_PTS];
 	u32 base_val[NV_HOST1X_SYNCPT_NB_BASES];
+#ifdef CONFIG_MACH_N1
+	bool restore_needed;
+#endif
 };
 
 /**
@@ -101,11 +117,22 @@ static inline u32 nvhost_syncpt_read_max(struct nvhost_syncpt *sp, u32 id)
 	return (u32)atomic_read(&sp->max_val[id]);
 }
 
+#ifdef CONFIG_MACH_N1
 static inline u32 nvhost_syncpt_read_min(struct nvhost_syncpt *sp, u32 id)
 {
 	smp_rmb();
 	return (u32)atomic_read(&sp->min_val[id]);
 }
+
+/**
+ * Updates the value incremented in hardware.
+ */
+static inline u32 nvhost_syncpt_incr_min(struct nvhost_syncpt *sp,
+					u32 id, u32 incrs)
+{
+	return (u32)atomic_add_return(incrs, &sp->min_val[id]);
+}
+#endif
 
 /**
  * Returns true if syncpoint has reached threshold
@@ -144,17 +171,18 @@ u32 nvhost_syncpt_read(struct nvhost_syncpt *sp, u32 id);
 void nvhost_syncpt_incr(struct nvhost_syncpt *sp, u32 id);
 
 int nvhost_syncpt_wait_timeout(struct nvhost_syncpt *sp, u32 id, u32 thresh,
-			u32 timeout, u32 *value);
+			u32 timeout);
 
 static inline int nvhost_syncpt_wait(struct nvhost_syncpt *sp, u32 id, u32 thresh)
 {
-	return nvhost_syncpt_wait_timeout(sp, id, thresh,
-	                                  MAX_SCHEDULE_TIMEOUT, NULL);
+	return nvhost_syncpt_wait_timeout(sp, id, thresh, MAX_SCHEDULE_TIMEOUT);
 }
 
+#ifdef CONFIG_MACH_N1
 int nvhost_syncpt_wait_check(struct nvmap_client *nvmap,
 			struct nvhost_syncpt *sp, u32 mask,
 			struct nvhost_waitchk *waitp, u32 num_waits);
+#endif
 
 const char *nvhost_syncpt_name(u32 id);
 

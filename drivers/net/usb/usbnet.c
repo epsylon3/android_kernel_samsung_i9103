@@ -940,7 +940,12 @@ fail_halt:
 fail_lowmem:
 			if (resched)
 				tasklet_schedule (&dev->bh);
-		}
+		        }
+
+		/* if urb is not NULL in this point, free the urb */
+		if(urb != NULL)
+			usb_free_urb(urb);    
+		
 	}
 
 	if (test_bit (EVENT_LINK_RESET, &dev->flags)) {

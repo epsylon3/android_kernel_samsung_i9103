@@ -52,11 +52,19 @@
 #include "mpuirq.h"
 #include "slaveirq.h"
 #include "mlsl.h"
+#include "mlos.h"
 #include "mpu-i2c.h"
 #include "mldl_cfg.h"
+#include "mpu-accel.h"
+
 #include "mpu.h"
 
-#define MPU3050_EARLY_SUSPEND_IN_DRIVER 0
+#define MPU3050_EARLY_SUSPEND_IN_DRIVER 1
+
+#define CALIBRATION_FILE_PATH	"/efs/calibration_data"
+#define CALIBRATION_DATA_AMOUNT	100
+
+struct acc_data cal_data;
 
 /* Platform data for the MPU */
 struct mpu_private_data {
@@ -70,12 +78,160 @@ struct mpu_private_data {
 static int pid;
 
 static struct i2c_client *this_client;
+	
+int read_accel_raw_xyz(struct acc_data *acc)
+{
+	unsigned char acc_data[6];
+	s32 temp;
+
+	struct mpu_private_data *mpu =
+	    (struct mpu_private_data *) i2c_get_clientdata(this_client);
+	struct mldl_cfg *mldl_cfg = &mpu->mldl_cfg;
+	
+	if(mldl_cfg->accel_is_suspended == 1 || 
+    	(mldl_cfg->dmp_is_running==0 && mldl_cfg->accel_is_suspended == 0)) 
+	{
+#ifdef CONFIG_MACH_BOSE_ATT
+		if (system_rev<=7)
+			if(sensor_i2c_read(this_client->adapter, 0x30>>1, 0x00, 6, acc_data) != 0) return -1;
+		else
+			if(sensor_i2c_read(this_client->adapter, 0x0F, 0x06, 6, acc_data) != 0) return -1;
+#else
+			if(sensor_i2c_read(this_client->adapter, 0x0F, 0x06, 6, acc_data) != 0) return -1;
+#endif
+
+	}
+  	else if(mldl_cfg->dmp_is_running && 
+          mldl_cfg->accel_is_suspended==0) {
+
+		if(sensor_i2c_read(this_client->adapter, DEFAULT_MPU_SLAVEADDR, 0x23, 6, acc_data) != 0) return -1;
+      		
+  	}
+	else return -1;
+
+	temp = ((acc_data[1] << 4) | (acc_data[0] >> 4));
+	if (temp < 2048)
+		acc->x = (s16)(-temp);
+	else
+		acc->x = (s16)(4096 - temp);
+
+	temp = ((acc_data[3] << 4) | (acc_data[2] >> 4));
+	if (temp < 2048)
+		acc->y = (s16)(-temp);
+	else
+		acc->y = (s16)(4096 - temp);
+
+	temp = ((acc_data[5] << 4) | (acc_data[4] >> 4));
+	acc->z = (s16)(3072 - temp);
+		
+	return 0;
+}
+
+static int accel_open_calibration(void)
+{
+	struct file *cal_filp = NULL;
+	int err = 0;
+	mm_segment_t old_fs;
+
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+
+	cal_filp = filp_open(CALIBRATION_FILE_PATH, O_RDONLY, 0666);
+	if (IS_ERR(cal_filp)) {
+		pr_err("%s: Can't open calibration file\n", __func__);
+		set_fs(old_fs);
+		err = PTR_ERR(cal_filp);
+
+		cal_data.x = 0;
+		cal_data.y = 0;
+		cal_data.z = 0;
+		
+		return err;
+	}
+
+	err = cal_filp->f_op->read(cal_filp,
+		(char *)&cal_data, 3 * sizeof(s16), &cal_filp->f_pos);
+	if (err != 3 * sizeof(s16)) {
+		pr_err("%s: Can't read the cal data from file\n", __func__);
+		err = -EIO;
+	}
+
+	printk("%s: (%u,%u,%u)\n", __func__,
+		cal_data.x, cal_data.y, cal_data.z);
+
+	filp_close(cal_filp, current->files);
+	set_fs(old_fs);
+
+	return err;
+}
+
+static int accel_do_calibrate(void)
+{
+	struct acc_data data = { 0, };
+	struct file *cal_filp = NULL;
+	int sum[3] = { 0, };
+	int err = 0;
+	int i;
+	mm_segment_t old_fs;
+
+	for (i = 0; i < CALIBRATION_DATA_AMOUNT; i++) {
+		err = read_accel_raw_xyz(&data);
+		if (err < 0) {
+			pr_err("%s: accel_read_accel_raw_xyz() "
+				"failed in the %dth loop\n", __func__, i);
+			return err;
+		}
+
+		sum[0] += data.x;
+		sum[1] += data.y;
+		sum[2] += data.z;
+	}
+
+	cal_data.x = sum[0] / CALIBRATION_DATA_AMOUNT;
+	cal_data.y = sum[1] / CALIBRATION_DATA_AMOUNT;
+	cal_data.z = sum[2] / CALIBRATION_DATA_AMOUNT;
+
+	printk(KERN_INFO "%s: cal data (%d,%d,%d)\n", __func__,
+			cal_data.x, cal_data.y, cal_data.z);
+/*
+	if (k3dh->cal_data.z >= 1100) {
+		pr_err("%s : Not horitonzal position z = %d\n",
+				__func__, k3dh->cal_data.z);
+		return -1;
+	}
+*/
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+
+	cal_filp = filp_open(CALIBRATION_FILE_PATH,
+			O_CREAT | O_TRUNC | O_WRONLY, 0666);
+	if (IS_ERR(cal_filp)) {
+		pr_err("%s: Can't open calibration file\n", __func__);
+		set_fs(old_fs);
+		err = PTR_ERR(cal_filp);
+		return err;
+	}
+
+	err = cal_filp->f_op->write(cal_filp,
+		(char *)&cal_data, 3 * sizeof(s16), &cal_filp->f_pos);
+	if (err != 3 * sizeof(s16)) {
+		pr_err("%s: Can't write the cal data to file\n", __func__);
+		err = -EIO;
+	}
+
+	filp_close(cal_filp, current->files);
+	set_fs(old_fs);
+
+	return err;
+}
 
 static int mpu_open(struct inode *inode, struct file *file)
 {
 	struct mpu_private_data *mpu =
 	    (struct mpu_private_data *) i2c_get_clientdata(this_client);
 	struct mldl_cfg *mldl_cfg = &mpu->mldl_cfg;
+
+	accel_open_calibration();
 
 	dev_dbg(&this_client->adapter->dev, "mpu_open\n");
 	dev_dbg(&this_client->adapter->dev, "current->pid %d\n",
@@ -575,7 +731,7 @@ static long mpu_ioctl(struct file *file,
 	struct i2c_adapter *accel_adapter;
 	struct i2c_adapter *compass_adapter;
 	struct i2c_adapter *pressure_adapter;
-
+	
 	accel_adapter = i2c_get_adapter(mldl_cfg->pdata->accel.adapt_num);
 	compass_adapter =
 	    i2c_get_adapter(mldl_cfg->pdata->compass.adapt_num);
@@ -777,6 +933,7 @@ static long mpu_ioctl(struct file *file,
 		unsigned char data[6];
 		retval = mpu3050_read_accel(mldl_cfg, client->adapter,
 					    data);
+
 		if ((ML_SUCCESS == retval) &&
 		    (copy_to_user((unsigned char __user *) arg,
 			    data, sizeof(data))))
@@ -842,6 +999,8 @@ void mpu3050_early_suspend(struct early_suspend *h)
 	pressure_adapter =
 	    i2c_get_adapter(mldl_cfg->pdata->pressure.adapt_num);
 
+	get_MPUReg(mldl_cfg, this_client->adapter);
+
 	dev_dbg(&this_client->adapter->dev, "%s: %d, %d\n", __func__,
 		h->level, mpu->mldl_cfg.gyro_is_suspended);
 	if (MPU3050_EARLY_SUSPEND_IN_DRIVER)
@@ -866,6 +1025,8 @@ void mpu3050_early_resume(struct early_suspend *h)
 	    i2c_get_adapter(mldl_cfg->pdata->compass.adapt_num);
 	pressure_adapter =
 	    i2c_get_adapter(mldl_cfg->pdata->pressure.adapt_num);
+
+	set_MPUReg(mldl_cfg, this_client->adapter);
 
 	if (MPU3050_EARLY_SUSPEND_IN_DRIVER) {
 		if (pid) {
@@ -923,6 +1084,8 @@ int mpu_suspend(struct i2c_client *client, pm_message_t mesg)
 	pressure_adapter =
 	    i2c_get_adapter(mldl_cfg->pdata->pressure.adapt_num);
 
+	get_MPUReg(mldl_cfg, this_client->adapter);
+
 	if (!mpu->mldl_cfg.gyro_is_suspended) {
 		dev_dbg(&this_client->adapter->dev,
 			"%s: suspending on event %d\n", __func__,
@@ -954,6 +1117,8 @@ int mpu_resume(struct i2c_client *client)
 	pressure_adapter =
 	    i2c_get_adapter(mldl_cfg->pdata->pressure.adapt_num);
 
+	set_MPUReg(mldl_cfg, this_client->adapter);
+	
 	if (pid) {
 		unsigned long sensors = mldl_cfg->requested_sensors;
 		(void) mpu3050_resume(mldl_cfg, this_client->adapter,
@@ -996,6 +1161,589 @@ static struct miscdevice i2c_mpu_device = {
 	.fops = &mpu_fops,
 };
 
+#define FACTORY_TEST
+#ifdef FACTORY_TEST
+
+static ssize_t mpu3050_power_on(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int count = 0;
+
+	dev_dbg(dev, "this_client = %d\n", (int)this_client);
+	count = sprintf(buf, "%d\n", (this_client != NULL ? 1 : 0));
+
+	return count;
+}
+
+static int mpu3050_factory_on(struct i2c_client *client)
+{
+	struct mpu_private_data *mpu = i2c_get_clientdata(client);
+	struct mldl_cfg *mldl_cfg = &mpu->mldl_cfg;
+	struct i2c_adapter *accel_adapter;
+	struct i2c_adapter *compass_adapter;
+	struct i2c_adapter *pressure_adapter;
+	int prev_gyro_suspended;
+
+	accel_adapter = i2c_get_adapter(mldl_cfg->pdata->accel.adapt_num);
+	compass_adapter =
+	    i2c_get_adapter(mldl_cfg->pdata->compass.adapt_num);
+	pressure_adapter =
+		i2c_get_adapter(mldl_cfg->pdata->pressure.adapt_num);
+
+	prev_gyro_suspended = mldl_cfg->gyro_is_suspended;
+	if(prev_gyro_suspended) {
+		unsigned long sensors = mldl_cfg->requested_sensors;
+		(void) mpu3050_resume(mldl_cfg,
+					client->adapter,
+					accel_adapter,
+					compass_adapter,
+					pressure_adapter,
+					sensors & ML_THREE_AXIS_GYRO,
+					sensors & ML_THREE_AXIS_ACCEL,
+					sensors & ML_THREE_AXIS_COMPASS,
+					sensors & ML_THREE_AXIS_PRESSURE);
+	}
+
+	return prev_gyro_suspended;
+}
+
+static void mpu3050_factory_off(struct i2c_client *client)
+{
+	struct mpu_private_data *mpu = i2c_get_clientdata(client);
+	struct mldl_cfg *mldl_cfg = &mpu->mldl_cfg;
+	struct i2c_adapter *accel_adapter;
+	struct i2c_adapter *compass_adapter;
+	struct i2c_adapter *pressure_adapter;
+
+	accel_adapter = i2c_get_adapter(mldl_cfg->pdata->accel.adapt_num);
+	compass_adapter =
+	    i2c_get_adapter(mldl_cfg->pdata->compass.adapt_num);
+	pressure_adapter =
+		i2c_get_adapter(mldl_cfg->pdata->pressure.adapt_num);
+
+	(void) mpu3050_suspend(mldl_cfg,
+					client->adapter,
+					accel_adapter,
+					compass_adapter,
+					pressure_adapter,
+					TRUE,
+					TRUE,
+					TRUE,
+					TRUE);
+}
+
+static ssize_t mpu3050_get_temp(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int count = 0;
+	short int temperature=0;
+	unsigned char data[2];
+	int prev_gyro_suspended;
+
+	prev_gyro_suspended = mpu3050_factory_on(this_client);
+
+	//MPUREG_TEMP_OUT_H,	/* 27 0x1b */
+	//MPUREG_TEMP_OUT_L,	/* 28 0x1c */
+	/* TEMP_OUT_H/L: 16-bit temperature data (2's complement data format) */
+	sensor_i2c_read(this_client->adapter, DEFAULT_MPU_SLAVEADDR,
+			MPUREG_TEMP_OUT_H, 2, data);
+	temperature = (short) (((data[0]) << 8) | data[1]);
+	temperature = (((temperature + 13200) / 280) + 35);
+	printk("read temperature = %d\n", temperature);
+
+	count = sprintf(buf, "%d\n", temperature);
+
+	if(prev_gyro_suspended) {
+		mpu3050_factory_off(this_client);
+	}
+
+	return count;
+}
+
+/*
+    Defines
+*/
+
+#define DEBUG_OUT 1
+
+#define DEF_GYRO_FULLSCALE       (2000)        /* gyro full scale dps        */
+#define DEF_GYRO_SENS            (32768.f/DEF_GYRO_FULLSCALE)
+                                               /* gyro sensitivity LSB/dps   */
+#define DEF_PACKET_THRESH        (75)          /* 600 ms / 8ms / sample      */
+#define DEF_TIMING_TOL           (.05f)        /* 5%                         */
+#define DEF_BIAS_THRESH          (40*DEF_GYRO_SENS)
+                                               /* 40 dps in LSBs             */
+#define DEF_RMS_THRESH_SQ        (0.4f*0.4f*DEF_GYRO_SENS*DEF_GYRO_SENS)
+                                               /* (.2 dps in LSBs ) ^ 2      */
+#define DEF_TEST_TIME_PER_AXIS   (600)         /* ms of time spent collecting
+                                                  data for each axis,
+                                                  multiple of 600ms          */
+
+/*
+    Macros
+*/
+
+#define CHECK_TEST_ERROR(x)                                                 \
+    if (x) {                                                                \
+        printk("error %d @ %s|%d\n", x, __func__, __LINE__);                \
+        return (-1);                                                        \
+    }
+
+#define SHORT_TO_TEMP_C(shrt)         (((shrt+13200)/280)+35)
+#define CHARS_TO_SHORT(d)             ((((short)(d)[0])<<8)+(d)[1])
+#define fabs(x)      (((x)<0)?-(x):(x))
+
+
+void mpu3050_usleep(unsigned long t)
+{
+    unsigned long start = MLOSGetTickCount();
+    while (MLOSGetTickCount()-start<t/1000);
+}
+
+
+#define X   (0)
+#define Y   (1)
+#define Z   (2)
+
+static short mpu3050_selftest_gyro_avg[3];
+static int mpu3050_selftest_result;
+static int mpu3050_selftest_bias[3];
+static int mpu3050_selftest_rms[3];
+
+int mpu3050_test_gyro(struct i2c_client *client, short gyro_biases[3],
+			short *temp_avg)
+{
+    void *mlsl_handle = client->adapter;
+    int retVal = 0;
+    tMLError result;
+
+    int total_count = 0;
+    int total_count_axis[3] = {0, 0, 0};
+    int packet_count;
+    unsigned char regs[7];
+
+    char a_name[3][2] = {"X", "Y", "Z"};
+    int temperature;
+    int Avg[3];
+    int RMS[3];
+    int i, j, tmp;
+    unsigned char dataout[20];
+
+    short *x, *y, *z;
+
+    x = kzalloc(sizeof(*x) * (DEF_TEST_TIME_PER_AXIS/8*4), GFP_KERNEL);
+    y = kzalloc(sizeof(*y) * (DEF_TEST_TIME_PER_AXIS/8*4), GFP_KERNEL);
+    z = kzalloc(sizeof(*z) * (DEF_TEST_TIME_PER_AXIS/8*4), GFP_KERNEL);
+
+    temperature = 0;
+
+    /* sample rate = 8ms */
+    result = MLSLSerialWriteSingle(
+                mlsl_handle, client->addr,
+                MPUREG_SMPLRT_DIV, 0x07);
+    CHECK_TEST_ERROR(result);
+
+    regs[0] = 0x03; /* filter = 42Hz, analog_sample rate = 1 KHz */
+    switch (DEF_GYRO_FULLSCALE) {
+        case 2000:
+            regs[0] |= 0x18;
+            break;
+        case 1000:
+            regs[0] |= 0x10;
+            break;
+        case 500:
+            regs[0] |= 0x08;
+            break;
+        case 250:
+        default:
+            regs[0] |= 0x00;
+            break;
+    }
+    result = MLSLSerialWriteSingle(
+                mlsl_handle, client->addr,
+                MPUREG_DLPF_FS_SYNC, regs[0]);
+    CHECK_TEST_ERROR(result);
+    result = MLSLSerialWriteSingle(
+                mlsl_handle, client->addr,
+                MPUREG_INT_CFG, 0x00);
+
+    /* 1st, timing test */
+    for (j = 0; j < 3; j++) {
+
+        printk("Collecting gyro data from %s gyro PLL\n", a_name[j]);
+
+        /* turn on all gyros, use gyro X for clocking
+           Set to Y and Z for 2nd and 3rd iteration */
+        result = MLSLSerialWriteSingle(
+                    mlsl_handle, client->addr,
+                    MPUREG_PWR_MGM, j+1);
+        CHECK_TEST_ERROR(result);
+
+        /* wait for 2 ms after switching clock source */
+        mpu3050_usleep(2000);
+
+        /* we will enable XYZ gyro in FIFO and nothing else */
+        result = MLSLSerialWriteSingle(
+                    mlsl_handle, client->addr,
+                    MPUREG_FIFO_EN2, 0x00);
+        CHECK_TEST_ERROR(result);
+        /* enable/reset FIFO */
+        result = MLSLSerialWriteSingle(
+                    mlsl_handle, client->addr,
+                    MPUREG_USER_CTRL, 0x42);
+
+        tmp = (int)(DEF_TEST_TIME_PER_AXIS / 600);
+        while (tmp-->0) {
+            /* enable XYZ gyro in FIFO and nothing else */
+            result = MLSLSerialWriteSingle(
+                        mlsl_handle, client->addr,
+                        MPUREG_FIFO_EN1, 0x70);
+            CHECK_TEST_ERROR(result);
+
+            /* wait for 600 ms for data */
+            mpu3050_usleep(600000);
+
+            /* stop storing gyro in the FIFO */
+            result = MLSLSerialWriteSingle(
+                        mlsl_handle, client->addr,
+                        MPUREG_FIFO_EN1, 0x00);
+            CHECK_TEST_ERROR(result);
+
+            /* Getting number of bytes in FIFO */
+            result = MLSLSerialRead(
+                           mlsl_handle, client->addr,
+                           MPUREG_FIFO_COUNTH, 2, dataout);
+            CHECK_TEST_ERROR(result);
+            /* number of 6 B packets in the FIFO */
+            packet_count = CHARS_TO_SHORT(dataout) / 6;
+            printk("Packet Count: %d - ", packet_count);
+
+            if ( abs(packet_count - DEF_PACKET_THRESH)
+                        <=      /* Within +-5% range */
+                     (int)(DEF_TIMING_TOL * DEF_PACKET_THRESH + .5)) {
+                for (i=0; i<packet_count; i++) {
+                    /* getting FIFO data */
+                    result = MLSLSerialReadFifo(
+                                mlsl_handle, client->addr,
+                                6, dataout);
+                    CHECK_TEST_ERROR(result);
+                    x[total_count+i] = CHARS_TO_SHORT(&dataout[0]);
+                    y[total_count+i] = CHARS_TO_SHORT(&dataout[2]);
+                    z[total_count+i] = CHARS_TO_SHORT(&dataout[4]);
+                    if (DEBUG_OUT && 0) {
+                        printk("Gyros %-4d    : %+13d %+13d %+13d\n",
+                            total_count+i,
+                            x[total_count+i], y[total_count+i], z[total_count+i]
+                        );
+                    }
+                }
+                total_count += packet_count;
+                total_count_axis[j] += packet_count;
+                printk("OK\n");
+            } else {
+                retVal |= 1 << j;
+                printk("NOK - samples ignored\n");
+            }
+        }
+
+        /* remove gyros from FIFO */
+        result = MLSLSerialWriteSingle(
+                    mlsl_handle, client->addr,
+                    MPUREG_FIFO_EN1, 0x00);
+        CHECK_TEST_ERROR(result);
+
+        /* Read Temperature */
+        result = MLSLSerialRead(mlsl_handle, client->addr,
+                    MPUREG_TEMP_OUT_H, 2, dataout);
+        temperature += (short)CHARS_TO_SHORT(dataout);
+    }
+
+    printk("\nTotal %d samples\n\n", total_count);
+
+    /* 2nd, check bias from X and Y PLL clock source */
+    tmp = total_count != 0 ? total_count : 1;
+    for (i = 0,
+            Avg[X] = .0f, Avg[Y] = .0f, Avg[Z] = .0f;
+         i < total_count; i++) {
+        Avg[X] += x[i];
+        Avg[Y] += y[i];
+        Avg[Z] += z[i];
+    }
+
+    Avg[X] /= tmp;
+    Avg[Y] /= tmp;
+    Avg[Z] /= tmp;
+
+    printk("bias          : %+13d %+13d %+13d (LSB)\n",
+            Avg[X], Avg[Y], Avg[Z]);
+    if (DEBUG_OUT) {
+        printk("              : %+13d %+13d %+13d (dps)\n",
+                Avg[X] / 131, Avg[Y] / 131, Avg[Z] / 131);
+    }
+    for (j = 0; j < 3; j++) {
+        if (abs(Avg[j]) > (int)DEF_BIAS_THRESH) {
+            printk("%s-Gyro bias (%.0d) exceeded threshold (threshold = %f)\n",
+                    a_name[j], Avg[j], DEF_BIAS_THRESH);
+            retVal |= 1 << (3+j);
+        }
+    }
+
+    /* 3rd and finally, check RMS */
+    for (i = 0,
+            RMS[X] = 0.f, RMS[Y] = 0.f, RMS[Z] = 0.f;
+         i < total_count; i++) {
+        RMS[X] += (x[i] - Avg[X]) * (x[i] - Avg[X]);
+        RMS[Y] += (y[i] - Avg[Y]) * (y[i] - Avg[Y]);
+        RMS[Z] += (z[i] - Avg[Z]) * (z[i] - Avg[Z]);
+    }
+    for (j = 0; j < 3; j++) {
+        if (RMS[j] > (int)DEF_RMS_THRESH_SQ * total_count) {
+            printk("%s-Gyro RMS (%d) exceeded threshold (%.4f)\n",
+                       a_name[j], RMS[j] / total_count,
+                       DEF_RMS_THRESH_SQ);
+            retVal |= 1 << (6+j);
+        }
+
+    }
+    printk("RMS^2           : %+13d %+13d %+13d (LSB-rms)\n",
+            (RMS[X] / total_count),
+            (RMS[Y] / total_count),
+            (RMS[Z] / total_count));
+    if (RMS[X] == 0 || RMS[Y] == 0 || RMS[Z] == 0) {
+        /*If any of the RMS noise value returns zero,
+            then we might have dead gyro or FIFO/register failure,
+            or the part is sleeping */
+        retVal |= 1 << 9;
+    }
+
+    temperature /= 3;
+    if (DEBUG_OUT)
+        printk("Temperature   : %+13d %13s %13s (deg. C)\n",
+            SHORT_TO_TEMP_C(temperature), "", "");
+
+    /* load into final storage */
+    *temp_avg = (short)temperature;
+    gyro_biases[X] = (short)Avg[X];
+    gyro_biases[Y] = (short)Avg[Y];
+    gyro_biases[Z] = (short)Avg[Z];
+
+	mpu3050_selftest_bias[X] = (int)Avg[X];
+	mpu3050_selftest_bias[Y] = (int)Avg[Y];
+	mpu3050_selftest_bias[Z] = (int)Avg[Z];
+
+	mpu3050_selftest_rms[X] = RMS[X] / total_count;
+	mpu3050_selftest_rms[Y] = RMS[Y] / total_count;
+	mpu3050_selftest_rms[Z] = RMS[Z] / total_count;
+
+    return retVal;
+}
+
+
+int mpu3050_self_test_once(struct i2c_client *client)
+{
+    void *mlsl_handle = client->adapter;
+    int result = 0;
+
+    short temp_avg;
+
+    unsigned char regs[5];
+    unsigned long testStart = MLOSGetTickCount();
+
+    printk("Collecting %d groups of 600 ms samples for each axis\n\n",
+        DEF_TEST_TIME_PER_AXIS / 600);
+
+    result = MLSLSerialRead(
+                mlsl_handle, client->addr,
+                MPUREG_PWR_MGM, 1, regs);
+    CHECK_TEST_ERROR(result);
+    /* reset */
+    result = MLSLSerialWriteSingle(
+                mlsl_handle, client->addr,
+                MPUREG_PWR_MGM, regs[0]|0x80);
+    CHECK_TEST_ERROR(result);
+    MLOSSleep(5);
+    /* wake up */
+    if (regs[0] & 0x40) {
+        result = MLSLSerialWriteSingle(
+                    mlsl_handle, client->addr,
+                    MPUREG_PWR_MGM, 0x00);
+        CHECK_TEST_ERROR(result);
+
+    }
+    MLOSSleep(60);
+
+    /* collect gyro and temperature data */
+    mpu3050_selftest_result = mpu3050_test_gyro(client,
+    				mpu3050_selftest_gyro_avg, &temp_avg);
+
+    printk("\nTest time : %ld ms\n", MLOSGetTickCount()-testStart);
+
+    return mpu3050_selftest_result;
+}
+
+static ssize_t mpu3050_self_test(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	unsigned char gyro_data[6];
+	short int raw[3];
+	int count = 0;
+	int res = 0;
+	int prev_gyro_suspended;
+
+	//MPUREG_GYRO_XOUT_H,	/* 29 0x1d */
+	//MPUREG_GYRO_XOUT_L,	/* 30 0x1e */
+	//MPUREG_GYRO_YOUT_H,	/* 31 0x1f */
+	//MPUREG_GYRO_YOUT_L,	/* 32 0x20 */
+	//MPUREG_GYRO_ZOUT_H,	/* 33 0x21 */
+	//MPUREG_GYRO_ZOUT_L,	/* 34 0x22 */
+
+	/* GYRO_XOUT_H/L: 16-bit X gyro output data (2's complement data format) */
+	/* GYRO_YOUT_H/L: 16-bit Y gyro output data (2's complement data format) */
+	/* GYRO_ZOUT_H/L: 16-bit Z gyro output data (2's complement data format) */
+
+	prev_gyro_suspended = mpu3050_factory_on(this_client);
+
+	mpu3050_self_test_once(this_client);
+
+	res = sensor_i2c_read(this_client->adapter, DEFAULT_MPU_SLAVEADDR,
+			MPUREG_GYRO_XOUT_H, 6, gyro_data);
+
+	if(res)
+		return 0;
+	raw[0] = (short) (((gyro_data[0]) << 8) | gyro_data[1]);
+	raw[1] = (short) (((gyro_data[2]) << 8) | gyro_data[3]);
+	raw[2] = (short) (((gyro_data[4]) << 8) | gyro_data[5]);
+
+	printk(buf, "%s: %s, %d, %d, %d, %d, %d, %d\n",
+			__func__,
+			(!mpu3050_selftest_result ? "OK" : "NG"),
+			raw[0], raw[1], raw[2],
+			mpu3050_selftest_gyro_avg[0],
+			mpu3050_selftest_gyro_avg[1],
+			mpu3050_selftest_gyro_avg[2]);
+
+	count = sprintf(buf, "%s, %d, %d, %d, %d, %d, %d\n",
+			(!mpu3050_selftest_result ? "OK" : "NG"),
+			mpu3050_selftest_bias[0], mpu3050_selftest_bias[1], mpu3050_selftest_bias[2],
+			mpu3050_selftest_rms[0],
+			mpu3050_selftest_rms[1],
+			mpu3050_selftest_rms[2]);
+
+	if(prev_gyro_suspended) {
+		mpu3050_factory_off(this_client);
+	}
+
+	return count;
+}
+
+static ssize_t mpu3050_acc_read(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	unsigned char acc_data[6];
+	s16 x, y, z;
+	int count = 0;
+	s32 temp;
+
+	struct mpu_private_data *mpu =
+	    (struct mpu_private_data *) i2c_get_clientdata(this_client);
+	struct mldl_cfg *mldl_cfg = &mpu->mldl_cfg;
+	
+	if(mldl_cfg->accel_is_suspended == 1 || 
+    (mldl_cfg->dmp_is_running==0 && mldl_cfg->accel_is_suspended == 0)) 
+	{
+#ifdef CONFIG_MACH_BOSE_ATT
+		if (system_rev<=7)
+			sensor_i2c_read(this_client->adapter, 0x30>>1, 0x00, 6, acc_data);		
+		else
+			sensor_i2c_read(this_client->adapter, 0x0F, 0x06, 6, acc_data);		
+#else
+			sensor_i2c_read(this_client->adapter, 0x0F, 0x06, 6, acc_data);		
+#endif
+	}
+  	else if(mldl_cfg->dmp_is_running && 
+          mldl_cfg->accel_is_suspended==0) {
+
+		sensor_i2c_read(this_client->adapter, DEFAULT_MPU_SLAVEADDR, 0x23, 6, acc_data);
+
+  	}
+
+	temp = (s16)((acc_data[1] << 4) | (acc_data[0] >> 4)) + cal_data.x;
+	if (temp < 2048)
+		x = (s16)(temp);
+	else
+		x = (s16)((4096 - temp)) * (-1);
+
+	temp = (s16)((acc_data[3] << 4) | (acc_data[2] >> 4)) + cal_data.y;
+	if (temp < 2048)
+		y = (s16)(temp);
+	else
+		y = (s16)((4096 - temp)) * (-1);
+
+	temp = (s16)((acc_data[5] << 4) | (acc_data[4] >> 4)) + cal_data.z;
+	if (temp < 2048)
+		z = (s16)(temp);
+	else
+		z = (s16)((4096 - temp)) * (-1);
+
+	x *= (-1);
+#ifdef CONFIG_MACH_BOSE_ATT
+	y *= (-1);
+	z *= (-1);
+#endif
+
+	count = sprintf(buf, "%d, %d, %d\n", x,y,z);
+	return count;
+}
+
+static ssize_t accel_calibration_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	int err;
+	int count = 0;
+	
+#if 0
+	err = accel_open_calibration();
+	if (err < 0)
+		pr_err("%s: accel_open_calibration() failed\n", __func__);
+#endif
+
+	err = accel_do_calibrate();
+	if (err < 0)
+		pr_err("%s: accel_do_calibrate() failed\n", __func__);
+
+	printk(buf, "%d %d %d\n",
+		cal_data.x, cal_data.y, cal_data.z);
+
+	count = sprintf(buf, "%d", err);
+	return count; 
+}
+
+
+static DEVICE_ATTR(calibration, 0664, accel_calibration_show, NULL);
+
+static DEVICE_ATTR(gyro_power_on, S_IRUGO | S_IWUSR,
+		mpu3050_power_on, NULL);
+static DEVICE_ATTR(gyro_get_temp, S_IRUGO | S_IWUSR,
+		mpu3050_get_temp, NULL);
+static DEVICE_ATTR(gyro_selftest, S_IRUGO | S_IWUSR,
+		mpu3050_self_test, NULL);
+static DEVICE_ATTR(raw_data, S_IRUGO, mpu3050_acc_read, NULL);
+
+static struct device_attribute *accel_sensor_attrs[] = {
+	&dev_attr_raw_data,
+	&dev_attr_calibration,
+	NULL,
+};
+
+extern struct class *sec_class;
+extern struct class *sensors_class;
+
+static struct device *sec_mpu3050_dev;
+static struct device *accel_sensor_device;
+
+extern int sensors_register(struct device *dev, void * drvdata, struct device_attribute *attributes[], char *name);
+#endif	
 
 int mpu3050_probe(struct i2c_client *client,
 		  const struct i2c_device_id *devid)
@@ -1015,6 +1763,36 @@ int mpu3050_probe(struct i2c_client *client,
 		goto out_check_functionality_failed;
 	}
 
+#ifdef FACTORY_TEST
+	res = sensors_register(accel_sensor_device, NULL, accel_sensor_attrs, "accelerometer_sensor");
+	if(res) {
+		printk(KERN_ERR "%s: cound not register accelerometer sensor device(%d).\n", __func__, res);
+	}
+	
+	sec_mpu3050_dev = device_create(sec_class, NULL, 0, NULL,
+			"sec_mpu3050");
+	if (IS_ERR(sec_mpu3050_dev))
+		printk("Failed to create device!");
+
+	if (device_create_file(sec_mpu3050_dev, &dev_attr_gyro_power_on) < 0) {
+		printk("Failed to create device file(%s)! \n",
+			dev_attr_gyro_power_on.attr.name);
+		return -1;
+	}
+	if (device_create_file(sec_mpu3050_dev, &dev_attr_gyro_get_temp) < 0) {
+		printk("Failed to create device file(%s)! \n",
+		dev_attr_gyro_get_temp.attr.name);
+		device_remove_file(sec_mpu3050_dev, &dev_attr_gyro_power_on);
+		return -1;
+	}
+	if (device_create_file(sec_mpu3050_dev, &dev_attr_gyro_selftest) < 0) {
+		printk("Failed to create device file(%s)! \n",
+		dev_attr_gyro_selftest.attr.name);
+		device_remove_file(sec_mpu3050_dev, &dev_attr_gyro_power_on);
+		device_remove_file(sec_mpu3050_dev, &dev_attr_gyro_get_temp);
+		return -1;
+	}
+#endif
 	mpu = kzalloc(sizeof(struct mpu_private_data), GFP_KERNEL);
 	if (!mpu) {
 		res = -ENOMEM;
@@ -1031,12 +1809,16 @@ int mpu3050_probe(struct i2c_client *client,
 	} else {
 		mldl_cfg->pdata = pdata;
 
-#if defined(CONFIG_MPU_SENSORS_MPU3050_MODULE) || \
-    defined(CONFIG_MPU_SENSORS_MPU6000_MODULE)
+#ifdef CONFIG_MACH_BOSE_ATT
+		if (system_rev<=7)
+			pdata->accel.get_slave_descr = get_accel_slave_descr_2;
+		else
+			pdata->accel.get_slave_descr = get_accel_slave_descr;
+#else
 		pdata->accel.get_slave_descr = get_accel_slave_descr;
+#endif
 		pdata->compass.get_slave_descr = get_compass_slave_descr;
 		pdata->pressure.get_slave_descr = get_pressure_slave_descr;
-#endif
 
 		if (pdata->accel.get_slave_descr) {
 			mldl_cfg->accel =
@@ -1147,6 +1929,7 @@ int mpu3050_probe(struct i2c_client *client,
 			 "WARNING: %s irq not assigned\n", MPU_NAME);
 	}
 
+	mpu_accel_init(&mpu->mldl_cfg,client->adapter); 
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	mpu->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN + 1;
@@ -1230,6 +2013,8 @@ static int mpu3050_remove(struct i2c_client *client)
 	misc_deregister(&i2c_mpu_device);
 	kfree(mpu);
 
+    mpu_accel_exit(mldl_cfg);
+
 	return 0;
 }
 
@@ -1249,6 +2034,12 @@ static struct i2c_driver mpu3050_driver = {
 		   .owner = THIS_MODULE,
 		   .name = MPU_NAME,
 		   },
+	.address_list = normal_i2c,
+	.shutdown = mpu_shutdown,	/* optional */
+	.suspend = mpu_suspend,	/* optional */
+	.resume = mpu_resume,	/* optional */
+
+#if 0
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 32)
 	.address_data = &addr_data,
 #else
@@ -1258,6 +2049,7 @@ static struct i2c_driver mpu3050_driver = {
 	.shutdown = mpu_shutdown,	/* optional */
 	.suspend = mpu_suspend,	/* optional */
 	.resume = mpu_resume,	/* optional */
+#endif
 
 };
 
@@ -1265,6 +2057,7 @@ static int __init mpu_init(void)
 {
 	int res = i2c_add_driver(&mpu3050_driver);
 	pid = 0;
+
 	printk(KERN_DEBUG "%s\n", __func__);
 	if (res)
 		dev_err(&this_client->adapter->dev, "%s failed\n",

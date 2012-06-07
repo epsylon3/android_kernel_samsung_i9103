@@ -46,6 +46,10 @@
 
 #define HDMI_REKEY_DEFAULT		56
 
+#if (defined(CONFIG_MHL_SWITCH) && defined(CONFIG_MHL_SII9234)) 
+#define SAMSUNG_MHL_HPD_SOLUTION 1 
+#endif
+
 struct tegra_dc_hdmi_data {
 	struct tegra_dc			*dc;
 	struct tegra_edid		*edid;
@@ -67,6 +71,7 @@ struct tegra_dc_hdmi_data {
 
 	bool				dvi;
 };
+struct switch_dev           rcp_switch;
 
 const struct fb_videomode tegra_dc_hdmi_supported_modes[] = {
 	/* 1280x720p 60hz: EIA/CEA-861-B Format 4 */
@@ -144,6 +149,8 @@ const struct fb_videomode tegra_dc_hdmi_supported_modes[] = {
 		.vmode =	FB_VMODE_NONINTERLACED,
 		.sync = 0,
 	},
+
+#ifdef CONFIG_TEGRA_ENABLE_SUPPORT_FOR_1080p_30HZ
 	/* 1920x1080p 30Hz EIA/CEA-861-B Format 34 */
 	{
 		.xres =		1920,
@@ -158,6 +165,7 @@ const struct fb_videomode tegra_dc_hdmi_supported_modes[] = {
 		.vmode =	FB_VMODE_NONINTERLACED,
 		.sync = FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
 	},
+#else
 	/* 1920x1080p 59.94/60hz EIA/CEA-861-B Format 16 */
 	{
 		.xres =		1920,
@@ -172,6 +180,7 @@ const struct fb_videomode tegra_dc_hdmi_supported_modes[] = {
 		.vmode =	FB_VMODE_NONINTERLACED,
 		.sync = FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
 	},
+#endif
 };
 
 /* table of electrical settings, must be in acending order. */
@@ -482,54 +491,62 @@ static void hdmi_dumpregs(struct tegra_dc_hdmi_data *hdmi)
 }
 #endif
 
+#ifdef SAMSUNG_MHL_HPD_SOLUTION 
+static atomic_t mhl_hpd_state;
+static struct tegra_dc_hdmi_data hdmi_pdata;
+static struct tegra_dc_hdmi_data *gp_hdmi_pdata=&hdmi_pdata;
+#define MHL_HPD_GET_STATE atomic_read(&mhl_hpd_state)
+#define MHL_HPD_SET_STATE(State) atomic_set(&mhl_hpd_state, state);
+
+void mhl_hpd_handler(bool state)
+{
+	struct tegra_dc_hdmi_data *hdmi = gp_hdmi_pdata;
+	MHL_HPD_SET_STATE(state);
+
+	
+	printk(KERN_ERR "## HPD1 Detected : %d\n", MHL_HPD_GET_STATE);
+	schedule_delayed_work(&hdmi->work, msecs_to_jiffies(MHL_HPD_GET_STATE?100:0));
+}
+#endif
 #define PIXCLOCK_TOLERANCE	200
 
-static int tegra_dc_calc_clock_per_frame(const struct fb_videomode *mode)
-{
-	return (mode->left_margin + mode->xres +
-		mode->right_margin + mode->hsync_len) *
-	       (mode->upper_margin + mode->yres +
-		mode->lower_margin + mode->vsync_len);
-}
 static bool tegra_dc_hdmi_mode_equal(const struct fb_videomode *mode1,
 					const struct fb_videomode *mode2)
 {
-	int clock_per_frame = tegra_dc_calc_clock_per_frame(mode1);
-
-	/* allows up to 1Hz of pixclock difference */
-	return mode1->xres	== mode2->xres &&
-		mode1->yres	== mode2->yres &&
-		(abs(PICOS2KHZ(mode1->pixclock - mode2->pixclock)) *
-		1000 / clock_per_frame <= 1) &&
-		mode1->vmode	== mode2->vmode;
-}
-
-static bool tegra_dc_hdmi_valid_pixclock(const struct tegra_dc *dc,
-					const struct fb_videomode *mode)
-{
-	unsigned max_pixclock = tegra_dc_get_out_max_pixclock(dc);
-	if (max_pixclock) {
-		// this might look counter-intuitive, but pixclock's unit is picos(not Khz)
-		return mode->pixclock >= max_pixclock;
+	int clocks;
+	int hdmi_refresh;
+	
+	if (mode2->yres == 1080) {
+		clocks = (mode2->left_margin + mode2->xres + mode2->right_margin + mode2->hsync_len) *
+			(mode2->upper_margin + mode2->yres + mode2->lower_margin + mode2->vsync_len);
+		hdmi_refresh = (PICOS2KHZ(mode2->pixclock) * 1000) / clocks;
+		if (hdmi_refresh == 30)
+			return mode1->xres	== mode2->xres &&
+				mode1->yres	== mode2->yres &&
+				mode1->vmode	== mode2->vmode;
+		else
+			return 0;
 	} else {
-		return true;
+		
+		return mode1->xres	== mode2->xres &&
+			mode1->yres	== mode2->yres &&
+			mode1->vmode	== mode2->vmode;
 	}
 }
 
-static bool tegra_dc_hdmi_mode_filter(const struct tegra_dc *dc,
-					struct fb_videomode *mode)
+static bool tegra_dc_hdmi_mode_filter(struct fb_videomode *mode)
 {
 	int i;
-	int clock_per_frame;
+	int clocks;
 
 	for (i = 0; i < ARRAY_SIZE(tegra_dc_hdmi_supported_modes); i++) {
-		if (tegra_dc_hdmi_mode_equal(&tegra_dc_hdmi_supported_modes[i], mode) &&
-			tegra_dc_hdmi_valid_pixclock(dc, &tegra_dc_hdmi_supported_modes[i])) {
+		if (tegra_dc_hdmi_mode_equal(&tegra_dc_hdmi_supported_modes[i],
+					     mode)) {
 			memcpy(mode, &tegra_dc_hdmi_supported_modes[i], sizeof(*mode));
 			mode->flag = FB_MODE_IS_DETAILED;
-			clock_per_frame = tegra_dc_calc_clock_per_frame(mode);
-			mode->refresh = (PICOS2KHZ(mode->pixclock) * 1000)
-					/ clock_per_frame;
+			clocks = (mode->left_margin + mode->xres + mode->right_margin + mode->hsync_len) *
+				(mode->upper_margin + mode->yres + mode->lower_margin + mode->vsync_len);
+			mode->refresh = (PICOS2KHZ(mode->pixclock) * 1000) / clocks;
 			return true;
 		}
 	}
@@ -537,7 +554,13 @@ static bool tegra_dc_hdmi_mode_filter(const struct tegra_dc *dc,
 	return false;
 }
 
-
+#ifdef SAMSUNG_MHL_HPD_SOLUTION 
+bool tegra_dc_hdmi_hpd(void)
+{
+	return MHL_HPD_GET_STATE?true:false;
+}
+EXPORT_SYMBOL(tegra_dc_hdmi_hpd);
+#else
 static bool tegra_dc_hdmi_hpd(struct tegra_dc *dc)
 {
 	int sense;
@@ -550,6 +573,7 @@ static bool tegra_dc_hdmi_hpd(struct tegra_dc *dc)
 	return (sense == TEGRA_DC_OUT_HOTPLUG_HIGH && level) ||
 		(sense == TEGRA_DC_OUT_HOTPLUG_LOW && !level);
 }
+#endif
 
 static bool tegra_dc_hdmi_detect(struct tegra_dc *dc)
 {
@@ -557,7 +581,11 @@ static bool tegra_dc_hdmi_detect(struct tegra_dc *dc)
 	struct fb_monspecs specs;
 	int err;
 
+#ifdef SAMSUNG_MHL_HPD_SOLUTION
+	if (!tegra_dc_hdmi_hpd())
+#else
 	if (!tegra_dc_hdmi_hpd(dc))
+#endif
 		goto fail;
 
 	err = tegra_edid_get_monspecs(hdmi->edid, &specs);
@@ -577,6 +605,7 @@ static bool tegra_dc_hdmi_detect(struct tegra_dc *dc)
 
 	tegra_fb_update_monspecs(dc->fb, &specs, tegra_dc_hdmi_mode_filter);
 	hdmi->hpd_switch.state = 0;
+	rcp_switch.state = 0;
 	switch_set_state(&hdmi->hpd_switch, 1);
 	dev_info(&dc->ndev->dev, "display detected\n");
 	return true;
@@ -599,7 +628,7 @@ static void tegra_dc_hdmi_detect_worker(struct work_struct *work)
 		tegra_fb_update_monspecs(dc->fb, NULL, NULL);
 	}
 }
-
+#ifndef SAMSUNG_MHL_HPD_SOLUTION
 static irqreturn_t tegra_dc_hdmi_irq(int irq, void *ptr)
 {
 	struct tegra_dc *dc = ptr;
@@ -622,7 +651,7 @@ static irqreturn_t tegra_dc_hdmi_irq(int irq, void *ptr)
 
 	return IRQ_HANDLED;
 }
-
+#endif
 static void tegra_dc_hdmi_suspend(struct tegra_dc *dc)
 {
 	struct tegra_dc_hdmi_data *hdmi = tegra_dc_get_outdata(dc);
@@ -642,7 +671,11 @@ static void tegra_dc_hdmi_resume(struct tegra_dc *dc)
 	spin_lock_irqsave(&hdmi->suspend_lock, flags);
 	hdmi->suspended = false;
 	if (hdmi->hpd_pending) {
+#ifdef SAMSUNG_MHL_HPD_SOLUTION
+		if (tegra_dc_hdmi_hpd())
+#else
 		if (tegra_dc_hdmi_hpd(dc))
+#endif
 			queue_delayed_work(system_nrt_wq, &hdmi->work,
 					   msecs_to_jiffies(100));
 		else
@@ -711,6 +744,9 @@ static int tegra_dc_hdmi_init(struct tegra_dc *dc)
 		goto err_put_clock;
 	}
 
+#ifdef SAMSUNG_MHL_HPD_SOLUTION 
+	atomic_set(&mhl_hpd_state, -1);//initial condition
+#else
 	/* TODO: support non-hotplug */
 	if (request_irq(gpio_to_irq(dc->out->hotplug_gpio), tegra_dc_hdmi_irq,
 			IRQF_DISABLED | IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
@@ -720,6 +756,8 @@ static int tegra_dc_hdmi_init(struct tegra_dc *dc)
 		err = -EBUSY;
 		goto err_put_clock;
 	}
+	enable_irq_wake(gpio_to_irq(dc->out->hotplug_gpio));
+#endif
 
 	hdmi->edid = tegra_edid_create(dc->out->dcc_bus);
 	if (IS_ERR_OR_NULL(hdmi->edid)) {
@@ -749,11 +787,29 @@ static int tegra_dc_hdmi_init(struct tegra_dc *dc)
 	spin_lock_init(&hdmi->suspend_lock);
 
 	hdmi->hpd_switch.name = "hdmi";
+	rcp_switch.name = "MHL_RCP";
 	switch_dev_register(&hdmi->hpd_switch);
+      switch_dev_register(&rcp_switch);
 
 	dc->out->depth = 24;
 
 	tegra_dc_set_outdata(dc, hdmi);
+
+#ifdef SAMSUNG_MHL_HPD_SOLUTION 
+	//Work arround, local copy of platform info to execute hdmi tasks
+	gp_hdmi_pdata->edid = hdmi->edid;
+	gp_hdmi_pdata->nvhdcp = hdmi->nvhdcp;
+	gp_hdmi_pdata->dc = dc;
+	gp_hdmi_pdata->base = base;
+	gp_hdmi_pdata->base_res = base_res;
+	gp_hdmi_pdata->clk = clk;
+	gp_hdmi_pdata->disp1_clk = disp1_clk;
+	gp_hdmi_pdata->disp2_clk = disp2_clk;
+	gp_hdmi_pdata->suspended = false;
+	gp_hdmi_pdata->hpd_pending = false;
+	gp_hdmi_pdata->hpd_switch.name = "hdmi";
+	INIT_DELAYED_WORK(&gp_hdmi_pdata->work, tegra_dc_hdmi_detect_worker);
+#endif
 
 	/* boards can select default content protection policy */
 	if (dc->out->flags & TEGRA_DC_OUT_NVHDCP_POLICY_ON_DEMAND) {
@@ -768,6 +824,7 @@ static int tegra_dc_hdmi_init(struct tegra_dc *dc)
 err_edid_destroy:
 	tegra_edid_destroy(hdmi->edid);
 err_free_irq:
+	disable_irq_wake(gpio_to_irq(dc->out->hotplug_gpio));
 	free_irq(gpio_to_irq(dc->out->hotplug_gpio), dc);
 err_put_clock:
 	if (!IS_ERR_OR_NULL(disp2_clk))
@@ -789,9 +846,11 @@ static void tegra_dc_hdmi_destroy(struct tegra_dc *dc)
 {
 	struct tegra_dc_hdmi_data *hdmi = tegra_dc_get_outdata(dc);
 
+	disable_irq_wake(gpio_to_irq(dc->out->hotplug_gpio));
 	free_irq(gpio_to_irq(dc->out->hotplug_gpio), dc);
 	cancel_delayed_work_sync(&hdmi->work);
 	switch_dev_unregister(&hdmi->hpd_switch);
+	switch_dev_unregister(&rcp_switch);
 	iounmap(hdmi->base);
 	release_resource(hdmi->base_res);
 	clk_put(hdmi->clk);
@@ -974,12 +1033,16 @@ static void tegra_dc_hdmi_setup_avi_infoframe(struct tegra_dc *dc, bool dvi)
 			avi.vic = 19; /* 50 Hz */
 	} else if (dc->mode.v_active == 1080) {
 		avi.m = HDMI_AVI_M_16_9;
+#ifdef CONFIG_MACH_SAMSUNG_VARIATION_TEGRA
+		avi.vic = 34; /* 30 Hz */
+#else		
 		if (dc->mode.h_front_porch == 88)
 			avi.vic = 16; /* 60 Hz */
 		else if (dc->mode.h_front_porch == 528)
 			avi.vic = 31; /* 50 Hz */
 		else
 			avi.vic = 32; /* 24 Hz */
+#endif			
 	} else {
 		avi.m = HDMI_AVI_M_16_9;
 		avi.vic = 0;
@@ -1266,7 +1329,6 @@ static void tegra_dc_hdmi_disable(struct tegra_dc *dc)
 
 	tegra_periph_reset_assert(hdmi->clk);
 	clk_disable(hdmi->clk);
-	tegra_dvfs_set_rate(hdmi->clk, 0);
 }
 
 struct tegra_dc_out_ops tegra_dc_hdmi_ops = {
@@ -1278,4 +1340,26 @@ struct tegra_dc_out_ops tegra_dc_hdmi_ops = {
 	.suspend = tegra_dc_hdmi_suspend,
 	.resume = tegra_dc_hdmi_resume,
 };
+
+void rcp_cbus_uevent(u8 rcpCode)	
+{
+      
+    	char env_buf[120];
+	char *envp[2];
+	int env_offset = 0;
+	memset(env_buf, 0, sizeof(env_buf));
+	printk("<0>\n RCP Message Recvd \n");
+	sprintf(env_buf, "MHL_RCP=%x", rcpCode);	
+	envp[env_offset++] = env_buf;
+	envp[env_offset] = NULL;
+        kobject_uevent_env(&(rcp_switch.dev->kobj), KOBJ_CHANGE, envp);
+	return;
+	
+
+
+}
+EXPORT_SYMBOL(rcp_cbus_uevent);
+
+
+
 

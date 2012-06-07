@@ -173,6 +173,7 @@ enum ext_slave_id {
 	COMPASS_ID_HMC5883,
 	COMPASS_ID_LSM303,
 	COMPASS_ID_MMC314X,
+	COMPASS_ID_MMC328X, //MEMSIC328X	
 	COMPASS_ID_HSCDTD002B,
 	COMPASS_ID_HSCDTD004A,
 
@@ -308,6 +309,7 @@ struct mpu3050_platform_data {
 	struct ext_slave_platform_data accel;
 	struct ext_slave_platform_data compass;
 	struct ext_slave_platform_data pressure;
+	struct class *sec_class;	
 };
 
 
@@ -340,10 +342,26 @@ struct ext_slave_descr *kxsd9_get_slave_descr(void);
 #define get_accel_slave_descr kxsd9_get_slave_descr
 #endif
 
+#if defined CONFIG_MACH_BOSE_ATT
+struct ext_slave_descr *kxtf9_get_slave_descr(void);
+#undef get_accel_slave_descr
+#define get_accel_slave_descr kxtf9_get_slave_descr
+
+struct ext_slave_descr *kxud9_get_slave_descr(void);
+#define get_accel_slave_descr_2 kxud9_get_slave_descr
+
+#else
+#ifdef CONFIG_MPU_SENSORS_KXUD9	/* Kionix accelerometer */
+struct ext_slave_descr *kxud9_get_slave_descr(void);
+#undef get_accel_slave_descr
+#define get_accel_slave_descr kxud9_get_slave_descr
+#endif
+
 #ifdef CONFIG_MPU_SENSORS_KXTF9	/* Kionix accelerometer */
 struct ext_slave_descr *kxtf9_get_slave_descr(void);
 #undef get_accel_slave_descr
 #define get_accel_slave_descr kxtf9_get_slave_descr
+#endif
 #endif
 
 #ifdef CONFIG_MPU_SENSORS_LIS331DLH	/* ST accelerometer */
@@ -413,6 +431,12 @@ struct ext_slave_descr *hmc5883_get_slave_descr(void);
 struct ext_slave_descr *mmc314x_get_slave_descr(void);
 #undef get_compass_slave_descr
 #define get_compass_slave_descr mmc314x_get_slave_descr
+#endif
+
+#ifdef CONFIG_MPU_SENSORS_MMC328X	/* MEMSIC compass */
+struct ext_slave_descr *mmc328x_get_slave_descr(void);
+#undef get_compass_slave_descr
+#define get_compass_slave_descr mmc328x_get_slave_descr
 #endif
 
 #ifdef CONFIG_MPU_SENSORS_LSM303DLHM	/* ST compass */

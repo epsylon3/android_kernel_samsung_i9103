@@ -89,6 +89,13 @@
 /* -    Variables.     - */
 /* --------------------- */
 
+/*exteded variables for only kernel*/
+struct mldl_ext_cfg {
+	
+	void* mpuacc_data; /*Mpu-Accel Data*/
+};
+
+
 /* Platform data for the MPU */
 struct mldl_cfg {
 	/* MPU related configuration */
@@ -130,6 +137,11 @@ struct mldl_cfg {
 
 	/* Platform Data */
 	struct mpu3050_platform_data *pdata;
+
+	/*---------------------------------------------------*/
+	/*KERNEL ONLY VARIABLES                              */
+	/*---------------------------------------------------*/
+	struct mldl_ext_cfg ext;
 };
 
 
@@ -189,6 +201,9 @@ int mpu3050_get_config_compass(struct mldl_cfg *mldl_cfg,
 int mpu3050_get_config_pressure(struct mldl_cfg *mldl_cfg,
 				void *pressure_handle,
 				struct ext_slave_config *data);
+
+int get_MPUReg(struct mldl_cfg *mldl_cfg, void *gyro_handle);
+int set_MPUReg(struct mldl_cfg *mldl_cfg, void *gyro_handle);
 
 
 #endif				/* __MLDL_CFG_H__ */

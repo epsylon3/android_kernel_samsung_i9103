@@ -13,8 +13,16 @@
 #include <linux/mmc/core.h>
 #include <linux/mod_devicetable.h>
 
+#ifdef CONFIG_MMC_DISCARD_MERGE
+#include <linux/mmc/discard.h>
+#endif
+#include <linux/mod_devicetable.h>
+
 struct mmc_cid {
 	unsigned int		manfid;
+#ifdef CONFIG_MMC_DISCARD_MOVINAND
+#define MMC_CSD_MANFID_MOVINAND		21
+#endif /* CONFIG_MMC_DISCARD_MOVINAND */
 	char			prod_name[8];
 	unsigned int		serial;
 	unsigned short		oemid;
@@ -122,11 +130,17 @@ struct mmc_card {
 						/* (missing CIA registers) */
 #define MMC_QUIRK_INAND_CMD38	(1<<3)		/* iNAND devices have broken CMD38 */
 
+#ifdef CONFIG_MMC_DISCARD_MERGE
+    struct discard_context discard_ctx;
+#endif
 	unsigned int		erase_size;	/* erase size in sectors */
  	unsigned int		erase_shift;	/* if erase unit is power 2 */
  	unsigned int		pref_erase;	/* in sectors */
  	u8			erased_byte;	/* value of erased bytes */
 
+#ifdef CONFIG_MMC_DISCARD_MOVINAND
+	unsigned int        pref_trim; /* in sectors */
+#endif /* CONFIG_MMC_DISCARD_MOVINAND */
 	u32			raw_cid[4];	/* raw card CID */
 	u32			raw_csd[4];	/* raw card CSD */
 	u32			raw_scr[2];	/* raw card SCR */

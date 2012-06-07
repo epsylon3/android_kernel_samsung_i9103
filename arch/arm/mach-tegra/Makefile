@@ -6,7 +6,11 @@ obj-y                                   += syncpt.o
 obj-y                                   += clock.o
 obj-y                                   += dvfs.o
 obj-y                                   += timer.o
+ifeq ($(CONFIG_MACH_BOSE_ATT),y)
+obj-y                                   += gpio_bose.o
+else
 obj-y                                   += gpio.o
+endif
 obj-y                                   += pinmux.o
 obj-y                                   += devices.o
 obj-y                                   += delay.o
@@ -20,9 +24,14 @@ else
 obj-y                                   += tegra_i2s_audio.o
 obj-y                                   += tegra_spdif_audio.o
 endif
+ifeq ($(CONFIG_MACH_BOSE_ATT),y)
+obj-y                                   += tegra_spdif_audio.o
+else
 obj-y                                   += spdif.o
+endif
 obj-y                                   += tegra_das.o
 obj-y                                   += mc.o
+obj-y                                   += tegra2_statmon.o
 obj-$(CONFIG_USB_SUPPORT)               += usb_phy.o
 obj-$(CONFIG_FIQ)                       += fiq.o
 obj-$(CONFIG_TEGRA_FIQ_DEBUGGER)        += tegra_fiq_debugger.o
@@ -79,3 +88,31 @@ obj-${CONFIG_MACH_WHISTLER}             += board-whistler-sensors.o
 obj-${CONFIG_MACH_WHISTLER}             += board-whistler-kbc.o
 obj-${CONFIG_MACH_WHISTLER}             += board-whistler-baseband.o
 obj-${CONFIG_MACH_WHISTLER}             += board-whistler-memory.o
+
+ifeq ($(CONFIG_MACH_BOSE_ATT),y)
+obj-${CONFIG_MACH_N1}                   += board-bose.o
+obj-${CONFIG_MACH_N1}                   += board-bose-pinmux.o
+obj-${CONFIG_MACH_N1}                   += board-bose-sdhci.o
+obj-${CONFIG_MACH_N1}                   += board-bose-power.o
+obj-${CONFIG_MACH_N1}                   += board-bose-panel.o
+obj-${CONFIG_MACH_N1}                   += board-bose-sensors.o
+obj-${CONFIG_MACH_N1}			+= board-bose-memory.o
+obj-${CONFIG_MACH_N1}                   += board-bose-kbc.o
+obj-${CONFIG_MACH_N1}                   += board-bose-gpioi2c.o
+obj-${CONFIG_MACH_N1}                   += panel-bose.o
+obj-${CONFIG_MACH_N1}                   += board-bose-vibrator.o
+obj-${CONFIG_SEC_MODEM}			+= board-bose-smd.o
+else
+obj-${CONFIG_MACH_N1}                   += board-n1.o
+obj-${CONFIG_MACH_N1}                   += board-n1-pinmux.o
+obj-${CONFIG_MACH_N1}                   += board-n1-sdhci.o
+obj-${CONFIG_MACH_N1}                   += board-n1-power.o
+obj-${CONFIG_MACH_N1}                   += board-n1-panel.o
+obj-${CONFIG_MACH_N1}                   += board-n1-sensors.o
+obj-${CONFIG_MACH_N1}			+= board-n1-memory.o
+obj-${CONFIG_MACH_N1}                   += board-n1-kbc.o
+obj-${CONFIG_MACH_N1}                   += board-n1-gpioi2c.o
+obj-${CONFIG_MACH_N1}                   += panel-n1.o
+obj-${CONFIG_MACH_N1}                   += board-n1-vibrator.o
+obj-${CONFIG_SEC_MODEM}			+= board-n1-smd.o
+endif

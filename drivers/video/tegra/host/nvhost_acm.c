@@ -27,11 +27,12 @@
 #include <linux/device.h>
 #include <mach/powergate.h>
 #include <mach/clk.h>
+#include "nvhost_syncpt.h"
 
 #include "dev.h"
 
 #define ACM_TIMEOUT 1*HZ
-
+#define SUSPEND_TIMEOUT 6*HZ // As per __device_suspend timer.expires
 #define DISABLE_3D_POWERGATING
 #define DISABLE_MPE_POWERGATING
 
@@ -39,6 +40,14 @@ void nvhost_module_busy(struct nvhost_module *mod)
 {
 	mutex_lock(&mod->lock);
 	cancel_delayed_work(&mod->powerdown);
+
+	if (mod->force_suspend) {
+		printk("tegra_grhost: module_busy despite %s force_suspend!\n",
+			mod->name);
+		dump_stack(); // Not needed if WARN_ON dumps stack
+		WARN_ON(1);
+	}
+
 	if ((atomic_inc_return(&mod->refcount) == 1) && !mod->powered) {
 		if (mod->parent)
 			nvhost_module_busy(mod->parent);
@@ -61,9 +70,12 @@ void nvhost_module_busy(struct nvhost_module *mod)
 static void powerdown_handler(struct work_struct *work)
 {
 	struct nvhost_module *mod;
+	int refcount;
+
 	mod = container_of(to_delayed_work(work), struct nvhost_module, powerdown);
 	mutex_lock(&mod->lock);
-	if ((atomic_read(&mod->refcount) == 0) && mod->powered) {
+	refcount = atomic_read(&mod->refcount);
+	if ((refcount == 0) && mod->powered) {
 		int i;
 		if (mod->func)
 			mod->func(mod, NVHOST_POWER_ACTION_OFF);
@@ -78,6 +90,12 @@ static void powerdown_handler(struct work_struct *work)
 		if (mod->parent)
 			nvhost_module_idle(mod->parent);
 	}
+	else if (mod->force_suspend) {
+		printk("tegra_grhost: module %s (refcnt %d)"
+			" force_suspend powerdown skipped!\n",
+			mod->name, refcount);
+	}
+	mod->force_suspend = false;
 	mutex_unlock(&mod->lock);
 }
 
@@ -128,28 +146,31 @@ int nvhost_module_init(struct nvhost_module *mod, const char *name,
 	int i = 0;
 	mod->name = name;
 
-	while (i < NVHOST_MODULE_MAX_CLOCKS) {
+	while (mod->clk_rate_has_set == 0 && i < NVHOST_MODULE_MAX_CLOCKS) {
 		long rate;
 		mod->clk[i] = clk_get(dev, get_module_clk_id(name, i));
 		if (IS_ERR_OR_NULL(mod->clk[i]))
 			break;
-		rate = clk_round_rate(mod->clk[i], UINT_MAX);
+		rate = clk_round_rate(mod->clk[i], ULONG_MAX);
 		if (rate < 0) {
 			pr_err("%s: can't get maximum rate for %s\n",
 				__func__, name);
 			break;
 		}
-		if (rate != clk_get_rate(mod->clk[i])) {
+		if ((rate != clk_get_rate(mod->clk[i])) && (!strstr(name, "mpe")))
 			clk_set_rate(mod->clk[i], rate);
-		}
 		i++;
 	}
 
-	mod->num_clks = i;
+	if (mod->clk_rate_has_set == 0)
+	        mod->num_clks = i;
+	mod->clk_rate_has_set = 1;
+
 	mod->func = func;
 	mod->parent = parent;
 	mod->powered = false;
 	mod->powergate_id = get_module_powergate_id(name);
+	mod->force_suspend = false;
 
 #ifdef DISABLE_3D_POWERGATING
 	/*
@@ -216,22 +237,66 @@ static void debug_not_idle(struct nvhost_module *mod)
 	}
 	if (lock_released)
 		printk("tegra_grhost: all locks released\n");
+
+	nvhost_debug_dump();
 }
 
 void nvhost_module_suspend(struct nvhost_module *mod, bool system_suspend)
 {
-	int ret;
+	int i = 0, idle_timeout;
+	struct nvhost_master *dev;
 
-	if (system_suspend && (!is_module_idle(mod)))
-		debug_not_idle(mod);
+	if (system_suspend) {
+		idle_timeout = SUSPEND_TIMEOUT;
+		dev = container_of(mod, struct nvhost_master, mod);
+	}
+	else {
+		idle_timeout = ACM_TIMEOUT;
+		dev = container_of(mod, struct nvhost_channel, mod)->dev;
+	}
 
-	ret = wait_event_timeout(mod->idle, is_module_idle(mod),
-			   ACM_TIMEOUT + msecs_to_jiffies(500));
-	if (ret == 0)
-		nvhost_debug_dump();
+	if (!wait_event_timeout(mod->idle, is_module_idle(mod), idle_timeout)) {
+		// Timeout occurred: clear refcnt forcibly
+		mod->force_suspend = true;
+		for (i = 0; i < NVHOST_NUMCHANNELS; i++) {
+			struct nvhost_module *m = &dev->channels[i].mod;
+			if (m->name) {
+				int refcount = atomic_read(&m->refcount);
+				if (refcount != 0) {
+					printk("tegra_grhost: %s: force refcnt %d to zero\n",
+						m->name, refcount);
+					nvhost_module_idle_mult(m, refcount);
+					flush_delayed_work(&m->powerdown);
+				}
+			}
+		}
+		wait_event(mod->idle, is_module_idle(mod)); // no timeout: failure fatal
+	}
 
-	if (system_suspend)
-		printk("tegra_grhost: entered idle\n");
+	if (system_suspend) {
+		// Ensure that syncpoints are not stuck
+		//
+		// (In theory this check should apply even in the ACM case (i.e., when
+		// !system_suspend) due to module_idle, but at such times there have
+		// occasionally been shown to be a huge number of syncpoint fixups needed,
+		// bogging everything down.  Since this is not fatal, until this is
+		// investigated further, we limit to system_suspend for now.)
+		for (i = 0; i < NV_HOST1X_SYNCPT_NB_PTS; i++) {
+			if (BIT(i) & ~(NVSYNCPTS_HOST_MANAGED))
+				continue;
+			while (!nvhost_syncpt_min_eq_max(&dev->syncpt, i)) {
+				printk("tegra_grhost: force syncpt id %d (%s) = %d + 1\n",
+					i, nvhost_syncpt_name(i),
+					nvhost_syncpt_read_min(&dev->syncpt, i));
+				nvhost_syncpt_incr_min(&dev->syncpt, i, 1);
+			}
+		}
+
+		if (!is_module_idle(mod))
+			debug_not_idle(mod);
+		else
+			printk("tegra_grhost: entered idle\n");
+	}
 
 	flush_delayed_work(&mod->powerdown);
 	if (system_suspend)

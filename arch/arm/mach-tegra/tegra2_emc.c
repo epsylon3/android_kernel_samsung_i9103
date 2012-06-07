@@ -199,6 +199,13 @@ int tegra_emc_set_rate(unsigned long rate)
 	return 0;
 }
 
+#ifdef CONFIG_MACH_N1 /* rollback to nVidia patch */
+void tegra_init_emc(const struct tegra_emc_table *table, int table_size)
+{
+	tegra_emc_table = table;
+	tegra_emc_table_size = table_size ;
+}
+#else
 void tegra_init_emc(const struct tegra_emc_chip *chips, int chips_size)
 {
 	int i;
@@ -249,3 +256,4 @@ void tegra_init_emc(const struct tegra_emc_chip *chips, int chips_size)
 		pr_info("%s: Memory pid     = 0x%04x", __func__, pid);
 	}
 }
+#endif

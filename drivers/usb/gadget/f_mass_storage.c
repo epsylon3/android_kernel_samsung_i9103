@@ -382,6 +382,7 @@ struct fsg_common {
 	u32			tag;
 	u32			residue;
 	u32			usb_amount_left;
+	u32			set_intf_do;
 
 	unsigned int		can_stall:1;
 	unsigned int		free_storage_on_release:1;
@@ -896,11 +897,13 @@ static int do_write(struct fsg_common *common)
 			curlun->sense_data = SS_INVALID_FIELD_IN_CDB;
 			return -EINVAL;
 		}
+#ifndef CONFIG_USB_ANDROID_MASS_STORAGE		
 		if (common->cmnd[1] & 0x08) {	/* FUA */
 			spin_lock(&curlun->filp->f_lock);
 			curlun->filp->f_flags |= O_SYNC;
 			spin_unlock(&curlun->filp->f_lock);
 		}
+#endif
 	}
 	if (lba >= curlun->num_sectors) {
 		curlun->sense_data = SS_LOGICAL_BLOCK_ADDRESS_OUT_OF_RANGE;
@@ -2434,6 +2437,8 @@ static int fsg_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 {
 	struct fsg_dev *fsg = fsg_from_func(f);
 	fsg->common->new_fsg = fsg;
+	do_set_interface(fsg->common, fsg->common->new_fsg);
+	fsg->common->set_intf_do = 1;
 	raise_exception(fsg->common, FSG_STATE_CONFIG_CHANGE);
 	return 0;
 }
@@ -2562,7 +2567,9 @@ static void handle_exception(struct fsg_common *common)
 		break;
 
 	case FSG_STATE_CONFIG_CHANGE:
-		do_set_interface(common, common->new_fsg);
+		if(!common->set_intf_do)
+			do_set_interface(common, common->new_fsg);
+		common->set_intf_do = 0;
 		break;
 
 	case FSG_STATE_EXIT:

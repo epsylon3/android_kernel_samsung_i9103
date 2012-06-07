@@ -46,47 +46,97 @@ static void sdhci_finish_data(struct sdhci_host *);
 static void sdhci_send_command(struct sdhci_host *, struct mmc_command *);
 static void sdhci_finish_command(struct sdhci_host *);
 
-static void sdhci_dumpregs(struct sdhci_host *host)
-{
-	printk(KERN_DEBUG DRIVER_NAME ": ============== REGISTER DUMP ==============\n");
 
-	printk(KERN_DEBUG DRIVER_NAME ": Sys addr: 0x%08x | Version:  0x%08x\n",
+static void dump_address(unsigned int Add, unsigned int data_size)
+{
+	   int i;
+    int offset =0;
+    unsigned int add = Add;
+    int size = data_size;
+
+    pr_err(" Address dump 0x%x and size 0x%x\n",Add, data_size);
+    for (i =0; i< size/16;++i) {
+        pr_err("%08x %08x %08x %08x %08x\n",
+            (add+offset),
+            readl(IO_ADDRESS(add + offset + 0)),
+            readl(IO_ADDRESS(add + offset + 4)),
+            readl(IO_ADDRESS(add + offset + 8)),
+            readl(IO_ADDRESS(add + offset + 12)));
+            offset+= 16;
+    }
+}
+
+static void debug_registers(void)
+{
+    dump_address(0xc8000000, 0x200);
+    dump_address(0xc8000200, 0x200);
+    dump_address(0xc8000400, 0x200);
+    dump_address(0xc8000600, 0x200);
+    dump_address(0x70000000, 0x100);
+    dump_address(0x60006000, 0x300);
+}
+
+static void verify_readwrite_registers(struct sdhci_host *host)
+{	
+	u32 sys_address, blk_size;
+	sys_address = sdhci_readl(host, SDHCI_DMA_ADDRESS);
+	blk_size = sdhci_readl(host, SDHCI_BLOCK_SIZE);
+	printk(" sys_address = 0x%x, blk_size = 0x%x \n", sys_address, blk_size);
+	printk(" Writing 0x0F0F0F0F to sys_address and blk_size registers \n");
+	sdhci_writel(host, 0x0F0F0F0F, SDHCI_DMA_ADDRESS);
+	sdhci_writel(host, 0x0F0F0F0F, SDHCI_BLOCK_SIZE);
+
+        printk("Read back....\n");
+	sys_address = sdhci_readl(host, SDHCI_DMA_ADDRESS);
+	blk_size = sdhci_readl(host, SDHCI_BLOCK_SIZE);
+	printk(" sys_address = 0x%x, blk_size = 0x%x \n", sys_address, blk_size);
+
+}
+
+
+void sdhci_dumpregs(struct sdhci_host *host)
+{
+   
+	printk(KERN_ERR DRIVER_NAME ": ========== REGISTER DUMP of %s ==========\n", mmc_hostname(host->mmc));
+
+	printk(KERN_ERR DRIVER_NAME ": Sys addr: 0x%08x | Version:  0x%08x\n",
 		sdhci_readl(host, SDHCI_DMA_ADDRESS),
 		sdhci_readw(host, SDHCI_HOST_VERSION));
-	printk(KERN_DEBUG DRIVER_NAME ": Blk size: 0x%08x | Blk cnt:  0x%08x\n",
+	printk(KERN_ERR DRIVER_NAME ": Blk size: 0x%08x | Blk cnt:  0x%08x\n",
 		sdhci_readw(host, SDHCI_BLOCK_SIZE),
 		sdhci_readw(host, SDHCI_BLOCK_COUNT));
-	printk(KERN_DEBUG DRIVER_NAME ": Argument: 0x%08x | Trn mode: 0x%08x\n",
+	printk(KERN_ERR DRIVER_NAME ": Argument: 0x%08x | Trn mode: 0x%08x\n",
 		sdhci_readl(host, SDHCI_ARGUMENT),
 		sdhci_readw(host, SDHCI_TRANSFER_MODE));
-	printk(KERN_DEBUG DRIVER_NAME ": Present:  0x%08x | Host ctl: 0x%08x\n",
+	printk(KERN_ERR DRIVER_NAME ": Present:  0x%08x | Host ctl: 0x%08x\n",
 		sdhci_readl(host, SDHCI_PRESENT_STATE),
 		sdhci_readb(host, SDHCI_HOST_CONTROL));
-	printk(KERN_DEBUG DRIVER_NAME ": Power:    0x%08x | Blk gap:  0x%08x\n",
+	printk(KERN_ERR DRIVER_NAME ": Power:    0x%08x | Blk gap:  0x%08x\n",
 		sdhci_readb(host, SDHCI_POWER_CONTROL),
 		sdhci_readb(host, SDHCI_BLOCK_GAP_CONTROL));
-	printk(KERN_DEBUG DRIVER_NAME ": Wake-up:  0x%08x | Clock:    0x%08x\n",
+	printk(KERN_ERR DRIVER_NAME ": Wake-up:  0x%08x | Clock:    0x%08x\n",
 		sdhci_readb(host, SDHCI_WAKE_UP_CONTROL),
 		sdhci_readw(host, SDHCI_CLOCK_CONTROL));
-	printk(KERN_DEBUG DRIVER_NAME ": Timeout:  0x%08x | Int stat: 0x%08x\n",
+	printk(KERN_ERR DRIVER_NAME ": Timeout:  0x%08x | Int stat: 0x%08x\n",
 		sdhci_readb(host, SDHCI_TIMEOUT_CONTROL),
 		sdhci_readl(host, SDHCI_INT_STATUS));
-	printk(KERN_DEBUG DRIVER_NAME ": Int enab: 0x%08x | Sig enab: 0x%08x\n",
+	printk(KERN_ERR DRIVER_NAME ": Int enab: 0x%08x | Sig enab: 0x%08x\n",
 		sdhci_readl(host, SDHCI_INT_ENABLE),
 		sdhci_readl(host, SDHCI_SIGNAL_ENABLE));
-	printk(KERN_DEBUG DRIVER_NAME ": AC12 err: 0x%08x | Slot int: 0x%08x\n",
+	printk(KERN_ERR DRIVER_NAME ": AC12 err: 0x%08x | Slot int: 0x%08x\n",
 		sdhci_readw(host, SDHCI_ACMD12_ERR),
 		sdhci_readw(host, SDHCI_SLOT_INT_STATUS));
-	printk(KERN_DEBUG DRIVER_NAME ": Caps:     0x%08x | Max curr: 0x%08x\n",
+	printk(KERN_ERR DRIVER_NAME ": Caps:     0x%08x | Max curr: 0x%08x\n",
 		sdhci_readl(host, SDHCI_CAPABILITIES),
 		sdhci_readl(host, SDHCI_MAX_CURRENT));
 
 	if (host->flags & SDHCI_USE_ADMA)
-		printk(KERN_DEBUG DRIVER_NAME ": ADMA Err: 0x%08x | ADMA Ptr: 0x%08x\n",
+		printk(KERN_ERR DRIVER_NAME ": ADMA Err: 0x%08x | ADMA Ptr: 0x%08x\n",
 		       readl(host->ioaddr + SDHCI_ADMA_ERROR),
 		       readl(host->ioaddr + SDHCI_ADMA_ADDRESS));
-
-	printk(KERN_DEBUG DRIVER_NAME ": ===========================================\n");
+	printk(KERN_ERR DRIVER_NAME ": ===========================================\n");
+	if (sdhci_readl(host, SDHCI_INT_STATUS)==0x00ff0003)
+		while(1);
 }
 
 /*****************************************************************************\
@@ -988,6 +1038,16 @@ static void sdhci_set_clock(struct sdhci_host *host, unsigned int clock)
 	u16 clk;
 	unsigned long timeout;
 
+	/*
+	 * Controller clock should be enabled before MMC_POWER_UP to do
+	 * register read/writes.
+	 */
+	if ((clock == 0) && (host->mmc->ios.power_mode == MMC_POWER_UP)) {
+		if (host->ops->set_clock)
+			host->ops->set_clock(host, host->mmc->f_min);
+		return;
+	}
+
 	if (clock && clock == host->clock)
 		return;
 
@@ -1162,7 +1222,9 @@ static void sdhci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		sdhci_writel(host, 0, SDHCI_SIGNAL_ENABLE);
 		sdhci_reinit(host);
 	}
-
+#if 0//def CONFIG_MACH_N1
+	sdhci_readl(host, SDHCI_INT_STATUS);
+#endif
 	sdhci_set_clock(host, ios->clock);
 
 	if (ios->power_mode == MMC_POWER_OFF)

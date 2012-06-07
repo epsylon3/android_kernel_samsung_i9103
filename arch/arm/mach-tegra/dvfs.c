@@ -86,6 +86,22 @@ static int dvfs_solve_relationship(struct dvfs_relationship *rel)
 	return rel->solve(rel->from, rel->to);
 }
 
+#ifdef CONFIG_MACH_N1
+#define DVFS_SLEW_RATE		32  /* BUCK slew rate */
+#define DVFS_SETTLE_MARGIN	30 /* DVFS settle time + margin percent */
+static int dvfs_calc_settle_time(int old, int new, int slew)
+{
+	int delay;
+
+	slew = (slew <= 0) ? 1 : slew; /* Avoid divide by 0 */
+	delay = abs(old - new) / slew; /* Calc settle time */
+	/* Adding timing margin x percent */
+	delay = delay * (100 + DVFS_SETTLE_MARGIN) / 100;
+	delay += 20; /* Add additional delay */
+	return delay;
+}
+#endif /* CONFIG_MACH_N1 */
+
 /* Sets the voltage on a dvfs rail to a specific value, and updates any
  * rails that depend on this rail. */
 static int dvfs_rail_set_voltage(struct dvfs_rail *rail, int millivolts)
@@ -95,6 +111,9 @@ static int dvfs_rail_set_voltage(struct dvfs_rail *rail, int millivolts)
 	int step = (millivolts > rail->millivolts) ? rail->step : -rail->step;
 	int i;
 	int steps;
+#ifdef CONFIG_MACH_N1
+	int delay = 0;
+#endif
 
 	if (!rail->reg) {
 		if (millivolts == rail->millivolts)
@@ -105,6 +124,12 @@ static int dvfs_rail_set_voltage(struct dvfs_rail *rail, int millivolts)
 
 	if (rail->disabled)
 		return 0;
+
+#ifdef CONFIG_MACH_N1
+	delay = dvfs_calc_settle_time(rail->millivolts, millivolts, DVFS_SLEW_RATE);
+	pr_debug("dvfs regulator %s, old=%d, new=%d, delay=%d\n",
+		rail->reg_id, rail->millivolts, millivolts, delay);
+#endif /* CONFIG_MACH_N1 */
 
 	steps = DIV_ROUND_UP(abs(millivolts - rail->millivolts), rail->step);
 
@@ -148,6 +173,13 @@ static int dvfs_rail_set_voltage(struct dvfs_rail *rail, int millivolts)
 				return ret;
 		}
 	}
+
+#ifdef CONFIG_MACH_N1
+	/* DVFS settle time */
+	if (delay > 0) {
+		udelay(delay);
+	}
+#endif /* CONFIG_MACH_N1 */
 
 	if (unlikely(rail->millivolts != millivolts)) {
 		pr_err("%s: rail didn't reach target %d in %d steps (%d)\n",
@@ -201,6 +233,7 @@ static int dvfs_rail_connect_to_regulator(struct dvfs_rail *rail)
 		reg = regulator_get(NULL, rail->reg_id);
 		if (IS_ERR(reg))
 			return -EINVAL;
+
 		rail->reg = reg;
 	}
 

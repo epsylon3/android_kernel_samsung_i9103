@@ -66,4 +66,8 @@ struct board_info {
 
 void tegra_get_board_info(struct board_info *);
 
+#ifdef CONFIG_MACH_N1
+void n1_save_wakeup_key(int lp_state);
+#endif
+
 #endif

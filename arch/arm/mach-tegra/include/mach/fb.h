@@ -36,9 +36,12 @@ struct tegra_fb_info *tegra_fb_register(struct nvhost_device *ndev,
 void tegra_fb_unregister(struct tegra_fb_info *fb_info);
 void tegra_fb_update_monspecs(struct tegra_fb_info *fb_info,
 			      struct fb_monspecs *specs,
-			      bool (*mode_filter)(const struct tegra_dc *dc, struct fb_videomode *mode));
+			      bool (*mode_filter)(struct fb_videomode *mode));
 /* called by display controller on suspend */
 void tegra_fb_suspend(struct tegra_fb_info *tegra_fb);
+#if defined(CONFIG_MACH_N1)
+void tegra_fb_update_address(struct tegra_fb_info *fb_info, struct tegra_dc_win *win);
+#endif
 #else
 static inline struct tegra_fb_info *tegra_fb_register(struct nvhost_device *ndev,
 						      struct tegra_dc *dc,

@@ -30,6 +30,10 @@
 #include <linux/uaccess.h>
 #include <linux/random.h>
 
+#ifdef CONFIG_KERNEL_DEBUG_SEC
+#include <linux/kernel_sec_common.h>
+#endif
+
 #include <asm/cacheflush.h>
 #include <asm/leds.h>
 #include <asm/processor.h>
@@ -37,6 +41,10 @@
 #include <asm/thread_notify.h>
 #include <asm/stacktrace.h>
 #include <asm/mach/time.h>
+
+#ifdef CONFIG_KERNEL_DEBUG_SEC
+#include <linux/kernel_sec_common.h>
+#endif
 
 #ifdef CONFIG_CC_STACKPROTECTOR
 #include <linux/stackprotector.h>
@@ -92,12 +100,29 @@ __setup("hlt", hlt_setup);
 
 void arm_machine_restart(char mode, const char *cmd)
 {
+#ifdef CONFIG_KERNEL_DEBUG_SEC
+	kernel_sec_upload_cause_type upload_cause;
+#endif
+
+	/* Disable interrupts first */
+	local_irq_disable();
+	local_fiq_disable();
+
 	/*
 	 * Tell the mm system that we are going to reboot -
 	 * we may need it to insert some 1:1 mappings so that
 	 * soft boot works.
 	 */
 	setup_mm_for_reboot(mode);
+
+	/*
+	 * Clear the magic number because it's normal reboot.
+	 */
+#ifdef CONFIG_KERNEL_DEBUG_SEC
+	upload_cause = kernel_sec_get_upload_cause();
+	if (upload_cause == UPLOAD_CAUSE_INIT)
+		kernel_sec_clear_upload_magic_number();
+#endif
 
 	/* Clean and invalidate caches */
 	flush_cache_all();
@@ -107,6 +132,10 @@ void arm_machine_restart(char mode, const char *cmd)
 
 	/* Push out any further dirty data, and ensure cache is empty */
 	flush_cache_all();
+
+#ifdef CONFIG_KERNEL_DEBUG_SEC
+	outer_flush_all();
+#endif
 
 	/*
 	 * Now call the architecture specific reboot code.
@@ -215,8 +244,22 @@ int __init reboot_setup(char *str)
 
 __setup("reboot=", reboot_setup);
 
+#ifdef CONFIG_MACH_N1
+extern void tegra_dvfs_disable_core_cpu(void);
+#endif
 void machine_shutdown(void)
 {
+#ifdef CONFIG_KERNEL_DEBUG_SEC
+	kernel_sec_upload_cause_type upload_cause;
+	upload_cause = kernel_sec_get_upload_cause();
+        /* Clear the magic number because it's normal reboot */
+	if (upload_cause == UPLOAD_CAUSE_INIT)
+		kernel_sec_clear_upload_magic_number();
+#endif
+#ifdef CONFIG_MACH_N1
+	tegra_dvfs_disable_core_cpu();
+#endif
+
 #ifdef CONFIG_SMP
 	smp_send_stop();
 #endif
@@ -237,10 +280,6 @@ void machine_power_off(void)
 
 void machine_restart(char *cmd)
 {
-	/* Disable interrupts first */
-	local_irq_disable();
-	local_fiq_disable();
-
 	machine_shutdown();
 	arm_pm_restart(reboot_mode, cmd);
 }

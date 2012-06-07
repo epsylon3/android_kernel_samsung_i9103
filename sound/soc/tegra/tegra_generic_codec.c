@@ -93,6 +93,7 @@ struct snd_soc_dai tegra_generic_codec_dai[] = {
 			.formats        = SNDRV_PCM_FMTBIT_S16_LE,
 		},
 		.ops = &tegra_generic_codec_stub_ops,
+#ifndef CONFIG_MACH_BOSE_ATT /* Sync to P4 spdif drivers of BOSE project */
 	},
 	{
 		.name = "tegra_generic_spdif_codec",
@@ -112,6 +113,7 @@ struct snd_soc_dai tegra_generic_codec_dai[] = {
 			.formats        = SNDRV_PCM_FMTBIT_S16_LE,
 		},
 		.ops = &tegra_generic_codec_stub_ops,
+#endif
 	}
 };
 EXPORT_SYMBOL_GPL(tegra_generic_codec_dai);

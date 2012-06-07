@@ -35,4 +35,9 @@ struct tegra_emc_chip {
 
 int tegra_emc_set_rate(unsigned long rate);
 long tegra_emc_round_rate(unsigned long rate);
+
+#ifdef CONFIG_MACH_N1 /* rollback to nVidia patch */
+void tegra_init_emc(const struct tegra_emc_table *table, int table_size);
+#else
 void tegra_init_emc(const struct tegra_emc_chip *chips, int chips_size);
+#endif

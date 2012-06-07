@@ -56,6 +56,15 @@
 #include "board.h"
 #include "power.h"
 
+/* only lp0 sleep control gpio pins */
+/* this code enable wakeup by modem during not lp0 sleep */
+#include <linux/gpio.h>
+#if defined (CONFIG_MACH_BOSE_ATT)
+#include <mach/gpio-bose.h>
+#else
+#include <mach/gpio-n1.h>
+#endif
+
 #ifdef CONFIG_TRUSTED_FOUNDATIONS
 void callGenericSMC(u32 param0, u32 param1, u32 param2)
 {
@@ -711,6 +720,9 @@ void tegra_ahbgizmo_resume(void)
 	gizmo_writel(ahb_gizmo[28],AHB_ARBITRATION_AHB_MEM_WRQUE_MST_ID);
 }
 
+#ifdef CONFIG_MACH_N1
+extern int Is_call_active(void);
+#endif
 static int tegra_suspend_enter(suspend_state_t state)
 {
 	struct irq_desc *desc;
@@ -721,11 +733,28 @@ static int tegra_suspend_enter(suspend_state_t state)
 	int irq;
 	bool do_lp0 = (current_suspend_mode == TEGRA_SUSPEND_LP0);
 	bool do_lp2 = (current_suspend_mode == TEGRA_SUSPEND_LP2);
+#ifdef CONFIG_MACH_N1
+	bool do_lp1 = (current_suspend_mode == TEGRA_SUSPEND_LP1);
+#endif
 	int lp_state;
 	u64 rtc_before;
 	u64 rtc_after;
 	u64 secs;
 	u32 ms;
+
+#ifdef CONFIG_MACH_N1
+	/* Set LP2 for audio path when the device is in call */
+	if (Is_call_active() || !gpio_get_value(GPIO_ALC_INT)) {
+		do_lp0 = 0;
+		do_lp1 = 1;
+		do_lp2 = 0;
+	}
+
+	/* only lp0 sleep control gpio pins */
+	/* this code enable wakeup by modem during not lp0 sleep */
+	if (!do_lp0)
+		gpio_set_value(GPIO_PDA_ACTIVE, 0);
+#endif
 
 	if (do_lp2)
 		lp_state = 2;
@@ -798,6 +827,15 @@ static int tegra_suspend_enter(suspend_state_t state)
 		tegra_dma_resume();
 		tegra_irq_resume();
 	}
+
+#ifdef CONFIG_MACH_N1
+	/* only lp0 sleep control gpio pins */
+	/* this code enable wakeup by modem during not lp0 sleep */
+	if (!do_lp0)
+		gpio_set_value(GPIO_PDA_ACTIVE, 1);
+
+	n1_save_wakeup_key(lp_state);
+#endif
 
 	secs = rtc_after - rtc_before;
 	ms = do_div(secs, 1000);

@@ -284,6 +284,7 @@ static int interpret_urb_result(struct us_data *us, unsigned int pipe,
 		 * a failed command */
 		if (usb_pipecontrol(pipe)) {
 			US_DEBUGP("-- stall on control pipe\n");
+			printk("usb storage -- stall on control pipe\n");
 			return USB_STOR_XFER_STALLED;
 		}
 
@@ -296,26 +297,31 @@ static int interpret_urb_result(struct us_data *us, unsigned int pipe,
 	/* babble - the device tried to send more than we wanted to read */
 	case -EOVERFLOW:
 		US_DEBUGP("-- babble\n");
+		printk("usb storage -- babble\n");
 		return USB_STOR_XFER_LONG;
 
 	/* the transfer was cancelled by abort, disconnect, or timeout */
 	case -ECONNRESET:
 		US_DEBUGP("-- transfer cancelled\n");
+		printk("usb storage -- transfer cancelled\n");
 		return USB_STOR_XFER_ERROR;
 
 	/* short scatter-gather read transfer */
 	case -EREMOTEIO:
 		US_DEBUGP("-- short read transfer\n");
+		printk("usb storage -- short read transfer\n");
 		return USB_STOR_XFER_SHORT;
 
 	/* abort or disconnect in progress */
 	case -EIO:
 		US_DEBUGP("-- abort or disconnect in progress\n");
+		printk("usb storage -- abort or disconnect in progress\n");
 		return USB_STOR_XFER_ERROR;
 
 	/* the catch-all error case */
 	default:
 		US_DEBUGP("-- unknown error\n");
+		printk("usb storage -- unknown error\n");
 		return USB_STOR_XFER_ERROR;
 	}
 }
@@ -609,6 +615,7 @@ void usb_stor_invoke_transport(struct scsi_cmnd *srb, struct us_data *us)
 	 */
 	if (test_bit(US_FLIDX_TIMED_OUT, &us->dflags)) {
 		US_DEBUGP("-- command was aborted\n");
+		printk("usb storage -- command was aborted\n");
 		srb->result = DID_ABORT << 16;
 		goto Handle_Errors;
 	}
@@ -616,6 +623,7 @@ void usb_stor_invoke_transport(struct scsi_cmnd *srb, struct us_data *us)
 	/* if there is a transport error, reset and don't auto-sense */
 	if (result == USB_STOR_TRANSPORT_ERROR) {
 		US_DEBUGP("-- transport indicates error, resetting\n");
+		printk("usb storage -- transport indicates error, resetting\n");
 		srb->result = DID_ERROR << 16;
 		goto Handle_Errors;
 	}
@@ -716,6 +724,7 @@ Retry_Sense:
 
 		if (test_bit(US_FLIDX_TIMED_OUT, &us->dflags)) {
 			US_DEBUGP("-- auto-sense aborted\n");
+			printk("usb storage -- auto-sense aborted\n");
 			srb->result = DID_ABORT << 16;
 
 			/* If SANE_SENSE caused this problem, disable it */
@@ -743,6 +752,7 @@ Retry_Sense:
 		/* Other failures */
 		if (temp_result != USB_STOR_TRANSPORT_GOOD) {
 			US_DEBUGP("-- auto-sense failure\n");
+			printk("usb storage -- auto-sense failure\n");
 
 			/* we skip the reset if this happens to be a
 			 * multi-target device, since failure of an

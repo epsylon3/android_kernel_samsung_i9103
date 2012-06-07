@@ -32,10 +32,16 @@ obj-$(CONFIG_BATTERY_WM97XX)	+= wm97xx_battery.o
 obj-$(CONFIG_BATTERY_BQ20Z75)	+= bq20z75_battery.o
 obj-$(CONFIG_BATTERY_BQ27x00)	+= bq27x00_battery.o
 obj-$(CONFIG_BATTERY_DA9030)	+= da9030_battery.o
-obj-$(CONFIG_BATTERY_MAX17040)	+= max17040_battery.o
+obj-$(CONFIG_BATTERY_MAX17043)	+= max17043_battery.o
 obj-$(CONFIG_BATTERY_Z2)	+= z2_battery.o
 obj-$(CONFIG_BATTERY_S3C_ADC)	+= s3c_adc_battery.o
 obj-$(CONFIG_CHARGER_PCF50633)	+= pcf50633-charger.o
 obj-$(CONFIG_BATTERY_JZ4740)	+= jz4740-battery.o
 obj-$(CONFIG_BATTERY_INTEL_MID)	+= intel_mid_battery.o
 obj-$(CONFIG_MAX8907C_CHARGER)	+= max8907c-charger.o
+obj-$(CONFIG_MAX8922_CHARGER)	+= max8922-charger.o
+ifeq ($(CONFIG_MACH_BOSE_ATT),y)
+obj-$(CONFIG_BATTERY_SEC)	+= sec_battery_bose.o
+else
+obj-$(CONFIG_BATTERY_SEC)	+= sec_battery.o
+endif

@@ -142,7 +142,16 @@ static int max8907c_rtc_set_time(struct device *dev, struct rtc_time *tm)
 	struct max8907c_rtc_info *info = dev_get_drvdata(dev);
 	u8 buf[TIME_NUM];
 	int ret;
+#ifdef CONFIG_MACH_N1
+	struct task_struct *task;
 
+	task = current;
+	pr_info("%s called by %s[pid:%d]\n", __func__, task->comm, task->pid);
+	pr_info("%s: %02d:%02d:%02d %02d/%02d/%04d\n",
+		__func__,
+		tm->tm_hour, tm->tm_min, tm->tm_sec,
+		tm->tm_mon + 1, tm->tm_mday, tm->tm_year + 1900);
+#endif
 	ret = data_calc(buf, tm, TIME_NUM);
 
 	if (ret < 0)
@@ -187,7 +196,16 @@ static int max8907c_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alrm)
 	struct max8907c_rtc_info *info = dev_get_drvdata(dev);
 	unsigned char buf[TIME_NUM];
 	int ret;
+#ifdef CONFIG_MACH_N1
+	struct task_struct *task;
 
+	task = current;
+	pr_info("%s called by %s[pid:%d]\n", __func__, task->comm, task->pid);
+	pr_info("%s: %02d:%02d:%02d %02d/%02d/%04d\n",
+		__func__,
+		alrm->time.tm_hour, alrm->time.tm_min, alrm->time.tm_sec,
+		alrm->time.tm_mon + 1, alrm->time.tm_mday, alrm->time.tm_year + 1900);
+#endif
 	ret = data_calc(buf, &alrm->time, TIME_NUM);
 	if (ret < 0)
 		return ret;

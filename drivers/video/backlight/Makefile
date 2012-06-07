@@ -36,4 +36,8 @@ obj-$(CONFIG_BACKLIGHT_ADP5520)	+= adp5520_bl.o
 obj-$(CONFIG_BACKLIGHT_ADP8860)	+= adp8860_bl.o
 obj-$(CONFIG_BACKLIGHT_88PM860X) += 88pm860x_bl.o
 obj-$(CONFIG_BACKLIGHT_PCF50633)	+= pcf50633-backlight.o
-
+ifeq ($(CONFIG_MACH_BOSE_ATT),y)
+obj-$(CONFIG_BACKLIGHT_CMC623_PWM)	+= cmc623_pwm_bl_bose.o
+else
+obj-$(CONFIG_BACKLIGHT_CMC623_PWM)	+= cmc623_pwm_bl.o
+endif

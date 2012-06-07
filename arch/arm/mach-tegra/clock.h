@@ -44,6 +44,9 @@
 
 #define MAX_SAME_LIMIT_SKU_IDS	16
 
+#define KHZ 1000
+#define MHZ 1000000
+
 struct clk;
 
 struct clk_mux_sel {
@@ -132,12 +135,12 @@ struct clk {
 			struct clk			*backup;
 		} cpu;
 		struct {
-			struct clk			*pclk;
-			struct clk			*hclk;
-			struct clk			*sclk_low;
-			struct clk			*sclk_high;
-			unsigned long			threshold;
-		} system;
+                        struct clk                      *pclk;
+                        struct clk                      *hclk;
+                        struct clk                      *sclk_low;
+                        struct clk                      *sclk_high;
+                        unsigned long                   threshold;
+                } system;
 		struct {
 			struct list_head		node;
 			bool				enabled;

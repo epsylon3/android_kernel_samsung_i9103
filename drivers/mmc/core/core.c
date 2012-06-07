@@ -1259,7 +1259,9 @@ static int mmc_do_erase(struct mmc_card *card, unsigned int from,
 		from <<= 9;
 		to <<= 9;
 	}
-
+	#ifdef CONFIG_MMC_DISCARD_DEBUG
+	printk ("mmc_do_erase : from : %d, to : %d\n", from, to);
+	#endif 
 	memset(&cmd, 0, sizeof(struct mmc_command));
 	if (mmc_card_sd(card))
 		cmd.opcode = SD_ERASE_WR_BLK_START;
@@ -1322,6 +1324,9 @@ static int mmc_do_erase(struct mmc_card *card, unsigned int from,
 	} while (!(cmd.resp[0] & R1_READY_FOR_DATA) ||
 		 R1_CURRENT_STATE(cmd.resp[0]) == 7);
 out:
+#ifdef CONFIG_MMC_DISCARD_DEBUG
+	printk ("mmc_do_erase : return  %d \n", err);
+#endif 
 	return err;
 }
 
@@ -1346,6 +1351,28 @@ int mmc_erase(struct mmc_card *card, unsigned int from, unsigned int nr,
 	if (!card->erase_size)
 		return -EOPNOTSUPP;
 
+#ifdef CONFIG_MMC_DISCARD_MOVINAND
+	if (!mmc_card_mmc(card) || arg != MMC_TRIM_ARG)
+		return -EOPNOTSUPP;
+
+	if (card->cid.manfid == MMC_CSD_MANFID_MOVINAND) {
+		/* check to see if start sector is aligned pref_erase or not */
+		rem = from % card->pref_trim;
+		if (rem) {
+			rem = card->pref_trim - rem;
+			from += rem;
+			if (nr > rem)
+				nr -= rem;
+			else
+				return 0;
+		}
+		/* check to see if nr blocks is aligned pref_erase or not */
+		rem = nr % card->pref_trim;
+		if (rem)
+			nr -= rem;
+	}
+
+#else
 	if (mmc_card_sd(card) && arg != MMC_ERASE_ARG)
 		return -EOPNOTSUPP;
 
@@ -1376,7 +1403,7 @@ int mmc_erase(struct mmc_card *card, unsigned int from, unsigned int nr,
 		if (rem)
 			nr -= rem;
 	}
-
+#endif 
 	if (nr == 0)
 		return 0;
 
@@ -1403,8 +1430,20 @@ EXPORT_SYMBOL(mmc_can_erase);
 
 int mmc_can_trim(struct mmc_card *card)
 {
+#ifdef CONFIG_MMC_DISCARD_MOVINAND
+	if(card->cid.manfid == MMC_CSD_MANFID_MOVINAND) {
+		if (mmc_card_mmc(card) &&
+			(card->ext_csd.sec_feature_support & EXT_CSD_SEC_GB_CL_EN) &&
+			(card->host->caps & MMC_CAP_ERASE) &&
+		    (card->csd.cmdclass & CCC_ERASE) && card->erase_size)
+			return 1;
+	}
+
+#else
 	if (card->ext_csd.sec_feature_support & EXT_CSD_SEC_GB_CL_EN)
 		return 1;
+#endif
+
 	return 0;
 }
 EXPORT_SYMBOL(mmc_can_trim);
@@ -1696,9 +1735,15 @@ int mmc_suspend_host(struct mmc_host *host)
 	}
 	mmc_bus_put(host);
 
+#ifdef CONFIG_MACH_N1
+	if (!err && !(host->pm_flags & MMC_PM_KEEP_POWER)) {
+		if(!host->card || host->card->type != MMC_TYPE_SDIO)
+			mmc_power_off(host);
+	}
+#else
 	if (!err && !(host->pm_flags & MMC_PM_KEEP_POWER))
 		mmc_power_off(host);
-
+#endif
 	return err;
 }
 
@@ -1721,7 +1766,12 @@ int mmc_resume_host(struct mmc_host *host)
 
 	if (host->bus_ops && !host->bus_dead) {
 		if (!(host->pm_flags & MMC_PM_KEEP_POWER)) {
+#ifdef CONFIG_MACH_N1
+			if(!host->card || host->card->type != MMC_TYPE_SDIO)
+				mmc_power_up(host);
+#else
 			mmc_power_up(host);
+#endif
 			mmc_select_voltage(host, host->ocr);
 		}
 		BUG_ON(!host->bus_ops->resume);
@@ -1788,7 +1838,12 @@ int mmc_pm_notify(struct notifier_block *notify_block,
 		}
 		host->rescan_disable = 0;
 		spin_unlock_irqrestore(&host->lock, flags);
+#ifdef CONFIG_MACH_N1
+		if(!host->card || host->card->type != MMC_TYPE_SDIO)
+			mmc_detect_change(host, 0);
+#else
 		mmc_detect_change(host, 0);
+#endif
 
 	}
 

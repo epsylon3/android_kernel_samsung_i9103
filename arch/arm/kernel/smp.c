@@ -62,6 +62,10 @@ enum ipi_msg_type {
 	IPI_CPU_STOP,
 };
 
+#ifdef CONFIG_MACH_N1
+extern void n1_check_key_pressed(void);
+#endif
+
 int __cpuinit __cpu_up(unsigned int cpu)
 {
 	struct cpuinfo_arm *ci = &per_cpu(cpu_data, cpu);
@@ -117,6 +121,9 @@ int __cpuinit __cpu_up(unsigned int cpu)
 	ret = boot_secondary(cpu, idle);
 	if (ret == 0) {
 		unsigned long timeout;
+#ifdef CONFIG_MACH_N1
+		int loop = 0;
+#endif
 
 		/*
 		 * CPU was successfully started, wait for it
@@ -126,7 +133,13 @@ int __cpuinit __cpu_up(unsigned int cpu)
 		while (time_before(jiffies, timeout)) {
 			if (cpu_online(cpu))
 				break;
-
+#ifdef CONFIG_MACH_N1
+		/* this loop takes about 250ms */
+		/* we want to check key released while this loop is running */
+		loop++;
+		if (0 == (loop % 3000))	/* for 30ms */
+			n1_check_key_pressed();
+#endif
 			udelay(10);
 			barrier();
 		}
@@ -286,7 +299,9 @@ asmlinkage void __cpuinit secondary_start_kernel(void)
 	 */
 	percpu_timer_setup();
 
+#ifndef CONFIG_ARCH_PROVIDES_UDELAY
 	calibrate_delay();
+#endif
 
 	smp_store_cpu_info(cpu);
 
@@ -522,6 +537,9 @@ void smp_send_stop(void)
 
 	if (num_online_cpus() > 1) {
 		cpumask_t mask = cpu_online_map;
+#ifdef CONFIG_KERNEL_DEBUG_SEC
+		flush_all_cpu_caches();
+#endif
 		cpu_clear(smp_processor_id(), mask);
 
 		send_ipi_message(&mask, IPI_CPU_STOP);
@@ -668,3 +686,13 @@ void flush_tlb_kernel_range(unsigned long start, unsigned long end)
 	} else
 		local_flush_tlb_kernel_range(start, end);
 }
+#ifdef CONFIG_KERNEL_DEBUG_SEC
+static void flush_all_cpu_cache(void *info)
+{
+	flush_cache_all();
+}
+void flush_all_cpu_caches(void)
+{
+	on_each_cpu(flush_all_cpu_cache, NULL, 1);
+}
+#endif

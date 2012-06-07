@@ -17,6 +17,27 @@ config VIDEO_OV5650
           This is a driver for the Omnivision OV5650 5MP camera sensor
           for use with the tegra isp.
 
+config VIDEO_S5K4ECGX
+        tristate "S5K4ECGX camera sensor support"
+        depends on I2C && ARCH_TEGRA
+        ---help---
+          This is a driver for the Samsung Electronics S5K4ECGX 5MP camera sensor
+          for use with the tegra isp.
+
+config VIDEO_S5K6AAFX
+        tristate "S5K6AAFX camera sensor support"
+        depends on I2C && ARCH_TEGRA
+        ---help---
+          This is a driver for the Partron S5K6AAFX 1.3MP camera sensor
+          for use with the tegra isp.
+
+config VIDEO_M5MO
+        tristate "M5MO camera sensor support"
+        depends on I2C && ARCH_TEGRA
+        ---help---
+          This is a driver for the Fujitsu M5MO 8MP camera sensor
+          for use with the tegra isp.
+
 config VIDEO_OV2710
         tristate "OV2710 camera sensor support"
         depends on I2C && ARCH_TEGRA
@@ -50,3 +71,12 @@ config VIDEO_AD5820
         ---help---
           This is a driver for the AD5820 focuser
           for use with the tegra isp.
+
+config TEGRA_DYNAMIC_CAMERA_CLK_RATE
+        boolean "Set graphics clk rate per use cases"
+        depends on CPU_FREQ && ARCH_TEGRA
+        ---help---
+          Dynamically change the rates of graphics related clocks
+          based on the use case that is being executed on the
+          camera system. For example, clocks usually set to
+          higher rates when switching to higher resolutions.

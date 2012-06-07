@@ -221,7 +221,6 @@ struct tegra_dc_out {
 	int			dcc_bus;
 	int			hotplug_gpio;
 
-	unsigned		max_pixclock;
 	unsigned		order;
 	unsigned		align;
 	unsigned		depth;
@@ -296,9 +295,13 @@ struct tegra_dc_win {
 #define TEGRA_WIN_FLAG_ENABLED		(1 << 0)
 #define TEGRA_WIN_FLAG_BLEND_PREMULT	(1 << 1)
 #define TEGRA_WIN_FLAG_BLEND_COVERAGE	(1 << 2)
+#ifdef CONFIG_MACH_N1
 #define TEGRA_WIN_FLAG_INVERT_H		(1 << 3)
 #define TEGRA_WIN_FLAG_INVERT_V		(1 << 4)
 #define TEGRA_WIN_FLAG_TILED		(1 << 5)
+#else
+#define TEGRA_WIN_FLAG_TILED		(1 << 3)
+#endif
 
 #define TEGRA_WIN_BLEND_FLAGS_MASK \
 	(TEGRA_WIN_FLAG_BLEND_PREMULT | TEGRA_WIN_FLAG_BLEND_COVERAGE)
@@ -368,9 +371,8 @@ int tegra_dc_sync_windows(struct tegra_dc_win *windows[], int n);
 
 int tegra_dc_set_mode(struct tegra_dc *dc, const struct tegra_dc_mode *mode);
 
-unsigned tegra_dc_get_out_height(const struct tegra_dc *dc);
-unsigned tegra_dc_get_out_width(const struct tegra_dc *dc);
-unsigned tegra_dc_get_out_max_pixclock(const struct tegra_dc *dc);
+unsigned tegra_dc_get_out_height(struct tegra_dc *dc);
+unsigned tegra_dc_get_out_width(struct tegra_dc *dc);
 
 /* PM0 and PM1 signal control */
 #define TEGRA_PWM_PM0 0

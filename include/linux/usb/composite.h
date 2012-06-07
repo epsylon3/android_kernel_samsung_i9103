@@ -103,6 +103,11 @@ struct usb_function {
 
 	struct usb_configuration	*config;
 
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+	int			(*set_intf_num)(struct usb_function *f,
+					int intf_num,
+					int index_num);
+#endif
 	/* disabled is zero if the function is enabled */
 	int				disabled;
 
@@ -361,10 +366,25 @@ struct usb_composite_dev {
 	struct switch_dev		sw_connected;
 	/* switch indicating current configuration */
 	struct switch_dev		sw_config;
+	/* switch indicating usb_composite_force_reset */
+	struct switch_dev		sw_usbreset;	
 	/* current connected state for sw_connected */
 	bool				connected;
+	bool				mute_switch;
 
 	struct work_struct switch_work;
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+/* woojin80.kim : Below values are used for samsung composite framework. */
+	unsigned int			product_num; 	/* product number (ex : 0, 1, 2, ..) */
+	struct android_usb_product 	*products;	/* products list */
+	/* number of multi configuration */
+	int				multi_configuration;  
+  int      bMultiConfiguration;
+  int     MacPC;
+#endif
+#ifdef CONFIG_USB_ANDROID_ACCESSORY
+	unsigned char	accessory_mode;		/* usb accessory mode */
+#endif
 };
 
 extern int usb_string_id(struct usb_composite_dev *c);

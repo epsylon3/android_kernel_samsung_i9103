@@ -33,6 +33,11 @@
 #include <mach/pinmux.h>
 #include <mach/tegra_das.h>
 
+#ifdef CONFIG_MACH_N1
+#include <linux/clk.h>
+#include "clock.h"
+#endif
+
 #define TOTAL_DAP_PORTS		5
 
 struct das_driver_context {
@@ -491,7 +496,20 @@ EXPORT_SYMBOL_GPL(tegra_das_get_dap_mclk);
 /* if is_normal is true then power mode is normal else tristated */
 int tegra_das_power_mode(bool is_normal)
 {
+#ifdef CONFIG_MACH_N1
+	/* This code is intended to prevent pop noise when i2s port is closed */
+	struct clk * dap_mclk1 = tegra_get_clock_by_name("clk_dev1");
+
+	if (is_normal) {
+		das_set_pin_state(is_normal);
+		clk_enable(dap_mclk1);
+	} else {
+		clk_disable(dap_mclk1);
+		das_set_pin_state(is_normal);
+	}
+#else
 	das_set_pin_state(is_normal);
+#endif
 	return 0;
 }
 EXPORT_SYMBOL_GPL(tegra_das_power_mode);

@@ -20,6 +20,9 @@ enum stmpe_block {
 };
 
 enum stmpe_partnum {
+#if defined (CONFIG_MACH_BOSE_ATT)
+	STMPE1801= 0,
+#endif
 	STMPE811,
 	STMPE1601,
 	STMPE2401,
@@ -32,6 +35,16 @@ enum stmpe_partnum {
  */
 enum {
 	STMPE_IDX_CHIP_ID,
+#if defined (CONFIG_MACH_BOSE_ATT)
+	STMPE_IDX_VERSION_ID,		
+	STMPE_IDX_SYS_CTRL,
+	STMPE_IDX_ICR_LOW = 4,
+	STMPE_IDX_ICR_HIGH,
+	STMPE_IDX_IEMR_LOW,
+	STMPE_IDX_IEMR_HIGH,
+	STMPE_IDX_ISR_LOW,
+	STMPE_IDX_ISR_HIGH,
+#endif
 	STMPE_IDX_ICR_LSB,
 	STMPE_IDX_IER_LSB,
 	STMPE_IDX_ISR_MSB,

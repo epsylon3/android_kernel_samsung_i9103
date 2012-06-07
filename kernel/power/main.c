@@ -40,8 +40,23 @@ EXPORT_SYMBOL_GPL(unregister_pm_notifier);
 
 int pm_notifier_call_chain(unsigned long val)
 {
+#ifdef CONFIG_MACH_N1
+	int ret;
+	int nr_calls = 0;
+	ret = __blocking_notifier_call_chain(&pm_chain_head, val, NULL, -1, &nr_calls);
+	if ((ret & NOTIFY_STOP_MASK) == NOTIFY_STOP_MASK) {
+		pr_notice("pm notifier call chain(%d) might be stopped by returning 0x%x in %dth callback\n", val, ret, nr_calls);
+		if (val == PM_POST_SUSPEND) {
+			/* notifier call chain for PM_POST_SUSPEND never be stopped. */
+			/* insert here strong debug routine */
+			WARN((val == PM_POST_SUSPEND), KERN_ERR "PM_POST_SUSPEND pm notifier call chain was stopped!!!\n");
+		}
+	}
+	return (ret == NOTIFY_BAD) ? -EINVAL : 0;
+#else
 	return (blocking_notifier_call_chain(&pm_chain_head, val, NULL)
 			== NOTIFY_BAD) ? -EINVAL : 0;
+#endif
 }
 
 /* If set, devices may be suspended and resumed asynchronously. */

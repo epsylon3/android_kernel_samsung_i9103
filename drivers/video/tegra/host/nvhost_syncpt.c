@@ -79,6 +79,9 @@ void nvhost_syncpt_reset(struct nvhost_syncpt *sp)
 		reset_syncpt(sp, i);
 	for (i = 0; i < NV_HOST1X_SYNCPT_NB_BASES; i++)
 		reset_syncpt_wait_base(sp, i);
+#ifdef CONFIG_MACH_N1
+	sp->restore_needed = false;
+#endif
 	wmb();
 }
 
@@ -98,6 +101,9 @@ void nvhost_syncpt_save(struct nvhost_syncpt *sp)
 
 	for (i = 0; i < NV_HOST1X_SYNCPT_NB_BASES; i++)
 		read_syncpt_wait_base(sp, i);
+#ifdef CONFIG_MACH_N1
+	sp->restore_needed = true;
+#endif
 }
 
 /**
@@ -151,7 +157,20 @@ void nvhost_syncpt_cpu_incr(struct nvhost_syncpt *sp, u32 id)
  */
 void nvhost_syncpt_incr(struct nvhost_syncpt *sp, u32 id)
 {
+#ifdef CONFIG_MACH_N1
+	u32 min, max;
+
+	max = nvhost_syncpt_incr_max(sp, id, 1);
+	min = nvhost_syncpt_incr_min(sp, id, 1);
+	if (sp->restore_needed) {
+		/* XXX restore_needed used only for logging (to be removed in final checkin) */
+		dev_warn(&syncpt_to_dev(sp)->pdev->dev,
+				 "syncpoint id %d (%s) incremented min = %d, max = %d while nvhost suspended\n",
+				 id, nvhost_syncpt_name(id), min, max);
+	}
+#else
 	nvhost_syncpt_incr_max(sp, id, 1);
+#endif
 	nvhost_module_busy(&syncpt_to_dev(sp)->mod);
 	nvhost_syncpt_cpu_incr(sp, id);
 	nvhost_module_idle(&syncpt_to_dev(sp)->mod);
@@ -161,23 +180,18 @@ void nvhost_syncpt_incr(struct nvhost_syncpt *sp, u32 id)
  * Main entrypoint for syncpoint value waits.
  */
 int nvhost_syncpt_wait_timeout(struct nvhost_syncpt *sp, u32 id,
-			u32 thresh, u32 timeout, u32 *value)
+			u32 thresh, u32 timeout)
 {
 	DECLARE_WAIT_QUEUE_HEAD_ONSTACK(wq);
 	void *ref;
 	int err = 0;
-
-	if (value)
-		*value = 0;
+    unsigned int debug_done = 0 ;
 
 	BUG_ON(!check_max(sp, id, thresh));
 
 	/* first check cache */
-	if (nvhost_syncpt_min_cmp(sp, id, thresh)) {
-		if (value)
-			*value = nvhost_syncpt_read_min(sp, id);
+	if (nvhost_syncpt_min_cmp(sp, id, thresh))
 		return 0;
-	}
 
 	/* keep host alive */
 	nvhost_module_busy(&syncpt_to_dev(sp)->mod);
@@ -185,11 +199,8 @@ int nvhost_syncpt_wait_timeout(struct nvhost_syncpt *sp, u32 id,
 	if (client_managed(id) || !nvhost_syncpt_min_eq_max(sp, id)) {
 		/* try to read from register */
 		u32 val = nvhost_syncpt_update_min(sp, id);
-		if ((s32)(val - thresh) >= 0) {
-			if (value)
-				*value = val;
+		if ((s32)(val - thresh) >= 0)
 			goto done;
-		}
 	}
 
 	if (!timeout) {
@@ -211,8 +222,6 @@ int nvhost_syncpt_wait_timeout(struct nvhost_syncpt *sp, u32 id,
 						nvhost_syncpt_min_cmp(sp, id, thresh),
 						check);
 		if (remain > 0 || nvhost_syncpt_min_cmp(sp, id, thresh)) {
-			if (value)
-				*value = nvhost_syncpt_read_min(sp, id);
 			err = 0;
 			break;
 		}
@@ -227,6 +236,15 @@ int nvhost_syncpt_wait_timeout(struct nvhost_syncpt *sp, u32 id,
 				"syncpoint id %d (%s) stuck waiting %d\n",
 				id, nvhost_syncpt_name(id), thresh);
 			nvhost_syncpt_debug(sp);
+
+
+			if (debug_done > 15)
+			{
+				nvhost_debug_dump();
+				BUG_ON(1);
+			}
+			debug_done++;
+            
 		}
 	};
 	nvhost_intr_put_ref(&(syncpt_to_dev(sp)->intr), ref);
@@ -237,7 +255,7 @@ done:
 }
 
 static const char *s_syncpt_names[32] = {
-	"gfx_host", "", "", "", "", "", "", "", "", "", "", "",
+	"", "", "", "", "", "", "", "", "", "", "", "gfx_host",
 	"vi_isp_0", "vi_isp_1", "vi_isp_2", "vi_isp_3", "vi_isp_4", "vi_isp_5",
 	"2d_0", "2d_1",
 	"", "",

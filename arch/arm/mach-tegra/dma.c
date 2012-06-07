@@ -724,6 +724,10 @@ static void handle_continuous_dbl_dma(struct tegra_dma_channel *ch)
 				tegra_dma_update_hw_partial(ch, next_req);
 			}
 			req->buffer_status = TEGRA_DMA_REQ_BUF_STATUS_HALF_FULL;
+#ifdef CONFIG_MACH_N1
+			/* Add to fix dma available size for NXP EC solution porting */
+			req->status = TEGRA_DMA_REQ_SUCCESS;
+#endif
 			req->bytes_transferred = req->size >> 1;
 			/* DMA lock is NOT held when callback is called */
 			spin_unlock_irqrestore(&ch->lock, irq_flags);

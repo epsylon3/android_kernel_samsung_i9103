@@ -38,6 +38,8 @@
 #include "mlos.h"
 
 #include "log.h"
+#include "mpu-accel.h"
+
 #undef MPL_LOG_TAG
 #define MPL_LOG_TAG "mldl_cfg:"
 
@@ -64,6 +66,51 @@
 /*----------------------*/
 /*-  Static Functions. -*/
 /*----------------------*/
+unsigned char reg_temp;
+
+int get_MPUReg(struct mldl_cfg *mldl_cfg, void *gyro_handle)
+{
+	int result = ML_SUCCESS;
+	unsigned char b;
+
+	result = MLSLSerialRead(gyro_handle, mldl_cfg->addr,
+				MPUREG_PWR_MGM, 1, &reg_temp);
+	ERROR_CHECK(result);
+
+#ifdef CONFIG_MPU_SENSORS_DEBUG
+	result = MLSLSerialRead(gyro_handle, mldl_cfg->addr,
+				MPUREG_USER_CTRL, 1, &b);	
+	printk("####### %s : Register(0x61) = 0x%x\n", __func__, b);
+	result = MLSLSerialRead(gyro_handle, mldl_cfg->addr,
+				MPUREG_PWR_MGM, 1, &b);	
+	printk("####### %s : Register(0x62) = 0x%x\n", __func__, b);
+#endif
+
+	return 0;
+}
+
+int set_MPUReg(struct mldl_cfg *mldl_cfg, void *gyro_handle)
+{			
+	int result = ML_SUCCESS;
+	unsigned char b = reg_temp;
+
+	result = MLSLSerialWriteSingle(gyro_handle, mldl_cfg->addr,
+			       MPUREG_PWR_MGM,  b);
+	ERROR_CHECK(result);	
+
+#ifdef CONFIG_MPU_SENSORS_DEBUG
+	result = MLSLSerialRead(gyro_handle, mldl_cfg->addr,
+				MPUREG_USER_CTRL, 1, &b);	
+	printk("####### %s : Register(0x61) = 0x%x\n", __func__, b);
+	result = MLSLSerialRead(gyro_handle, mldl_cfg->addr,
+				MPUREG_PWR_MGM, 1, &b);	
+	printk("####### %s : Register(0x62) = 0x%x\n", __func__, b);
+#endif
+
+	return 0;
+}
+
+
 
 static int dmp_stop(struct mldl_cfg *mldl_cfg, void *gyro_handle)
 {
@@ -672,6 +719,7 @@ void mpu_print_cfg(struct mldl_cfg *mldl_cfg)
 	MPL_LOGD("mldl_cfg.divider          = %02x\n", mldl_cfg->divider);
 	MPL_LOGD("mldl_cfg.dmp_enable       = %02x\n",
 		 mldl_cfg->dmp_enable);
+	MPL_LOGD("mldl_cfg.gyro_is_bypassed = %02x\n", mldl_cfg->gyro_is_bypassed);
 	MPL_LOGD("mldl_cfg.fifo_enable      = %02x\n",
 		 mldl_cfg->fifo_enable);
 	MPL_LOGD("mldl_cfg.dmp_cfg1         = %02x\n", mldl_cfg->dmp_cfg1);
@@ -1126,7 +1174,7 @@ int mpu3050_open(struct mldl_cfg *mldl_cfg,
 	mldl_cfg->int_config = BIT_INT_ANYRD_2CLEAR | BIT_DMP_INT_EN;
 	mldl_cfg->clk_src = MPU_CLK_SEL_PLLGYROZ;
 	mldl_cfg->lpf = MPU_FILTER_42HZ;
-	mldl_cfg->full_scale = MPU_FS_2000DPS;
+	mldl_cfg->full_scale = MPU_FS_500DPS;
 	mldl_cfg->divider = 4;
 	mldl_cfg->dmp_enable = 1;
 	mldl_cfg->fifo_enable = 1;
@@ -1378,9 +1426,14 @@ int mpu3050_resume(struct mldl_cfg *mldl_cfg,
 			result = MLDLSetI2CBypass(mldl_cfg, gyro_handle, TRUE);
 			ERROR_CHECK(result);
 		}
+
+#if 0
 		result = mldl_cfg->accel->resume(accel_handle,
 						 mldl_cfg->accel,
 						 &mldl_cfg->pdata->accel);
+#else
+       result = mpu_accel_resume(mldl_cfg);
+#endif
 		ERROR_CHECK(result);
 		mldl_cfg->accel_is_suspended = FALSE;
 	}
@@ -1517,9 +1570,14 @@ int mpu3050_suspend(struct mldl_cfg *mldl_cfg,
 					       NULL, NULL);
 			ERROR_CHECK(result);
 		}
+
+#if 0		
 		result = mldl_cfg->accel->suspend(accel_handle,
 						  mldl_cfg->accel,
 						  &mldl_cfg->pdata->accel);
+#else
+		result = mpu_accel_suspend(mldl_cfg);
+#endif
 		ERROR_CHECK(result);
 		mldl_cfg->accel_is_suspended = TRUE;
 	}

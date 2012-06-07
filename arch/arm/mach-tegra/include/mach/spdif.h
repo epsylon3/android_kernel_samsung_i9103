@@ -388,12 +388,12 @@
 #define SPDIF_DATA_FIFO_CSR_0_TD_EMPTY_COUNT_MASK		\
 		((0x1f) << SPDIF_DATA_FIFO_CSR_0_TD_EMPTY_COUNT_SHIFT)
 
-
+#ifndef CONFIG_MACH_BOSE_ATT /* Sync to P4 spdif drivers of BOSE project */
 struct spdif_regs_cache {
 	int spdif_ctrl_0;
 	int spdif_status_0;
 	int spdif_strobe_ctrl_0;
-	int spdif_data_fifo_csr_0;
+	int spdif_data_fifo_scr_0;
 	int spdif_ch_sta_rx_a_0;
 	int spdif_ch_sta_rx_b_0;
 	int spdif_ch_sta_rx_c_0;
@@ -429,6 +429,5 @@ u32 spdif_get_fifo_full_empty_count(unsigned long base, int mode);
 int spdif_initialize(unsigned long base, int mode);
 void spdif_get_all_regs(unsigned long base, struct spdif_regs_cache* regs);
 void spdif_set_all_regs(unsigned long base, struct spdif_regs_cache* regs);
-void spdif_dump_registers(unsigned long base, struct spdif_regs_cache* regs);
-
+#endif
 #endif /* __ARCH_ARM_MACH_TEGRA_SPDIF_H */
