@@ -164,7 +164,6 @@ err_root:
 void mmc_remove_host_debugfs(struct mmc_host *host)
 {
 	debugfs_remove_recursive(host->debugfs_root);
-	host->debugfs_root = NULL;
 }
 
 static int mmc_dbg_card_status_get(void *data, u64 *val)
@@ -291,5 +290,4 @@ err:
 void mmc_remove_card_debugfs(struct mmc_card *card)
 {
 	debugfs_remove_recursive(card->debugfs_root);
-	card->debugfs_root = NULL;
 }
