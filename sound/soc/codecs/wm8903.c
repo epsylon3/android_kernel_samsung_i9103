@@ -23,6 +23,7 @@
 #include <linux/i2c.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/gpio.h>
 #include <sound/core.h>
 #include <sound/jack.h>
 #include <sound/pcm.h>
@@ -212,6 +213,147 @@ static u16 wm8903_reg_defaults[] = {
 	0x0000,     /* R172 - Analogue Output Bias 0 */
 };
 
+#ifdef CONFIG_DEBUG_FS
+
+#include <linux/debugfs.h>
+#include <linux/seq_file.h>
+
+#define SEQ_PR_WM8903(x)					\
+	do {							\
+		seq_printf(s, "0x%04X : 0x%08X \n",		\
+			   (x), snd_soc_read(codec, (x)));	\
+	} while (0)
+
+static int dbg_wm8903_show(struct seq_file *s, void *unused)
+{
+	struct snd_soc_codec* codec = s->private;
+
+	seq_printf(s, "WM8903 config Registers \n");
+	seq_printf(s, "------------------------\n");
+	SEQ_PR_WM8903(WM8903_SW_RESET_AND_ID);
+	SEQ_PR_WM8903(WM8903_REVISION_NUMBER);
+	seq_printf(s, "------------------------\n");
+	SEQ_PR_WM8903(WM8903_BIAS_CONTROL_0);
+	SEQ_PR_WM8903(WM8903_VMID_CONTROL_0);
+	SEQ_PR_WM8903(WM8903_MIC_BIAS_CONTROL_0);
+	seq_printf(s, "------------------------\n");
+	SEQ_PR_WM8903(WM8903_ANALOGUE_DAC_0);
+	SEQ_PR_WM8903(WM8903_ANALOGUE_ADC_0);
+	seq_printf(s, "------------------------\n");
+	SEQ_PR_WM8903(WM8903_POWER_MANAGEMENT_0);
+	SEQ_PR_WM8903(WM8903_POWER_MANAGEMENT_1);
+	SEQ_PR_WM8903(WM8903_POWER_MANAGEMENT_2);
+	SEQ_PR_WM8903(WM8903_POWER_MANAGEMENT_3);
+	SEQ_PR_WM8903(WM8903_POWER_MANAGEMENT_4);
+	SEQ_PR_WM8903(WM8903_POWER_MANAGEMENT_5);
+	SEQ_PR_WM8903(WM8903_POWER_MANAGEMENT_6);
+	seq_printf(s, "------------------------\n");
+	SEQ_PR_WM8903(WM8903_CLOCK_RATES_0);
+	SEQ_PR_WM8903(WM8903_CLOCK_RATES_1);
+	SEQ_PR_WM8903(WM8903_CLOCK_RATES_2);
+	seq_printf(s, "------------------------\n");
+	SEQ_PR_WM8903(WM8903_AUDIO_INTERFACE_0);
+	SEQ_PR_WM8903(WM8903_AUDIO_INTERFACE_1);
+	SEQ_PR_WM8903(WM8903_AUDIO_INTERFACE_2);
+	SEQ_PR_WM8903(WM8903_AUDIO_INTERFACE_3);
+	seq_printf(s, "------------------------\n");
+	SEQ_PR_WM8903(WM8903_DAC_DIGITAL_VOLUME_LEFT);
+	SEQ_PR_WM8903(WM8903_DAC_DIGITAL_VOLUME_RIGHT);
+	seq_printf(s, "------------------------\n");
+	SEQ_PR_WM8903(WM8903_DAC_DIGITAL_0);
+	SEQ_PR_WM8903(WM8903_DAC_DIGITAL_1);
+	seq_printf(s, "------------------------\n");
+	SEQ_PR_WM8903(WM8903_ADC_DIGITAL_VOLUME_LEFT);
+	SEQ_PR_WM8903(WM8903_ADC_DIGITAL_VOLUME_RIGHT);
+	seq_printf(s, "------------------------\n");
+	SEQ_PR_WM8903(WM8903_ADC_DIGITAL_0);
+	seq_printf(s, "------------------------\n");
+	SEQ_PR_WM8903(WM8903_DIGITAL_MICROPHONE_0);
+	seq_printf(s, "------------------------\n");
+	SEQ_PR_WM8903(WM8903_DRC_0);
+	SEQ_PR_WM8903(WM8903_DRC_1);
+	SEQ_PR_WM8903(WM8903_DRC_2);
+	SEQ_PR_WM8903(WM8903_DRC_3);
+	seq_printf(s, "------------------------\n");
+	SEQ_PR_WM8903(WM8903_ANALOGUE_LEFT_INPUT_0);
+	SEQ_PR_WM8903(WM8903_ANALOGUE_RIGHT_INPUT_0);
+	SEQ_PR_WM8903(WM8903_ANALOGUE_LEFT_INPUT_1);
+	SEQ_PR_WM8903(WM8903_ANALOGUE_RIGHT_INPUT_1);
+	seq_printf(s, "------------------------\n");
+	SEQ_PR_WM8903(WM8903_ANALOGUE_LEFT_MIX_0);
+	SEQ_PR_WM8903(WM8903_ANALOGUE_RIGHT_MIX_0);
+	seq_printf(s, "------------------------\n");
+	SEQ_PR_WM8903(WM8903_ANALOGUE_SPK_MIX_LEFT_0);
+	SEQ_PR_WM8903(WM8903_ANALOGUE_SPK_MIX_LEFT_1);
+	SEQ_PR_WM8903(WM8903_ANALOGUE_SPK_MIX_RIGHT_0);
+	SEQ_PR_WM8903(WM8903_ANALOGUE_SPK_MIX_RIGHT_1);
+	seq_printf(s, "------------------------\n");
+	SEQ_PR_WM8903(WM8903_ANALOGUE_OUT1_LEFT);
+	SEQ_PR_WM8903(WM8903_ANALOGUE_OUT1_RIGHT);
+	SEQ_PR_WM8903(WM8903_ANALOGUE_OUT2_LEFT);
+	SEQ_PR_WM8903(WM8903_ANALOGUE_OUT2_RIGHT);
+	SEQ_PR_WM8903(WM8903_ANALOGUE_OUT3_LEFT);
+	SEQ_PR_WM8903(WM8903_ANALOGUE_OUT3_RIGHT);
+	seq_printf(s, "------------------------\n");
+	SEQ_PR_WM8903(WM8903_ANALOGUE_SPK_OUTPUT_CONTROL_0);
+	seq_printf(s, "------------------------\n");
+	SEQ_PR_WM8903(WM8903_DC_SERVO_0);
+	SEQ_PR_WM8903(WM8903_DC_SERVO_2);
+	seq_printf(s, "------------------------\n");
+	SEQ_PR_WM8903(WM8903_ANALOGUE_HP_0);
+	SEQ_PR_WM8903(WM8903_ANALOGUE_LINEOUT_0);
+	seq_printf(s, "------------------------\n");
+	SEQ_PR_WM8903(WM8903_CHARGE_PUMP_0);
+	seq_printf(s, "------------------------\n");
+	SEQ_PR_WM8903(WM8903_CLASS_W_0);
+	seq_printf(s, "------------------------\n");
+	SEQ_PR_WM8903(WM8903_WRITE_SEQUENCER_0);
+	SEQ_PR_WM8903(WM8903_WRITE_SEQUENCER_1);
+	SEQ_PR_WM8903(WM8903_WRITE_SEQUENCER_2);
+	SEQ_PR_WM8903(WM8903_WRITE_SEQUENCER_3);
+	SEQ_PR_WM8903(WM8903_WRITE_SEQUENCER_4);
+	seq_printf(s, "------------------------\n");
+	SEQ_PR_WM8903(WM8903_CONTROL_INTERFACE);
+	seq_printf(s, "------------------------\n");
+	SEQ_PR_WM8903(WM8903_GPIO_CONTROL_1);
+	SEQ_PR_WM8903(WM8903_GPIO_CONTROL_2);
+	SEQ_PR_WM8903(WM8903_GPIO_CONTROL_3);
+	SEQ_PR_WM8903(WM8903_GPIO_CONTROL_4);
+	SEQ_PR_WM8903(WM8903_GPIO_CONTROL_5);
+	seq_printf(s, "------------------------\n");
+	SEQ_PR_WM8903(WM8903_ANALOGUE_OUTPUT_BIAS_0);
+	seq_printf(s, "------------------------\n");
+	SEQ_PR_WM8903(WM8903_REGISTER_COUNT);
+	SEQ_PR_WM8903(WM8903_MAX_REGISTER);
+
+	return 0;
+}
+
+static int dbg_wm8903_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, dbg_wm8903_show, inode->i_private);
+}
+
+static const struct file_operations debug_fops = {
+	.open	 = dbg_wm8903_open,
+	.read	 = seq_read,
+	.llseek  = seq_lseek,
+	.release = single_release,
+};
+
+static void wm8903_debuginit(struct snd_soc_codec* codec)
+{
+	(void) debugfs_create_file("wm8903", S_IRUGO,
+				   NULL, codec, &debug_fops);
+}
+
+#else
+static void __init wm8903_debuginit(struct snd_soc_codec* codec)
+{
+	return;
+}
+#endif
+
 struct wm8903_priv {
 	struct snd_soc_codec codec;
 	u16 reg_cache[ARRAY_SIZE(wm8903_reg_defaults)];
@@ -233,7 +375,131 @@ struct wm8903_priv {
 
 	struct snd_pcm_substream *master_substream;
 	struct snd_pcm_substream *slave_substream;
+
+#ifdef CONFIG_GPIOLIB
+	struct gpio_chip gpio_chip;
+#endif
 };
+
+#ifdef CONFIG_GPIOLIB
+static inline struct wm8903_priv *gpio_to_wm8903(struct gpio_chip* chip)
+{
+	return container_of(chip, struct wm8903_priv, gpio_chip);
+}
+
+static int wm8903_gpio_request(struct gpio_chip* chip,
+			       unsigned int offset)
+{
+	if (offset >= WM8903_NUM_GPIO)
+		return -EINVAL;
+
+	return 0;
+}
+
+static int wm8903_gpio_direction_in(struct gpio_chip* chip,
+				    unsigned int offset)
+{
+	struct wm8903_priv* wm8903 = gpio_to_wm8903(chip);
+	struct snd_soc_codec* codec = &(wm8903->codec);
+	unsigned int mask, val;
+
+	mask = WM8903_GP1_FN_MASK | WM8903_GP1_DIR_MASK;
+	val = (WM8903_GPn_FN_GPIO_INPUT << WM8903_GP1_FN_SHIFT) |
+		WM8903_GP1_DIR;
+
+	return snd_soc_update_bits(codec, WM8903_GPIO_CONTROL_1 + offset,
+				  mask, val);
+}
+
+static int wm8903_gpio_direction_out(struct gpio_chip* chip,
+				     unsigned int offset, int value)
+{
+	struct wm8903_priv* wm8903 = gpio_to_wm8903(chip);
+	struct snd_soc_codec* codec = &(wm8903->codec);
+	unsigned int mask, val;
+
+	mask = WM8903_GP1_FN_MASK | WM8903_GP1_DIR_MASK | WM8903_GP1_LVL_MASK;
+	val = (WM8903_GPn_FN_GPIO_OUTPUT << WM8903_GP1_FN_SHIFT) |
+		(!!value << WM8903_GP1_LVL_SHIFT);
+
+	return snd_soc_update_bits(codec, WM8903_GPIO_CONTROL_1 + offset,
+				  mask, val);
+}
+
+static int wm8903_gpio_get(struct gpio_chip* chip, unsigned int offset)
+{
+	struct wm8903_priv* wm8903 = gpio_to_wm8903(chip);
+	struct snd_soc_codec* codec = &(wm8903->codec);
+	int reg;
+
+	reg = snd_soc_read(codec, WM8903_GPIO_CONTROL_1 + offset);
+
+	return (reg & WM8903_GP1_LVL_MASK) >> WM8903_GP1_LVL_SHIFT;
+}
+
+static void wm8903_gpio_set(struct gpio_chip* chip, unsigned int offset,
+			    int value)
+{
+	struct wm8903_priv* wm8903 = gpio_to_wm8903(chip);
+	struct snd_soc_codec* codec = &(wm8903->codec);
+
+	snd_soc_update_bits(codec, WM8903_GPIO_CONTROL_1 + offset,
+			    WM8903_GP1_LVL_MASK,
+			    !!value << WM8903_GP1_LVL_SHIFT);
+}
+
+static struct gpio_chip wm8903_gpio_chip = {
+	.label		  = "wm8903",
+	.owner		  = THIS_MODULE,
+	.request	  = wm8903_gpio_request,
+	.direction_input  = wm8903_gpio_direction_in,
+	.direction_output = wm8903_gpio_direction_out,
+	.get		  = wm8903_gpio_get,
+	.set		  = wm8903_gpio_set,
+	.can_sleep	  = 1,
+};
+
+static void wm8903_init_gpio(struct snd_soc_codec* codec)
+{
+	struct wm8903_priv* wm8903 = snd_soc_codec_get_drvdata(codec);
+	struct wm8903_platform_data* pdata = dev_get_platdata(codec->dev);
+	int ret;
+
+	wm8903->gpio_chip = wm8903_gpio_chip;
+	wm8903->gpio_chip.ngpio = WM8903_NUM_GPIO;
+	wm8903->gpio_chip.dev = codec->dev;
+
+	if (pdata && pdata->gpio_base)
+		wm8903->gpio_chip.base = pdata->gpio_base;
+	else
+		wm8903->gpio_chip.base = -1;
+
+	ret = gpiochip_add(&wm8903->gpio_chip);
+	if (ret != 0)
+		dev_err(codec->dev,
+			"Failed to add GPIOs for wm8903: %d\n", ret);
+}
+
+static void wm8903_free_gpio(struct snd_soc_codec* codec)
+{
+	struct wm8903_priv* wm8903 = snd_soc_codec_get_drvdata(codec);
+	int ret;
+
+	ret = gpiochip_remove(&wm8903->gpio_chip);
+	if (ret != 0)
+		dev_err(codec->dev,
+			"Failed to remove GPIOs for wm8903: %d\n", ret);
+}
+#else
+static void wm8903_init_gpio(struct snd_soc_codec* codec)
+{
+}
+
+static void wm8903_free_gpio(struct snd_soc_codec* codec)
+{
+}
+#endif
+
 
 static int wm8903_volatile_register(unsigned int reg)
 {
@@ -945,6 +1211,7 @@ static int wm8903_set_bias_level(struct snd_soc_codec *codec,
 		reg &= ~(WM8903_VMID_RES_MASK);
 		reg |= WM8903_VMID_RES_50K;
 		snd_soc_write(codec, WM8903_VMID_CONTROL_0, reg);
+		snd_soc_write(codec, WM8903_BIAS_CONTROL_0, 0xB);
 		break;
 
 	case SND_SOC_BIAS_STANDBY:
@@ -987,6 +1254,11 @@ static int wm8903_set_bias_level(struct snd_soc_codec *codec,
 
 	case SND_SOC_BIAS_OFF:
 		wm8903_run_sequence(codec, 32);
+
+		snd_soc_write(codec, WM8903_VMID_CONTROL_0, 0x0);
+
+		snd_soc_write(codec, WM8903_BIAS_CONTROL_0, 0x0);
+
 		reg = snd_soc_read(codec, WM8903_CLOCK_RATES_2);
 		reg &= ~WM8903_CLK_SYS_ENA;
 		snd_soc_write(codec, WM8903_CLOCK_RATES_2, reg);
@@ -1627,9 +1899,6 @@ static int wm8903_resume(struct platform_device *pdev)
 	u16 *tmp_cache = kmemdup(reg_cache, sizeof(wm8903_reg_defaults),
 				 GFP_KERNEL);
 
-	/* Bring the codec back up to standby first to minimise pop/clicks */
-	wm8903_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
-
 	/* Sync back everything else */
 	if (tmp_cache) {
 		for (i = 2; i < ARRAY_SIZE(wm8903_reg_defaults); i++)
@@ -1639,6 +1908,9 @@ static int wm8903_resume(struct platform_device *pdev)
 	} else {
 		dev_err(&i2c->dev, "Failed to allocate temporary cache\n");
 	}
+
+	/* Bring the codec back up to standby first to minimise pop/clicks */
+	wm8903_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 
 	return 0;
 }
@@ -1703,7 +1975,7 @@ static __devinit int wm8903_i2c_probe(struct i2c_client *i2c,
 	/* Set up GPIOs and microphone detection */
 	if (pdata) {
 		for (i = 0; i < ARRAY_SIZE(pdata->gpio_cfg); i++) {
-			if (!pdata->gpio_cfg[i])
+			if (pdata->gpio_cfg[i] == WM8903_GPIO_NO_CONFIG)
 				continue;
 
 			snd_soc_write(codec, WM8903_GPIO_CONTROL_1 + i,
@@ -1783,6 +2055,8 @@ static __devinit int wm8903_i2c_probe(struct i2c_client *i2c,
 
 	wm8903_dai.dev = &i2c->dev;
 	wm8903_codec = codec;
+
+	wm8903_debuginit(codec);
 
 	ret = snd_soc_register_codec(codec);
 	if (ret != 0) {
@@ -1870,6 +2144,8 @@ static int wm8903_probe(struct platform_device *pdev)
 				ARRAY_SIZE(wm8903_snd_controls));
 	wm8903_add_widgets(socdev->card->codec);
 
+	wm8903_init_gpio(socdev->card->codec);
+
 	return ret;
 
 err:
@@ -1887,6 +2163,8 @@ static int wm8903_remove(struct platform_device *pdev)
 
 	snd_soc_free_pcms(socdev);
 	snd_soc_dapm_free(socdev);
+
+	wm8903_free_gpio(codec);
 
 	return 0;
 }

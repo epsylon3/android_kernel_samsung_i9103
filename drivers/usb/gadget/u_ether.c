@@ -582,8 +582,9 @@ static netdev_tx_t eth_start_xmit(struct sk_buff *skb,
 	 * though any robust network rx path ignores extra padding.
 	 * and some hardware doesn't like to write zlps.
 	 */
+	if (dev->zlp)
 	req->zero = 1;
-	if (!dev->zlp && (length % in->maxpacket) == 0)
+	else if (length % in->maxpacket == 0)
 		length++;
 
 	req->length = length;
@@ -936,7 +937,6 @@ void gether_disconnect(struct gether *link)
 	struct eth_dev		*dev = link->ioport;
 	struct usb_request	*req;
 
-	WARN_ON(!dev);
 	if (!dev)
 		return;
 

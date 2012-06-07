@@ -1320,7 +1320,10 @@ static int _regulator_enable(struct regulator_dev *rdev)
 	}
 
 	rdev->use_count++;
-
+#ifdef CONFIG_MACH_N1
+	printk(KERN_INFO "%s: NAME: %s USE COUNT: %d \n", 
+		__func__, rdev->desc->name, rdev->use_count);
+#endif
 	return 0;
 }
 
@@ -1389,6 +1392,10 @@ static int _regulator_disable(struct regulator_dev *rdev)
 
 		rdev->use_count--;
 	}
+#ifdef CONFIG_MACH_N1
+	printk(KERN_INFO "%s: NAME: %s USE COUNT: %d \n", 
+		__func__, rdev->desc->name, rdev->use_count);
+#endif
 	return ret;
 }
 

@@ -47,25 +47,24 @@ struct secondary_data secondary_data;
 
 /*
  * structures for inter-processor calls
- * - A collection of single bit ipi messages.
  */
 struct ipi_data {
-	spinlock_t lock;
 	unsigned long ipi_count;
-	unsigned long bits;
 };
 
-static DEFINE_PER_CPU(struct ipi_data, ipi_data) = {
-	.lock	= SPIN_LOCK_UNLOCKED,
-};
+static DEFINE_PER_CPU(struct ipi_data, ipi_data);
 
 enum ipi_msg_type {
-	IPI_TIMER,
+	IPI_TIMER = 2,
 	IPI_RESCHEDULE,
 	IPI_CALL_FUNC,
 	IPI_CALL_FUNC_SINGLE,
 	IPI_CPU_STOP,
 };
+
+#ifdef CONFIG_MACH_N1
+extern void n1_check_key_pressed(void);
+#endif
 
 int __cpuinit __cpu_up(unsigned int cpu)
 {
@@ -122,6 +121,9 @@ int __cpuinit __cpu_up(unsigned int cpu)
 	ret = boot_secondary(cpu, idle);
 	if (ret == 0) {
 		unsigned long timeout;
+#ifdef CONFIG_MACH_N1
+		int loop = 0;
+#endif
 
 		/*
 		 * CPU was successfully started, wait for it
@@ -131,7 +133,13 @@ int __cpuinit __cpu_up(unsigned int cpu)
 		while (time_before(jiffies, timeout)) {
 			if (cpu_online(cpu))
 				break;
-
+#ifdef CONFIG_MACH_N1
+		/* this loop takes about 250ms */
+		/* we want to check key released while this loop is running */
+		loop++;
+		if (0 == (loop % 3000))	/* for 30ms */
+			n1_check_key_pressed();
+#endif
 			udelay(10);
 			barrier();
 		}
@@ -291,7 +299,9 @@ asmlinkage void __cpuinit secondary_start_kernel(void)
 	 */
 	percpu_timer_setup();
 
+#ifndef CONFIG_ARCH_PROVIDES_UDELAY
 	calibrate_delay();
+#endif
 
 	smp_store_cpu_info(cpu);
 
@@ -341,25 +351,10 @@ void __init smp_prepare_boot_cpu(void)
 
 static void send_ipi_message(const struct cpumask *mask, enum ipi_msg_type msg)
 {
-	unsigned long flags;
-	unsigned int cpu;
-
-	local_irq_save(flags);
-
-	for_each_cpu(cpu, mask) {
-		struct ipi_data *ipi = &per_cpu(ipi_data, cpu);
-
-		spin_lock(&ipi->lock);
-		ipi->bits |= 1 << msg;
-		spin_unlock(&ipi->lock);
-	}
-
 	/*
 	 * Call the platform specific cross-CPU call function.
 	 */
-	smp_cross_call(mask);
-
-	local_irq_restore(flags);
+	smp_cross_call(mask, msg);
 }
 
 void arch_send_call_function_ipi_mask(const struct cpumask *mask)
@@ -490,14 +485,8 @@ static void ipi_cpu_stop(unsigned int cpu)
 
 /*
  * Main handler for inter-processor interrupts
- *
- * For ARM, the ipimask now only identifies a single
- * category of IPI (Bit 1 IPIs have been replaced by a
- * different mechanism):
- *
- *  Bit 0 - Inter-processor function call
  */
-asmlinkage void __exception do_IPI(struct pt_regs *regs)
+asmlinkage void __exception do_IPI(int ipinr, struct pt_regs *regs)
 {
 	unsigned int cpu = smp_processor_id();
 	struct ipi_data *ipi = &per_cpu(ipi_data, cpu);
@@ -505,56 +494,35 @@ asmlinkage void __exception do_IPI(struct pt_regs *regs)
 
 	ipi->ipi_count++;
 
-	for (;;) {
-		unsigned long msgs;
+	switch (ipinr) {
+	case IPI_TIMER:
+		ipi_timer();
+		break;
 
-		spin_lock(&ipi->lock);
-		msgs = ipi->bits;
-		ipi->bits = 0;
-		spin_unlock(&ipi->lock);
+	case IPI_RESCHEDULE:
+		/*
+		 * nothing more to do - eveything is
+		 * done on the interrupt return path
+		 */
+		break;
 
-		if (!msgs)
-			break;
+	case IPI_CALL_FUNC:
+		generic_smp_call_function_interrupt();
+		break;
 
-		do {
-			unsigned nextmsg;
+	case IPI_CALL_FUNC_SINGLE:
+		generic_smp_call_function_single_interrupt();
+		break;
 
-			nextmsg = msgs & -msgs;
-			msgs &= ~nextmsg;
-			nextmsg = ffz(~nextmsg);
+	case IPI_CPU_STOP:
+		ipi_cpu_stop(cpu);
+		break;
 
-			switch (nextmsg) {
-			case IPI_TIMER:
-				ipi_timer();
-				break;
-
-			case IPI_RESCHEDULE:
-				/*
-				 * nothing more to do - eveything is
-				 * done on the interrupt return path
-				 */
-				break;
-
-			case IPI_CALL_FUNC:
-				generic_smp_call_function_interrupt();
-				break;
-
-			case IPI_CALL_FUNC_SINGLE:
-				generic_smp_call_function_single_interrupt();
-				break;
-
-			case IPI_CPU_STOP:
-				ipi_cpu_stop(cpu);
-				break;
-
-			default:
-				printk(KERN_CRIT "CPU%u: Unknown IPI message 0x%x\n",
-				       cpu, nextmsg);
-				break;
-			}
-		} while (msgs);
+	default:
+		printk(KERN_CRIT "CPU%u: Unknown IPI message 0x%x\n",
+				cpu, ipinr);
+		break;
 	}
-
 	set_irq_regs(old_regs);
 }
 
@@ -565,9 +533,25 @@ void smp_send_reschedule(int cpu)
 
 void smp_send_stop(void)
 {
-	cpumask_t mask = cpu_online_map;
-	cpu_clear(smp_processor_id(), mask);
-	send_ipi_message(&mask, IPI_CPU_STOP);
+	unsigned long timeout;
+
+	if (num_online_cpus() > 1) {
+		cpumask_t mask = cpu_online_map;
+#ifdef CONFIG_KERNEL_DEBUG_SEC
+		flush_all_cpu_caches();
+#endif
+		cpu_clear(smp_processor_id(), mask);
+
+		send_ipi_message(&mask, IPI_CPU_STOP);
+	}
+
+	/* Wait up to one second for other CPUs to stop */
+	timeout = USEC_PER_SEC;
+	while (num_online_cpus() > 1 && timeout--)
+		udelay(1);
+
+	if (num_online_cpus() > 1)
+		pr_warning("SMP: failed to stop secondary CPUs ");
 }
 
 /*
@@ -702,3 +686,13 @@ void flush_tlb_kernel_range(unsigned long start, unsigned long end)
 	} else
 		local_flush_tlb_kernel_range(start, end);
 }
+#ifdef CONFIG_KERNEL_DEBUG_SEC
+static void flush_all_cpu_cache(void *info)
+{
+	flush_cache_all();
+}
+void flush_all_cpu_caches(void)
+{
+	on_each_cpu(flush_all_cpu_cache, NULL, 1);
+}
+#endif

@@ -262,10 +262,12 @@ struct _mmc_csd {
 #define EXT_CSD_S_A_TIMEOUT		217	/* RO */
 #define EXT_CSD_ERASE_TIMEOUT_MULT	223	/* RO */
 #define EXT_CSD_HC_ERASE_GRP_SIZE	224	/* RO */
+#define EXT_CSD_BOOT_SIZE_MULTI		226
 #define EXT_CSD_SEC_TRIM_MULT		229	/* RO */
 #define EXT_CSD_SEC_ERASE_MULT		230	/* RO */
 #define EXT_CSD_SEC_FEATURE_SUPPORT	231	/* RO */
 #define EXT_CSD_TRIM_MULT		232	/* RO */
+#define EXT_CSD_BOOT_SIZE_MULTI		226	/* RO */
 
 /*
  * EXT_CSD field definitions
@@ -277,7 +279,13 @@ struct _mmc_csd {
 
 #define EXT_CSD_CARD_TYPE_26	(1<<0)	/* Card can run at 26MHz */
 #define EXT_CSD_CARD_TYPE_52	(1<<1)	/* Card can run at 52MHz */
+
+#ifdef CONFIG_MMC_DISCARD_MOVINAND
+#define EXT_CSD_CARD_TYPE_TEMP   (1<<2)
+#define EXT_CSD_CARD_TYPE_MASK	0x7	/* Mask out reserved and DDR bits */
+#else
 #define EXT_CSD_CARD_TYPE_MASK	0x3	/* Mask out reserved and DDR bits */
+#endif
 
 #define EXT_CSD_BUS_WIDTH_1	0	/* Card is in 1 bit mode */
 #define EXT_CSD_BUS_WIDTH_4	1	/* Card is in 4 bit mode */

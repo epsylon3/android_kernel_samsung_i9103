@@ -21,6 +21,8 @@
 #define disk_to_dev(disk)	(&(disk)->part0.__dev)
 #define part_to_dev(part)	(&((part)->__dev))
 
+#define GENHD_PART_NAME_SIZE	128
+
 extern struct device_type part_type;
 extern struct kobject *block_depr;
 extern struct class block_class;
@@ -106,6 +108,7 @@ struct hd_struct {
 	struct disk_stats dkstats;
 #endif
 	struct rcu_head rcu_head;
+	char partition_name[GENHD_PART_NAME_SIZE];
 };
 
 #define GENHD_FL_REMOVABLE			1
@@ -168,6 +171,9 @@ struct gendisk {
 	struct blk_integrity *integrity;
 #endif
 	int node_id;
+#ifdef CONFIG_MACH_N1
+	int media_present;
+#endif
 };
 
 static inline struct gendisk *part_to_disk(struct hd_struct *part)

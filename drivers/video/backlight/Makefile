@@ -24,6 +24,7 @@ obj-$(CONFIG_BACKLIGHT_OMAP1)	+= omap1_bl.o
 obj-$(CONFIG_BACKLIGHT_PROGEAR) += progear_bl.o
 obj-$(CONFIG_BACKLIGHT_CARILLO_RANCH) += cr_bllcd.o
 obj-$(CONFIG_BACKLIGHT_PWM)	+= pwm_bl.o
+obj-$(CONFIG_BACKLIGHT_TEGRA_PWM) += tegra_pwm_bl.o
 obj-$(CONFIG_BACKLIGHT_DA903X)	+= da903x_bl.o
 obj-$(CONFIG_BACKLIGHT_MAX8925)	+= max8925_bl.o
 obj-$(CONFIG_BACKLIGHT_MBP_NVIDIA) += mbp_nvidia_bl.o
@@ -35,4 +36,8 @@ obj-$(CONFIG_BACKLIGHT_ADP5520)	+= adp5520_bl.o
 obj-$(CONFIG_BACKLIGHT_ADP8860)	+= adp8860_bl.o
 obj-$(CONFIG_BACKLIGHT_88PM860X) += 88pm860x_bl.o
 obj-$(CONFIG_BACKLIGHT_PCF50633)	+= pcf50633-backlight.o
-
+ifeq ($(CONFIG_MACH_BOSE_ATT),y)
+obj-$(CONFIG_BACKLIGHT_CMC623_PWM)	+= cmc623_pwm_bl_bose.o
+else
+obj-$(CONFIG_BACKLIGHT_CMC623_PWM)	+= cmc623_pwm_bl.o
+endif

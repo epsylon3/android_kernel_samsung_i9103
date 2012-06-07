@@ -390,6 +390,8 @@ void debugfs_remove_recursive(struct dentry *dentry)
 		return;
 
 	parent = dentry;
+	if (!parent->d_inode)
+		return;
 	mutex_lock(&parent->d_inode->i_mutex);
 
 	while (1) {

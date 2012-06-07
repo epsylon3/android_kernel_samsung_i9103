@@ -982,9 +982,11 @@ static int qt602240_initialize(struct qt602240_data *data)
 		return error;
 
 	/* Check register init values */
+#if 0
 	error = qt602240_check_reg_init(data);
 	if (error)
 		return error;
+#endif
 
 	/* Check X/Y matrix size */
 	error = qt602240_check_matrix_size(data);
@@ -997,6 +999,7 @@ static int qt602240_initialize(struct qt602240_data *data)
 
 	qt602240_handle_pdata(data);
 
+#if 0
 	/* Backup to memory */
 	qt602240_write_object(data, QT602240_GEN_COMMAND,
 			QT602240_COMMAND_BACKUPNV,
@@ -1007,6 +1010,7 @@ static int qt602240_initialize(struct qt602240_data *data)
 	qt602240_write_object(data, QT602240_GEN_COMMAND,
 			QT602240_COMMAND_RESET, 1);
 	msleep(QT602240_RESET_TIME);
+#endif
 
 	/* Update matrix size at info struct */
 	error = qt602240_read_reg(client, QT602240_MATRIX_X_SIZE, &val);
@@ -1199,7 +1203,7 @@ static void qt602240_start(struct qt602240_data *data)
 {
 	/* Touch enable */
 	qt602240_write_object(data,
-			QT602240_TOUCH_MULTI, QT602240_TOUCH_CTRL, 0x83);
+			QT602240_TOUCH_MULTI, QT602240_TOUCH_CTRL, 0x8f);
 }
 
 static void qt602240_stop(struct qt602240_data *data)

@@ -5,114 +5,238 @@
  * Author: Rabin Vincent <rabin.vincent@stericsson.com> for ST-Ericsson
  */
 
+#include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/init.h>
-#include <linux/slab.h>
-#include <linux/input.h>
 #include <linux/interrupt.h>
-#include <linux/platform_device.h>
-#include <linux/input/matrix_keypad.h>
+#include <linux/irq.h>
+#include <linux/slab.h>
+#include <linux/i2c.h>
+#include <linux/mfd/core.h>
 #include <linux/mfd/stmpe.h>
+#include "stmpe-keypad.h"
 
-/* These are at the same addresses in all STMPE variants */
-#define STMPE_KPC_COL			0x60
-#define STMPE_KPC_ROW_MSB		0x61
-#define STMPE_KPC_ROW_LSB		0x62
-#define STMPE_KPC_CTRL_MSB		0x63
-#define STMPE_KPC_CTRL_LSB		0x64
-#define STMPE_KPC_COMBI_KEY_0		0x65
-#define STMPE_KPC_COMBI_KEY_1		0x66
-#define STMPE_KPC_COMBI_KEY_2		0x67
-#define STMPE_KPC_DATA_BYTE0		0x68
-#define STMPE_KPC_DATA_BYTE1		0x69
-#define STMPE_KPC_DATA_BYTE2		0x6a
-#define STMPE_KPC_DATA_BYTE3		0x6b
-#define STMPE_KPC_DATA_BYTE4		0x6c
+#include <linux/mutex.h>
+#include <linux/sched.h>
+#include <linux/module.h>
+#include <linux/spinlock.h>
+#include <linux/interrupt.h>
+#include <linux/debug_locks.h>
 
-#define STMPE_KPC_CTRL_LSB_SCAN		(0x1 << 0)
-#define STMPE_KPC_CTRL_LSB_DEBOUNCE	(0x7f << 1)
-#define STMPE_KPC_CTRL_MSB_SCAN_COUNT	(0xf << 4)
+#include <linux/delay.h>
+#include <linux/init.h>
+#include <linux/uaccess.h>
+#include <linux/gpio.h>
+#include <linux/input/matrix_keypad.h>
 
-#define STMPE_KPC_ROW_MSB_ROWS		0xff
+#include <mach/gpio-bose.h>
 
-#define STMPE_KPC_DATA_UP		(0x1 << 7)
-#define STMPE_KPC_DATA_ROW		(0xf << 3)
-#define STMPE_KPC_DATA_COL		(0x7 << 0)
-#define STMPE_KPC_DATA_NOKEY_MASK	0x78
+#include <linux/gpio.h>
+#include <mach/sec_battery.h>
 
-#define STMPE_KEYPAD_MAX_DEBOUNCE	127
-#define STMPE_KEYPAD_MAX_SCAN_COUNT	15
+#define BOARD_REV06 0x09
+#define BOARD_REV08 0x0B
+#define MAX8922_TOPOFF_INT 0x01
+#define EARJACK_DET35_INT  0x02
+#define SDCARD_DET_INT 0x80
 
-#define STMPE_KEYPAD_MAX_ROWS		8
-#define STMPE_KEYPAD_MAX_COLS		8
-#define STMPE_KEYPAD_ROW_SHIFT		3
-#define STMPE_KEYPAD_KEYMAP_SIZE	\
-	(STMPE_KEYPAD_MAX_ROWS * STMPE_KEYPAD_MAX_COLS)
+extern int sec_jack_detect_irq(void);
+extern irqreturn_t external_carddetect_irq();
 
-/**
- * struct stmpe_keypad_variant - model-specific attributes
- * @auto_increment: whether the KPC_DATA_BYTE register address
- *		    auto-increments on multiple read
- * @num_data: number of data bytes
- * @num_normal_data: number of normal keys' data bytes
- * @max_cols: maximum number of columns supported
- * @max_rows: maximum number of rows supported
- * @col_gpios: bitmask of gpios which can be used for columns
- * @row_gpios: bitmask of gpios which can be used for rows
- */
-struct stmpe_keypad_variant {
-	bool		auto_increment;
-	int		num_data;
-	int		num_normal_data;
-	int		max_cols;
-	int		max_rows;
-	unsigned int	col_gpios;
-	unsigned int	row_gpios;
+
+struct stmpe *g_stmpe;
+EXPORT_SYMBOL(g_stmpe);
+
+/*sec_class sysfs*/
+extern struct class *sec_class;
+struct device *sec_stmpe_bl;
+
+
+static struct stmpe_variant_info stmpe1801 = {
+	.name		= "stmpe1801",
+	.id_val		= 0xc110,                           /* chip_id, version_id */  
+	.id_mask		= 0xffff,	                     /* at least 0x0210 and 0x0212 */
+	.num_gpios	= 18,
+	.af_bits		= 2,
+//	.regs		= stmpe1801_regs,
+	.blocks		= NULL,
+	.num_blocks	= NULL,
+	.num_irqs	= NULL,
+	.enable		= NULL,
+	.get_altfunc	= NULL,
+	.enable_autosleep	= NULL,
 };
 
-static const struct stmpe_keypad_variant stmpe_keypad_variants[] = {
-	[STMPE1601] = {
-		.auto_increment		= true,
+static const struct stmpe_keypad_variant stmpe_keypad_variants = {
+		.auto_increment	= true,
 		.num_data		= 5,
 		.num_normal_data	= 3,
-		.max_cols		= 8,
+		.max_cols		= 10,
 		.max_rows		= 8,
 		.col_gpios		= 0x000ff,	/* GPIO 0 - 7 */
-		.row_gpios		= 0x0ff00,	/* GPIO 8 - 15 */
-	},
-	[STMPE2401] = {
-		.auto_increment		= false,
-		.num_data		= 3,
-		.num_normal_data	= 2,
-		.max_cols		= 8,
-		.max_rows		= 12,
-		.col_gpios		= 0x0000ff,	/* GPIO 0 - 7*/
-		.row_gpios		= 0x1fef00,	/* GPIO 8-14, 16-20 */
-	},
-	[STMPE2403] = {
-		.auto_increment		= true,
-		.num_data		= 5,
-		.num_normal_data	= 3,
-		.max_cols		= 8,
-		.max_rows		= 12,
-		.col_gpios		= 0x0000ff,	/* GPIO 0 - 7*/
-		.row_gpios		= 0x1fef00,	/* GPIO 8-14, 16-20 */
-	},
+		.row_gpios		= 0x3ff00,	/* GPIO 8 - 15, GPIO16, GPIO17 */
 };
 
-struct stmpe_keypad {
-	struct stmpe *stmpe;
-	struct input_dev *input;
-	const struct stmpe_keypad_variant *variant;
-	const struct stmpe_keypad_platform_data *plat;
+static int __stmpe_reg_read(struct stmpe *stmpe, u8 reg)
+{
+	int ret;
+	ret = i2c_smbus_read_byte_data(stmpe->i2c, reg);
+	if (ret < 0)
+		dev_err(stmpe->dev, "failed to read reg %#x: %d\n",
+			reg, ret);
 
-	unsigned int rows;
-	unsigned int cols;
+	dev_vdbg(stmpe->dev, "rd: reg %#x => data %#x\n", reg, ret);
 
-	unsigned short keymap[STMPE_KEYPAD_KEYMAP_SIZE];
-};
+	return ret;
+}
 
-static int stmpe_keypad_read_data(struct stmpe_keypad *keypad, u8 *data)
+static int __stmpe_reg_write(struct stmpe *stmpe, u8 reg, u8 val)
+{
+	int ret;
+	dev_vdbg(stmpe->dev, "wr: reg %#x <= %#x\n", reg, val);
+
+	ret = i2c_smbus_write_byte_data(stmpe->i2c, reg, val);
+	if (ret < 0)
+		dev_err(stmpe->dev, "failed to write reg %#x: %d\n",
+			reg, ret);
+
+	return ret;
+}
+
+static int __stmpe_set_bits(struct stmpe *stmpe, u8 reg, u8 mask, u8 val)
+{
+	int ret;
+	ret = __stmpe_reg_read(stmpe, reg);
+	if (ret < 0)
+		return ret;
+
+	ret &= ~mask;
+	ret |= val;
+
+	return __stmpe_reg_write(stmpe, reg, ret);
+}
+
+static int __stmpe_block_read(struct stmpe *stmpe, u8 reg, u8 length,
+			      u8 *values)
+{
+	int ret;
+	ret = i2c_smbus_read_i2c_block_data(stmpe->i2c, reg, length, values);
+	
+	if (ret < 0)
+		dev_err(stmpe->dev, "failed to read regs %#x: %d\n",
+			reg, ret);
+
+	dev_vdbg(stmpe->dev, "rd: reg %#x (%d) => ret %#x\n", reg, length, ret);
+	stmpe_dump_bytes("stmpe rd: ", values, length);
+
+	return ret;
+}
+
+static int __stmpe_block_write(struct stmpe *stmpe, u8 reg, u8 length,
+			const u8 *values)
+{
+	int ret;
+	dev_vdbg(stmpe->dev, "wr: regs %#x (%d)\n", reg, length);
+	stmpe_dump_bytes("stmpe wr: ", values, length);
+
+	ret = i2c_smbus_write_i2c_block_data(stmpe->i2c, reg, length,
+					     values);
+	if (ret < 0)
+		dev_err(stmpe->dev, "failed to write regs %#x: %d\n",
+			reg, ret);
+
+	return ret;
+}
+
+/**
+ * stmpe_reg_read() - read a single STMPE register
+ * @stmpe:	Device to read from
+ * @reg:	Register to read
+ */
+int stmpe_reg_read(struct stmpe *stmpe, u8 reg)
+{
+	int ret;
+	mutex_lock(&stmpe->lock);
+	ret = __stmpe_reg_read(stmpe, reg);
+	mutex_unlock(&stmpe->lock);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(stmpe_reg_read);
+
+/**
+ * stmpe_reg_write() - write a single STMPE register
+ * @stmpe:	Device to write to
+ * @reg:	Register to write
+ * @val:	Value to write
+ */
+int stmpe_reg_write(struct stmpe *stmpe, u8 reg, u8 val)
+{
+	int ret;
+	mutex_lock(&stmpe->lock);
+	ret = __stmpe_reg_write(stmpe, reg, val);
+	mutex_unlock(&stmpe->lock);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(stmpe_reg_write);
+
+/**
+ * stmpe_set_bits() - set the value of a bitfield in a STMPE register
+ * @stmpe:	Device to write to
+ * @reg:	Register to write
+ * @mask:	Mask of bits to set
+ * @val:	Value to set
+ */
+int stmpe_set_bits(struct stmpe *stmpe, u8 reg, u8 mask, u8 val)
+{
+	int ret;
+	mutex_lock(&stmpe->lock);
+	ret = __stmpe_set_bits(stmpe, reg, mask, val);
+	mutex_unlock(&stmpe->lock);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(stmpe_set_bits);
+
+/**
+ * stmpe_block_read() - read multiple STMPE registers
+ * @stmpe:	Device to read from
+ * @reg:	First register
+ * @length:	Number of registers
+ * @values:	Buffer to write to
+ */
+int stmpe_block_read(struct stmpe *stmpe, u8 reg, u8 length, u8 *values)
+{
+	int ret;
+	mutex_lock(&stmpe->lock);
+	ret = __stmpe_block_read(stmpe, reg, length, values);
+	mutex_unlock(&stmpe->lock);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(stmpe_block_read);
+
+/**
+ * stmpe_block_write() - write multiple STMPE registers
+ * @stmpe:	Device to write to
+ * @reg:	First register
+ * @length:	Number of registers
+ * @values:	Values to write
+ */
+int stmpe_block_write(struct stmpe *stmpe, u8 reg, u8 length,
+		      const u8 *values)
+{
+	int ret;
+	mutex_lock(&stmpe->lock);
+	ret = __stmpe_block_write(stmpe, reg, length, values);
+	mutex_unlock(&stmpe->lock);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(stmpe_block_write);
+
+
+int stmpe_keypad_read_data(struct stmpe_keypad *keypad, u8 *data)
 {
 	const struct stmpe_keypad_variant *variant = keypad->variant;
 	struct stmpe *stmpe = keypad->stmpe;
@@ -134,78 +258,173 @@ static int stmpe_keypad_read_data(struct stmpe_keypad *keypad, u8 *data)
 	return 0;
 }
 
-static irqreturn_t stmpe_keypad_irq(int irq, void *dev)
+#if defined (CONFIG_MACH_BOSE_ATT)
+int stmpe_max8922_topoff_irq_read_data(struct stmpe_keypad *keypad, int inq_status_high)
 {
-	struct stmpe_keypad *keypad = dev;
-	struct input_dev *input = keypad->input;
 	const struct stmpe_keypad_variant *variant = keypad->variant;
-	u8 fifo[variant->num_data];
+	struct stmpe *stmpe = keypad->stmpe;
 	int ret;
-	int i;
+	int ta_nconnected;
 
-	ret = stmpe_keypad_read_data(keypad, fifo);
+	ta_nconnected = gpio_get_value(GPIO_TA_nCONNECTED);
+
+	printk("%s [%x][%d]\n", __func__, inq_status_high, ta_nconnected);
+	if(inq_status_high == MAX8922_TOPOFF_INT && ta_nconnected ==0){
+		max8922_charger_topoff();
+	}
+
+	return 0;
+}
+
+int stmpe_get_topoff_value(void)
+{
+	int inq_status;
+
+	inq_status = stmpe_reg_read(g_stmpe, STMPE_GPIO_MP_HIGH);
+	if(inq_status == MAX8922_TOPOFF_INT)
+		return 1;
+	else
+		return 0;
+}
+
+static void stmpe_max8922_full_comp_work_handler(struct work_struct *work)
+{
+	struct delayed_work *dw = container_of(work, struct delayed_work, work);
+	struct stmpe_keypad *keypad = container_of(dw, struct stmpe_keypad, full_chg_work);
+
+	stmpe_max8922_topoff_irq_read_data(keypad, MAX8922_TOPOFF_INT);
+}
+
+#endif
+
+static irqreturn_t stmpe_irq(int irq, void *data)
+{
+	struct stmpe_keypad *keypad = data;
+	struct stmpe *stmpe = keypad->stmpe;
+	struct input_dev *input =  keypad->input;
+	struct stmpe_variant_info *variant = stmpe->variant;
+
+	u8 fifo[keypad->variant->num_data];
+	int ret,i;
+	int iSta_high, iSta_mid, iStaValue ;
+
+	iStaValue = stmpe_reg_read(stmpe, STMPE1801_REG_ISR_LSB);
+	iSta_mid = stmpe_reg_read(stmpe, STMPE_INT_STA_GPIO_MID);
+	iSta_high = stmpe_reg_read(stmpe, STMPE_INT_STA_GPIO_HIGH);
+
+
+/* MAX8922 TOPOFF , EARJACK DET */
+if(system_rev >= BOARD_REV06){
+		printk("STMPE_INT_STA_GPIO_HIGH %#x: [%x]\n", STMPE_INT_STA_GPIO_HIGH, iSta_high);
+
+		if(iSta_high == MAX8922_TOPOFF_INT){
+			cancel_delayed_work(&keypad->full_chg_work);
+			schedule_delayed_work(&keypad->full_chg_work, HZ/10);  // after 100 ms
+			return IRQ_HANDLED;
+		} else if ( iSta_high == EARJACK_DET35_INT ) {
+		/* earjack handler */
+		sec_jack_detect_irq();
+		return IRQ_HANDLED;
+	}
+}
+
+/* SDCARD DETECTION */
+	if(system_rev >= BOARD_REV08){
+		printk("STMPE_INT_STA_GPIO_MID %#x: [%x]\n", STMPE_INT_STA_GPIO_MID, iSta_mid);
+
+		if(iSta_mid == SDCARD_DET_INT){
+		external_carddetect_irq();
+		printk(KERN_ERR "SDcard_detect_interrupt occur\n");
+		return IRQ_HANDLED;
+	}
+}
+
+/* QWERTY KEYPAD */
+ 	ret = stmpe_keypad_read_data(keypad, fifo);
 	if (ret < 0)
-		return IRQ_NONE;
-
-	for (i = 0; i < variant->num_normal_data; i++) {
+		return IRQ_NONE;	
+		
+	for (i = 0; i < keypad->variant->num_normal_data; i++) {
 		u8 data = fifo[i];
-		int row = (data & STMPE_KPC_DATA_ROW) >> 3;
-		int col = data & STMPE_KPC_DATA_COL;
-		int code = MATRIX_SCAN_CODE(row, col, STMPE_KEYPAD_ROW_SHIFT);
+		int col = (data & STMPE_KPC_DATA_COL) >> 3;
+		int row = data & STMPE_KPC_DATA_ROW;
+		
+		int code = keypad->keymap[MATRIX_SCAN_CODE(row, col, STMPE_KEYPAD_COL_SHIFT)];
 		bool up = data & STMPE_KPC_DATA_UP;
 
 		if ((data & STMPE_KPC_DATA_NOKEY_MASK)
 			== STMPE_KPC_DATA_NOKEY_MASK)
 			continue;
 
+//		printk("[%s] row=%d, col=%d,  code=%d , ISR=%x \n",__func__ ,row,col,code,iStaValue);
 		input_event(input, EV_MSC, MSC_SCAN, code);
-		input_report_key(input, keypad->keymap[code], !up);
+		input_report_key(input, code, !up);
 		input_sync(input);
 	}
 
 	return IRQ_HANDLED;
+
 }
 
-static int __devinit stmpe_keypad_altfunc_init(struct stmpe_keypad *keypad)
+
+static void stmpe_irq_remove(struct stmpe *stmpe)
 {
-	const struct stmpe_keypad_variant *variant = keypad->variant;
-	unsigned int col_gpios = variant->col_gpios;
-	unsigned int row_gpios = variant->row_gpios;
-	struct stmpe *stmpe = keypad->stmpe;
-	unsigned int pins = 0;
-	int i;
+	int num_irqs = stmpe->variant->num_irqs;
+	int base = stmpe->irq_base;
+	int irq;
 
-	/*
-	 * Figure out which pins need to be set to the keypad alternate
-	 * function.
-	 *
-	 * {cols,rows}_gpios are bitmasks of which pins on the chip can be used
-	 * for the keypad.
-	 *
-	 * keypad->{cols,rows} are a bitmask of which pins (of the ones useable
-	 * for the keypad) are used on the board.
-	 */
-
-	for (i = 0; i < variant->max_cols; i++) {
-		int num = __ffs(col_gpios);
-
-		if (keypad->cols & (1 << i))
-			pins |= 1 << num;
-
-		col_gpios &= ~(1 << num);
+	for (irq = base; irq < base + num_irqs; irq++) {
+#ifdef CONFIG_ARM
+		set_irq_flags(irq, 0);
+#endif
+		set_irq_chip_and_handler(irq, NULL, NULL);
+		set_irq_chip_data(irq, NULL);
 	}
-
-	for (i = 0; i < variant->max_rows; i++) {
-		int num = __ffs(row_gpios);
-
-		if (keypad->rows & (1 << i))
-			pins |= 1 << num;
-
-		row_gpios &= ~(1 << num);
-	}
-
-	return stmpe_set_altfunc(stmpe, pins, STMPE_BLOCK_KEYPAD);
 }
+
+static int stmpe_key_suspend(struct i2c_client *client)
+{
+	printk(KERN_DEBUG "[QwertyKey] Qwertykey_early_suspend\n");
+
+  tegra_gpio_enable(GPIO_QKEY_BL_EN);
+  gpio_direction_output(GPIO_QKEY_BL_EN,0);
+
+	return 0;
+}
+
+
+static int stmpe_key_resume(struct i2c_client *client)
+{
+
+//	printk(KERN_DEBUG "[QwertyKey] stmpe_key_resume\n");
+
+#if 0
+  tegra_gpio_enable(GPIO_QKEY_BL_EN);
+  gpio_direction_output(GPIO_QKEY_BL_EN,1);
+#endif
+
+	return 0;
+}
+
+void stmpe_Register_DUMP(struct stmpe_keypad *keypad)
+{
+    u8 iread;
+    int value;		
+
+	   printk("[STMPE_KD] , REGISTER DUMP --------- \n");
+	   
+	    for(iread= 0x0; iread < 0x3E; iread++)
+	    	{
+		    value = stmpe_reg_read(keypad->stmpe, iread);
+		     printk("[%x]= %x ", iread, value);
+		    if( (iread % 8) == 0 )
+			 printk(" \n");
+	    	}
+		
+	   printk(" \n ----------------------------------- \n");
+
+ }
+EXPORT_SYMBOL(stmpe_Register_DUMP);
 
 static int __devinit stmpe_keypad_chip_init(struct stmpe_keypad *keypad)
 {
@@ -220,167 +439,384 @@ static int __devinit stmpe_keypad_chip_init(struct stmpe_keypad *keypad)
 	if (plat->scan_count > STMPE_KEYPAD_MAX_SCAN_COUNT)
 		return -EINVAL;
 
-	ret = stmpe_enable(stmpe, STMPE_BLOCK_KEYPAD);
+       // KPC columm nums
+	ret = stmpe_reg_write(stmpe, STMPE_KPC_COL_LOW, keypad->cols);
+	if (ret < 0)
+		return ret;
+	
+	ret = stmpe_reg_write(stmpe, STMPE_KPC_COL_HIGH, 0x0);
+	if (ret < 0)
+		return ret;
+	
+
+      // KPC row nums
+	ret = stmpe_reg_write(stmpe, STMPE_KPC_ROW, keypad->rows);
 	if (ret < 0)
 		return ret;
 
-	ret = stmpe_keypad_altfunc_init(keypad);
+
+      // KPC control scan count, dedicated keys
+	ret = stmpe_set_bits(stmpe, STMPE_KPC_CTL_LOW,
+			     STMPE_KPC_CTRL_MSB_SCAN_COUNT,
+			    plat->scan_count << 4);
 	if (ret < 0)
 		return ret;
 
-	ret = stmpe_reg_write(stmpe, STMPE_KPC_COL, keypad->cols);
+
+      // KPC control  debouce time
+	ret = stmpe_set_bits(stmpe, STMPE_KPC_CTL_MID,  0xff, plat->debounce_ms);  // deboucnce time
 	if (ret < 0)
 		return ret;
 
-	ret = stmpe_reg_write(stmpe, STMPE_KPC_ROW_LSB, keypad->rows);
+
+      // scan frequency
+	ret = stmpe_set_bits(stmpe, STMPE_KPC_CTL_HIGH,  0xff,   0x40);
+	  
 	if (ret < 0)
 		return ret;
 
-	if (variant->max_rows > 8) {
-		ret = stmpe_set_bits(stmpe, STMPE_KPC_ROW_MSB,
-				     STMPE_KPC_ROW_MSB_ROWS,
-				     keypad->rows >> 8);
+	/* GPIO direction */
+	ret = stmpe_set_bits(stmpe, STMPE_GPIO_DIR_LOW,  0xff,  0x0);
+	if (ret < 0)
+		return ret;
+
+	if(system_rev >= BOARD_REV06){	
+		ret = stmpe_set_bits(stmpe, STMPE_GPIO_DIR_HIGH,  0x03,  0x0);
 		if (ret < 0)
 			return ret;
 	}
 
-	ret = stmpe_set_bits(stmpe, STMPE_KPC_CTRL_MSB,
-			     STMPE_KPC_CTRL_MSB_SCAN_COUNT,
-			     plat->scan_count << 4);
+	if(system_rev >= BOARD_REV08){	
+		ret = stmpe_set_bits(stmpe, STMPE_GPIO_DIR_MID,  0x80,	0x0);
+		if (ret < 0)
+			return ret;
+	}
+
+	/* Edge detection */
+	ret = stmpe_set_bits(stmpe, STMPE_GPIO_FE_LOW,     0xff,  0xff);
+		if (ret < 0)
+			return ret;
+
+	if(system_rev >= BOARD_REV06){
+		ret = stmpe_set_bits(stmpe, STMPE_GPIO_RE_HIGH, 	0x03,  0x03);
+	if (ret < 0)
+		return ret;
+	
+		ret = stmpe_set_bits(stmpe, STMPE_GPIO_FE_HIGH, 	0x03,  0x02);
+	if (ret < 0)
+		return ret;
+	}
+
+	if(system_rev >= BOARD_REV08){
+		/* SD_DET GPIO15 rising/falling edge */
+		ret = stmpe_set_bits(stmpe, STMPE_GPIO_RE_MID, 	0x80,  0x80);
 	if (ret < 0)
 		return ret;
 
-	return stmpe_set_bits(stmpe, STMPE_KPC_CTRL_LSB,
-			      STMPE_KPC_CTRL_LSB_SCAN |
-			      STMPE_KPC_CTRL_LSB_DEBOUNCE,
-			      STMPE_KPC_CTRL_LSB_SCAN |
-			      (plat->debounce_ms << 1));
+		ret = stmpe_set_bits(stmpe, STMPE_GPIO_FE_MID, 	0x80,  0x80);
+	if (ret < 0)
+		return ret;
+	}
+		
+	/* GPIO PULLUP/DOWN setting */
+	ret = stmpe_set_bits(stmpe, STMPE_GPIO_PULLUP_LOW,     0xff,  0xff);
+	if (ret < 0)
+		return ret;
+
+	if(system_rev >= BOARD_REV06){	
+		/* topoff interrupt pin internal pull-up */
+		ret = stmpe_set_bits(stmpe, STMPE_GPIO_PULLUP_HIGH,  0x01,  0x01);
+	if (ret < 0)
+		return ret;
+	}
+
+
+	/* GPIO interrupt enable */
+	ret = stmpe_set_bits(stmpe, STMPE_GPIO_INT_EN_MASK_LOW,     0xff,  0xff);
+	if (ret < 0)
+		return ret;
+
+	if(system_rev >= BOARD_REV08){
+		ret = stmpe_set_bits(stmpe, STMPE_GPIO_INT_EN_MASK_MID, 0x80, 0x80);
+		if (ret < 0)
+			return ret;
+	}
+
+	if(system_rev >= BOARD_REV06){
+		ret = stmpe_set_bits(stmpe, STMPE_GPIO_INT_EN_MASK_HIGH, 0x03, 0x03);
+		if (ret < 0)
+			return ret;
+	}
+
+	/* SCAN START */
+	ret = stmpe_set_bits(stmpe, STMPE_KPC_CMD, 0xff, 0x3);  // scan starting  
+	if (ret < 0)
+		return ret;
+	
+	return  0;
 }
 
-static int __devinit stmpe_keypad_probe(struct platform_device *pdev)
+static int __devinit stmpe_chip_INT_init(struct stmpe *stmpe)
 {
-	struct stmpe *stmpe = dev_get_drvdata(pdev->dev.parent);
-	struct stmpe_keypad_platform_data *plat;
+//	unsigned int irq_trigger = stmpe->pdata->irq_trigger;
+	unsigned int irq_trigger = IRQF_TRIGGER_FALLING; // stmpe->pdata->irq_trigger;
+//	int autosleep_timeout = stmpe->pdata->autosleep_timeout;
+
+	struct stmpe_variant_info *variant = stmpe->variant;
+
+	u8 icr = 0;  //  to allow global interrupt to host
+	unsigned int id;
+	u8 data[2];
+	int ret;
+
+	ret = stmpe_block_read(stmpe, STMPE1801_IDX_CHIP_ID,
+			       ARRAY_SIZE(data), data);
+	if (ret < 0)
+		return ret;
+	
+
+	id = ((unsigned int)data[0] << 8) | (unsigned int)data[1];   // chipid, vender id
+	
+	if ((id & variant->id_mask) != variant->id_val) {
+		dev_err(stmpe->dev, "unknown chip id: %#x\n", id);
+		return -EINVAL;
+	}
+
+	dev_info(stmpe->dev, "%s detected, chip id: %#x\n", variant->name, id);
+
+
+       ret = stmpe_reg_write(stmpe, STMPE1801_REG_SYS_CTRL, 0x80);
+	if (ret < 0)
+		return ret;	
+	
+	if ( system_rev >= BOARD_REV06 ) {
+		ret = stmpe_reg_write(stmpe, STMPE1801_REG_IER_LSB, 0x1E);
+	} else {
+		ret = stmpe_reg_write(stmpe, STMPE1801_REG_IER_LSB, 0x16);
+	}
+	if (ret < 0)
+		return ret;
+		
+#if defined (CONFIG_MACH_BOSE_ATT)
+	icr = STMPE_ICR_LSB_LEVEL | STMPE_ICR_LSB_GIM;
+#else
+	icr = STMPE_ICR_LSB_EDGE | STMPE_ICR_LSB_GIM;
+#endif
+       ret = stmpe_reg_write(stmpe, STMPE1801_REG_ICR_LSB, icr);
+	if (ret < 0)
+		return ret;	
+
+
+
+	return   0;
+}
+
+
+static ssize_t stmpe_backlight_control(struct device *dev,
+				 struct device_attribute *attr, const char *buf,
+				 size_t size)
+{
+	int data;
+	int errnum;
+	if (sscanf(buf, "%d\n", &data) == 1) {
+		if (data == 0) {
+//			tegra_gpio_enable(GPIO_QKEY_BL_EN);
+			gpio_direction_output(GPIO_QKEY_BL_EN,0);
+			printk(KERN_DEBUG "[QWERTY] stmpe_backlight_control: %d \n", data);
+		} else if (data == 1) {
+//			tegra_gpio_enable(GPIO_QKEY_BL_EN);
+			gpio_direction_output(GPIO_QKEY_BL_EN,1);
+			printk(KERN_DEBUG "[QWERTY] stmpe_backlight_control: %d \n", data);
+		}
+
+	} else {
+		printk(KERN_DEBUG "[QWERTY] stmpe_backlight_control Error\n");
+	}
+
+	return size;
+}
+
+static DEVICE_ATTR(backlight, 0664, NULL, stmpe_backlight_control);
+
+
+static int __devinit stmpe_probe(struct i2c_client *i2c,
+				 const struct i2c_device_id *id)
+{
+	struct stmpe_keypad_platform_data *pdata = i2c->dev.platform_data;
 	struct stmpe_keypad *keypad;
 	struct input_dev *input;
+	struct stmpe * stmpe;
+	
 	int ret;
 	int irq;
 	int i;
 
-	plat = stmpe->pdata->keypad;
-	if (!plat)
-		return -ENODEV;
+       if(!pdata)
+		return -ENOMEM;
 
-	irq = platform_get_irq(pdev, 0);
-	if (irq < 0)
-		return irq;
+	stmpe = kzalloc(sizeof(*stmpe), GFP_KERNEL);
+	if (!stmpe)
+		return -ENOMEM;
 
 	keypad = kzalloc(sizeof(struct stmpe_keypad), GFP_KERNEL);
-	if (!keypad)
+	if (!keypad) {
+		kfree(stmpe); 
 		return -ENOMEM;
+	}
+	mutex_init(&stmpe->irq_lock);
+	mutex_init(&stmpe->lock);
+	
+	stmpe->dev = &i2c->dev;
+	stmpe->i2c = i2c;	
+	stmpe->variant = &stmpe1801;
+	stmpe->num_gpios = stmpe->variant->num_gpios;
+
 
 	input = input_allocate_device();
 	if (!input) {
 		ret = -ENOMEM;
-		goto out_freekeypad;
+		goto out_free;
 	}
-
-	input->name = "STMPE keypad";
+	input->name = "STMPE_keypad";
 	input->id.bustype = BUS_I2C;
-	input->dev.parent = &pdev->dev;
-
+	input->dev.parent = &i2c->dev;
+	
 	input_set_capability(input, EV_MSC, MSC_SCAN);
 
 	__set_bit(EV_KEY, input->evbit);
-	if (!plat->no_autorepeat)
+	if (!pdata->no_autorepeat)
 		__set_bit(EV_REP, input->evbit);
-
+	
 	input->keycode = keypad->keymap;
 	input->keycodesize = sizeof(keypad->keymap[0]);
-	input->keycodemax = ARRAY_SIZE(keypad->keymap);
+	input->keycodemax = ARRAY_SIZE(keypad->keymap);	
 
-	matrix_keypad_build_keymap(plat->keymap_data, STMPE_KEYPAD_ROW_SHIFT,
+	matrix_keypad_build_keymap(pdata->keymap_data, STMPE_KEYPAD_COL_SHIFT,
 				   input->keycode, input->keybit);
 
-	for (i = 0; i < plat->keymap_data->keymap_size; i++) {
-		unsigned int key = plat->keymap_data->keymap[i];
+	for (i = 0; i < pdata->keymap_data->keymap_size; i++) {
+		unsigned int key = pdata->keymap_data->keymap[i];
 
 		keypad->cols |= 1 << KEY_COL(key);
 		keypad->rows |= 1 << KEY_ROW(key);
 	}
 
 	keypad->stmpe = stmpe;
-	keypad->plat = plat;
+	keypad->plat = pdata;
 	keypad->input = input;
-	keypad->variant = &stmpe_keypad_variants[stmpe->partnum];
+	keypad->variant = &stmpe_keypad_variants;
+	
+	i2c_set_clientdata(i2c, stmpe);
+#ifdef CONFIG_MACH_BOSE_ATT	
+	g_stmpe = stmpe; // add opk
+
+	/* init delayed work */
+	INIT_DELAYED_WORK(&keypad->full_chg_work, stmpe_max8922_full_comp_work_handler);
+#endif
+
+	ret = stmpe_chip_INT_init(stmpe);
+	if (ret)
+		goto out_free;
 
 	ret = stmpe_keypad_chip_init(keypad);
-	if (ret < 0)
-		goto out_freeinput;
+	if (ret)
+		goto out_free;	
 
 	ret = input_register_device(input);
 	if (ret) {
-		dev_err(&pdev->dev,
+		dev_err(&i2c->dev,
 			"unable to register input device: %d\n", ret);
 		goto out_freeinput;
 	}
 
-	ret = request_threaded_irq(irq, NULL, stmpe_keypad_irq, IRQF_ONESHOT,
-				   "stmpe-keypad", keypad);
+/* BOSE_QWERTY_BL */
+    sec_stmpe_bl= device_create(sec_class, NULL, 0, NULL, "sec_stmpe_bl");
+	if (IS_ERR(sec_stmpe_bl))
+	{
+		printk(KERN_ERR "Failed to create device(sec_stmpe_bl)!\n");
+	}
+	if (device_create_file(sec_stmpe_bl, &dev_attr_backlight)< 0)
+	{
+		printk(KERN_ERR "Failed to create device file(%s)!\n", dev_attr_backlight.attr.name);
+	}
+/* BOSE_QWERTY_BL */
+
+	ret = request_threaded_irq(gpio_to_irq(stmpe->i2c->irq), NULL, stmpe_irq,
+				   IRQF_TRIGGER_FALLING  , "stmpe1801", keypad);
 	if (ret) {
-		dev_err(&pdev->dev, "unable to get irq: %d\n", ret);
-		goto out_unregisterinput;
+		dev_err(stmpe->dev, "failed to request IRQ: %d\n", ret);
+		goto out_removeirq;
 	}
 
-	platform_set_drvdata(pdev, keypad);
+	ret = enable_irq_wake(gpio_to_irq(stmpe->i2c->irq));
+	if (ret < 0)
+		dev_err(stmpe->dev,
+			"failed to enable wakeup src %d\n", ret);
+
+	tegra_gpio_enable(GPIO_QKEY_BL_EN);
 
 	return 0;
 
-out_unregisterinput:
-	input_unregister_device(input);
-	input = NULL;
+out_removedevs:
+	mfd_remove_devices(stmpe->dev);
+	free_irq(gpio_to_irq(stmpe->i2c->irq), stmpe);
+	
+out_removeirq:
+	stmpe_irq_remove(stmpe);
 out_freeinput:
 	input_free_device(input);
-out_freekeypad:
+out_free:
+	kfree(stmpe);
 	kfree(keypad);
+	
 	return ret;
 }
 
-static int __devexit stmpe_keypad_remove(struct platform_device *pdev)
+static int __devexit stmpe_remove(struct i2c_client *client)
 {
-	struct stmpe_keypad *keypad = platform_get_drvdata(pdev);
-	struct stmpe *stmpe = keypad->stmpe;
-	int irq = platform_get_irq(pdev, 0);
+	struct stmpe *stmpe = i2c_get_clientdata(client);
 
-	stmpe_disable(stmpe, STMPE_BLOCK_KEYPAD);
+	mfd_remove_devices(stmpe->dev);
 
-	free_irq(irq, keypad);
-	input_unregister_device(keypad->input);
-	platform_set_drvdata(pdev, NULL);
-	kfree(keypad);
+	free_irq(stmpe->i2c->irq, stmpe);
+	stmpe_irq_remove(stmpe);
+
+	kfree(stmpe);
 
 	return 0;
 }
 
-static struct platform_driver stmpe_keypad_driver = {
-	.driver.name	= "stmpe-keypad",
-	.driver.owner	= THIS_MODULE,
-	.probe		= stmpe_keypad_probe,
-	.remove		= __devexit_p(stmpe_keypad_remove),
+
+static const struct i2c_device_id stmpe_id[] = {
+	{ "stmpe1801", 0 },
+	{ }
 };
 
-static int __init stmpe_keypad_init(void)
-{
-	return platform_driver_register(&stmpe_keypad_driver);
-}
-module_init(stmpe_keypad_init);
 
-static void __exit stmpe_keypad_exit(void)
+MODULE_DEVICE_TABLE(i2c, stmpe_id);
+
+static struct i2c_driver stmpe_driver = {
+	.driver.name	= "stmpe1801",
+	.driver.owner	= THIS_MODULE,
+	.probe		= stmpe_probe,
+	.remove		= __devexit_p(stmpe_remove),
+        .suspend  = stmpe_key_suspend,
+        .resume   = stmpe_key_resume,
+	.id_table	= stmpe_id,
+};
+
+static int __init stmpe_init(void)
 {
-	platform_driver_unregister(&stmpe_keypad_driver);
+	return i2c_add_driver(&stmpe_driver);
 }
-module_exit(stmpe_keypad_exit);
+subsys_initcall(stmpe_init);
+
+static void __exit stmpe_exit(void)
+{
+	i2c_del_driver(&stmpe_driver);
+}
+module_exit(stmpe_exit);
 
 MODULE_LICENSE("GPL v2");
-MODULE_DESCRIPTION("STMPExxxx keypad driver");
+MODULE_DESCRIPTION("STMPE MFD core driver");
 MODULE_AUTHOR("Rabin Vincent <rabin.vincent@stericsson.com>");

@@ -26,6 +26,8 @@
 #include <linux/workqueue.h>
 #include <linux/gpio.h>
 
+#define SEC_DEBUG 0
+
 struct gpio_button_data {
 	struct gpio_keys_button *button;
 	struct input_dev *input;
@@ -47,7 +49,7 @@ struct gpio_keys_drvdata {
 /*
  * SYSFS interface for enabling/disabling keys and switches:
  *
- * There are 4 attributes under /sys/devices/platform/gpio-keys/
+ * There are 4 attributes under /sys/devices/platform/sec_key.0/
  *	keys [ro]              - bitmap of keys (EV_KEY) which can be
  *	                         disabled
  *	switches [ro]          - bitmap of switches (EV_SW) which can be
@@ -59,7 +61,7 @@ struct gpio_keys_drvdata {
  * for each key (or switch). Disabling a key means its interrupt line
  * is disabled.
  *
- * For example, if we have following switches set up as gpio-keys:
+ * For example, if we have following switches set up as sec_key.0:
  *	SW_DOCK = 5
  *	SW_CAMERA_LENS_COVER = 9
  *	SW_KEYPAD_SLIDE = 10
@@ -266,8 +268,8 @@ ATTR_SHOW_FN(disabled_switches, EV_SW, true);
 /*
  * ATTRIBUTES:
  *
- * /sys/devices/platform/gpio-keys/keys [ro]
- * /sys/devices/platform/gpio-keys/switches [ro]
+ * /sys/devices/platform/sec_key.0/keys [ro]
+ * /sys/devices/platform/sec_key.0/switches [ro]
  */
 static DEVICE_ATTR(keys, S_IRUGO, gpio_keys_show_keys, NULL);
 static DEVICE_ATTR(switches, S_IRUGO, gpio_keys_show_switches, NULL);
@@ -295,8 +297,8 @@ ATTR_STORE_FN(disabled_switches, EV_SW);
 /*
  * ATTRIBUTES:
  *
- * /sys/devices/platform/gpio-keys/disabled_keys [rw]
- * /sys/devices/platform/gpio-keys/disables_switches [rw]
+ * /sys/devices/platform/sec_key.0/disabled_keys [rw]
+ * /sys/devices/platform/sec_key.0/disables_switches [rw]
  */
 static DEVICE_ATTR(disabled_keys, S_IWUSR | S_IRUGO,
 		   gpio_keys_show_disabled_keys,
@@ -317,6 +319,23 @@ static struct attribute_group gpio_keys_attr_group = {
 	.attrs = gpio_keys_attrs,
 };
 
+#if SEC_DEBUG
+static char* code_to_str(int code)
+{
+	switch (code) {
+	case KEY_VOLUMEUP:
+		return "Vol-U";
+	case KEY_VOLUMEDOWN:
+		return "Vol-D";
+	case KEY_POWER:
+		return "PWR";
+	case KEY_HOME:
+		return "HOME";
+	};
+	return "Unknown";
+}
+#endif
+
 static void gpio_keys_report_event(struct gpio_button_data *bdata)
 {
 	struct gpio_keys_button *button = bdata->button;
@@ -324,6 +343,9 @@ static void gpio_keys_report_event(struct gpio_button_data *bdata)
 	unsigned int type = button->type ?: EV_KEY;
 	int state = (gpio_get_value(button->gpio) ? 1 : 0) ^ button->active_low;
 
+#if SEC_DEBUG
+	printk("key: %s(%s)\n", code_to_str(button->code), (state)?"prs":"rel" );
+#endif
 	input_event(input, type, button->code, !!state);
 	input_sync(input);
 }
@@ -440,6 +462,40 @@ static void gpio_keys_close(struct input_dev *input)
 		ddata->disable(input->dev.parent);
 }
 
+static ssize_t keyshort_test(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	int i, ret, bKeyPressed=false;
+	int count;
+	struct gpio_keys_platform_data *pdata = dev->platform_data;
+
+	for(i = 0; i < pdata->nbuttons; i++ )
+	{
+		struct gpio_keys_button *button = &pdata->buttons[i];
+
+		ret = gpio_get_value(button->gpio);
+
+		if(button->active_low && !ret || !button->active_low && ret)
+		{
+			bKeyPressed=true;
+			break;
+		}
+	}
+
+	if(bKeyPressed == true)
+	{
+		count = sprintf(buf,"PRESS\n");
+		printk("keyshort_test: PRESS\n");
+	}
+	else
+	{
+		count = sprintf(buf,"RELEASE\n");
+		printk("keyshort_test: RELEASE\n");
+	}	
+
+	return count;
+}
+static DEVICE_ATTR(key_pressed, S_IRUGO, keyshort_test, NULL);
+
 static int __devinit gpio_keys_probe(struct platform_device *pdev)
 {
 	struct gpio_keys_platform_data *pdata = pdev->dev.platform_data;
@@ -469,7 +525,7 @@ static int __devinit gpio_keys_probe(struct platform_device *pdev)
 	input_set_drvdata(input, ddata);
 
 	input->name = pdev->name;
-	input->phys = "gpio-keys/input0";
+	input->phys = "sec_key/input0";
 	input->dev.parent = &pdev->dev;
 	input->open = gpio_keys_open;
 	input->close = gpio_keys_close;
@@ -501,6 +557,8 @@ static int __devinit gpio_keys_probe(struct platform_device *pdev)
 		input_set_capability(input, type, button->code);
 	}
 
+	set_bit(KEY_CAMERA & KEY_MAX, input->keybit); //for factory key test
+
 	error = sysfs_create_group(&pdev->dev.kobj, &gpio_keys_attr_group);
 	if (error) {
 		dev_err(dev, "Unable to export keys/switches, error: %d\n",
@@ -521,6 +579,12 @@ static int __devinit gpio_keys_probe(struct platform_device *pdev)
 	input_sync(input);
 
 	device_init_wakeup(&pdev->dev, wakeup);
+
+	if (device_create_file(&pdev->dev, &dev_attr_key_pressed) < 0)
+	{
+		printk("%s \n",__FUNCTION__);
+		pr_err("Failed to create device file(%s)!\n", dev_attr_key_pressed.attr.name);
+	}
 
 	return 0;
 
@@ -594,7 +658,11 @@ static int gpio_keys_resume(struct device *dev)
 	struct platform_device *pdev = to_platform_device(dev);
 	struct gpio_keys_drvdata *ddata = platform_get_drvdata(pdev);
 	struct gpio_keys_platform_data *pdata = pdev->dev.platform_data;
+	int wakeup_key = KEY_RESERVED;
 	int i;
+
+	if (pdata->wakeup_key)
+		wakeup_key = pdata->wakeup_key();
 
 	for (i = 0; i < pdata->nbuttons; i++) {
 
@@ -604,7 +672,34 @@ static int gpio_keys_resume(struct device *dev)
 			disable_irq_wake(irq);
 		}
 
+		if (wakeup_key == button->code) {
+			unsigned int type = button->type ?: EV_KEY;
+			int twice = 0;
+			if (pdata->wakeup_key_twice)
+				twice = pdata->wakeup_key_twice();
+
+			input_event(ddata->input, type, button->code, 1);
+			pr_info("[wake] %d:1\n", button->code);
+			if (twice) {
+				input_event(ddata->input, type, button->code, 0);
+				input_sync(ddata->input);
+				pr_info("[wake2] %d:0\n", button->code);
+			}
+		}
+#ifdef CONFIG_SAMSUNG_LPM_MODE
+		if (pdata->check_lpm) {
+			if (pdata->check_lpm() && button->code == KEY_POWER) {
+				mod_timer(&ddata->data[i].timer,
+				jiffies + msecs_to_jiffies(1500));
+			} else {
+				gpio_keys_report_event(&ddata->data[i]);
+			}
+		} else {
+			gpio_keys_report_event(&ddata->data[i]);
+		}
+#else
 		gpio_keys_report_event(&ddata->data[i]);
+#endif
 	}
 	input_sync(ddata->input);
 
@@ -621,7 +716,7 @@ static struct platform_driver gpio_keys_device_driver = {
 	.probe		= gpio_keys_probe,
 	.remove		= __devexit_p(gpio_keys_remove),
 	.driver		= {
-		.name	= "gpio-keys",
+		.name	= "sec_key",
 		.owner	= THIS_MODULE,
 #ifdef CONFIG_PM
 		.pm	= &gpio_keys_pm_ops,
@@ -645,4 +740,4 @@ module_exit(gpio_keys_exit);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Phil Blundell <pb@handhelds.org>");
 MODULE_DESCRIPTION("Keyboard driver for CPU GPIOs");
-MODULE_ALIAS("platform:gpio-keys");
+MODULE_ALIAS("platform:sec_key");

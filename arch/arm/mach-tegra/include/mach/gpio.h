@@ -22,7 +22,8 @@
 
 #include <mach/irqs.h>
 
-#define ARCH_NR_GPIOS		INT_GPIO_NR
+#define TEGRA_NR_GPIOS		INT_GPIO_NR
+#define ARCH_NR_GPIOS		(TEGRA_NR_GPIOS + 128)
 
 #include <asm-generic/gpio.h>
 
@@ -31,11 +32,11 @@
 #define gpio_cansleep		__gpio_cansleep
 
 #define TEGRA_GPIO_TO_IRQ(gpio) (INT_GPIO_BASE + (gpio))
-#define TEGRA_IRQ_TO_GPIO(irq) ((gpio) - INT_GPIO_BASE)
+#define TEGRA_IRQ_TO_GPIO(irq) ((irq) - INT_GPIO_BASE)
 
 static inline int gpio_to_irq(unsigned int gpio)
 {
-	if (gpio < ARCH_NR_GPIOS)
+	if (gpio < TEGRA_NR_GPIOS)
 		return INT_GPIO_BASE + gpio;
 	return -EINVAL;
 }

@@ -19,6 +19,11 @@ struct gpio_keys_platform_data {
 	unsigned int rep:1;		/* enable input subsystem auto repeat */
 	int (*enable)(struct device *dev);
 	void (*disable)(struct device *dev);
+	int (*wakeup_key)(void);
+	int (*wakeup_key_twice)(void);
+#ifdef CONFIG_SAMSUNG_LPM_MODE
+	bool (*check_lpm)(void);
+#endif
 };
 
 #endif

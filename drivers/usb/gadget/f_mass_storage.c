@@ -295,7 +295,12 @@
 
 #include "gadget_chips.h"
 
+#ifdef CONFIG_USB_ANDROID_MASS_STORAGE
+#include <linux/usb/android_composite.h>
+#include <linux/platform_device.h>
 
+#define FUNCTION_NAME		"usb_mass_storage"
+#endif
 
 /*------------------------------------------------------------------------*/
 
@@ -377,6 +382,7 @@ struct fsg_common {
 	u32			tag;
 	u32			residue;
 	u32			usb_amount_left;
+	u32			set_intf_do;
 
 	unsigned int		can_stall:1;
 	unsigned int		free_storage_on_release:1;
@@ -424,6 +430,10 @@ struct fsg_config {
 	u16 release;
 
 	char			can_stall;
+
+#ifdef CONFIG_USB_ANDROID_MASS_STORAGE
+	struct platform_device *pdev;
+#endif
 };
 
 
@@ -887,11 +897,13 @@ static int do_write(struct fsg_common *common)
 			curlun->sense_data = SS_INVALID_FIELD_IN_CDB;
 			return -EINVAL;
 		}
+#ifndef CONFIG_USB_ANDROID_MASS_STORAGE		
 		if (common->cmnd[1] & 0x08) {	/* FUA */
 			spin_lock(&curlun->filp->f_lock);
 			curlun->filp->f_flags |= O_SYNC;
 			spin_unlock(&curlun->filp->f_lock);
 		}
+#endif
 	}
 	if (lba >= curlun->num_sectors) {
 		curlun->sense_data = SS_LOGICAL_BLOCK_ADDRESS_OUT_OF_RANGE;
@@ -2425,6 +2437,8 @@ static int fsg_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 {
 	struct fsg_dev *fsg = fsg_from_func(f);
 	fsg->common->new_fsg = fsg;
+	do_set_interface(fsg->common, fsg->common->new_fsg);
+	fsg->common->set_intf_do = 1;
 	raise_exception(fsg->common, FSG_STATE_CONFIG_CHANGE);
 	return 0;
 }
@@ -2553,7 +2567,9 @@ static void handle_exception(struct fsg_common *common)
 		break;
 
 	case FSG_STATE_CONFIG_CHANGE:
-		do_set_interface(common, common->new_fsg);
+		if(!common->set_intf_do)
+			do_set_interface(common, common->new_fsg);
+		common->set_intf_do = 0;
 		break;
 
 	case FSG_STATE_EXIT:
@@ -2746,7 +2762,13 @@ static struct fsg_common *fsg_common_init(struct fsg_common *common,
 		curlun->ro = lcfg->cdrom || lcfg->ro;
 		curlun->removable = lcfg->removable;
 		curlun->dev.release = fsg_lun_release;
+
+#ifdef CONFIG_USB_ANDROID_MASS_STORAGE
+		/* use "usb_mass_storage" platform device as parent */
+		curlun->dev.parent = &cfg->pdev->dev;
+#else
 		curlun->dev.parent = &gadget->dev;
+#endif
 		/* curlun->dev.driver = &fsg_driver.driver; XXX */
 		dev_set_drvdata(&curlun->dev, &common->filesem);
 		dev_set_name(&curlun->dev,
@@ -3029,7 +3051,11 @@ static int fsg_bind_config(struct usb_composite_dev *cdev,
 	if (unlikely(!fsg))
 		return -ENOMEM;
 
+#ifdef CONFIG_USB_ANDROID_MASS_STORAGE
+	fsg->function.name        = FUNCTION_NAME;
+#else
 	fsg->function.name        = FSG_DRIVER_DESC;
+#endif
 	fsg->function.strings     = fsg_strings_array;
 	fsg->function.bind        = fsg_bind;
 	fsg->function.unbind      = fsg_unbind;
@@ -3152,4 +3178,64 @@ fsg_common_from_params(struct fsg_common *common,
 	fsg_config_from_params(&cfg, params);
 	return fsg_common_init(common, cdev, &cfg);
 }
+
+#ifdef CONFIG_USB_ANDROID_MASS_STORAGE
+
+static struct fsg_config fsg_cfg;
+
+static int fsg_probe(struct platform_device *pdev)
+{
+	struct usb_mass_storage_platform_data *pdata = pdev->dev.platform_data;
+	int i, nluns;
+
+	printk(KERN_INFO "fsg_probe pdev: %p, pdata: %p\n", pdev, pdata);
+	if (!pdata)
+		return -1;
+
+	nluns = pdata->nluns;
+	if (nluns > FSG_MAX_LUNS)
+		nluns = FSG_MAX_LUNS;
+	fsg_cfg.nluns = nluns;
+	for (i = 0; i < nluns; i++)
+		fsg_cfg.luns[i].removable = 1;
+
+	fsg_cfg.vendor_name = pdata->vendor;
+	fsg_cfg.product_name = pdata->product;
+	fsg_cfg.release = pdata->release;
+	fsg_cfg.can_stall = 0;
+	fsg_cfg.pdev = pdev;
+
+	return 0;
+}
+
+static struct platform_driver fsg_platform_driver = {
+	.driver = { .name = FUNCTION_NAME, },
+	.probe = fsg_probe,
+};
+
+int mass_storage_bind_config(struct usb_configuration *c)
+{
+	struct fsg_common *common = fsg_common_init(NULL, c->cdev, &fsg_cfg);
+	if (IS_ERR(common))
+		return -1;
+	return fsg_add(c->cdev, c, common);
+}
+
+static struct android_usb_function mass_storage_function = {
+	.name = FUNCTION_NAME,
+	.bind_config = mass_storage_bind_config,
+};
+
+static int __init init(void)
+{
+	int		rc;
+	printk(KERN_INFO "f_mass_storage init\n");
+	rc = platform_driver_register(&fsg_platform_driver);
+	if (rc != 0)
+		return rc;
+	android_register_function(&mass_storage_function);
+	return 0;
+}module_init(init);
+
+#endif /* CONFIG_USB_ANDROID_MASS_STORAGE */
 

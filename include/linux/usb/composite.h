@@ -36,8 +36,10 @@
 
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
+#include <linux/switch.h>
 
 
+struct usb_composite_dev;
 struct usb_configuration;
 
 /**
@@ -101,6 +103,14 @@ struct usb_function {
 
 	struct usb_configuration	*config;
 
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+	int			(*set_intf_num)(struct usb_function *f,
+					int intf_num,
+					int index_num);
+#endif
+	/* disabled is zero if the function is enabled */
+	int				disabled;
+
 	/* REVISIT:  bind() functions can be marked __init, which
 	 * makes trouble for section mismatch analysis.  See if
 	 * we can't restructure things to avoid mismatching.
@@ -128,6 +138,7 @@ struct usb_function {
 	/* internals */
 	struct list_head		list;
 	DECLARE_BITMAP(endpoints, 32);
+	struct device			*dev;
 };
 
 int usb_add_function(struct usb_configuration *, struct usb_function *);
@@ -136,6 +147,9 @@ int usb_function_deactivate(struct usb_function *);
 int usb_function_activate(struct usb_function *);
 
 int usb_interface_id(struct usb_configuration *, struct usb_function *);
+
+void usb_function_set_enabled(struct usb_function *, int);
+void usb_composite_force_reset(struct usb_composite_dev *);
 
 /**
  * ep_choose - select descriptor endpoint at current device speed
@@ -269,6 +283,9 @@ struct usb_composite_driver {
 	const struct usb_device_descriptor	*dev;
 	struct usb_gadget_strings		**strings;
 
+	struct class		*class;
+	atomic_t		function_count;
+
 	/* REVISIT:  bind() functions can be marked __init, which
 	 * makes trouble for section mismatch analysis.  See if
 	 * we can't restructure things to avoid mismatching...
@@ -282,6 +299,8 @@ struct usb_composite_driver {
 	/* global suspend hooks */
 	void			(*suspend)(struct usb_composite_dev *);
 	void			(*resume)(struct usb_composite_dev *);
+
+	void			(*enable_function)(struct usb_function *f, int enable);
 };
 
 extern int usb_composite_register(struct usb_composite_driver *);
@@ -342,6 +361,30 @@ struct usb_composite_dev {
 
 	/* protects at least deactivation count */
 	spinlock_t			lock;
+
+	/* switch indicating connected/disconnected state */
+	struct switch_dev		sw_connected;
+	/* switch indicating current configuration */
+	struct switch_dev		sw_config;
+	/* switch indicating usb_composite_force_reset */
+	struct switch_dev		sw_usbreset;	
+	/* current connected state for sw_connected */
+	bool				connected;
+	bool				mute_switch;
+
+	struct work_struct switch_work;
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+/* woojin80.kim : Below values are used for samsung composite framework. */
+	unsigned int			product_num; 	/* product number (ex : 0, 1, 2, ..) */
+	struct android_usb_product 	*products;	/* products list */
+	/* number of multi configuration */
+	int				multi_configuration;  
+  int      bMultiConfiguration;
+  int     MacPC;
+#endif
+#ifdef CONFIG_USB_ANDROID_ACCESSORY
+	unsigned char	accessory_mode;		/* usb accessory mode */
+#endif
 };
 
 extern int usb_string_id(struct usb_composite_dev *c);
