@@ -122,8 +122,9 @@ dhd-y := src/dhd/sys/dhd_linux.o \
          src/bcmsdio/sys/bcmsdh_linux.o \
          src/bcmsdio/sys/bcmsdh_sdmmc_linux.o \
          src/wl/sys/wl_iw.o
-         
-all:
+
+all: modules
+modules:
 	@echo "$(MAKE) --no-print-directory -C $(KDIR) SUBDIRS=$(CURDIR) modules"
 	@$(MAKE) --no-print-directory -C $(KDIR) \
 		SUBDIRS=$(CURDIR) modules
