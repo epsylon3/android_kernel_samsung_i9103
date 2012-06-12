@@ -14,8 +14,9 @@ ifeq ($(TARGET_AUTO_KDIR),)
 #  . build/envsetup.sh
 #  choosecombo 1 1 i9103 eng
 #  make kernel
-#
-# It is also invoked automatically as part of the default target.
+#  make kernel_modules
+#  make wlan_dhd
+#  make kernel_install
 #
 ######################################################################
 #set -x
@@ -32,10 +33,6 @@ endif
 
 ifeq ($(PRODUCT_OUT),)
 	PRODUCT_OUT := out/target/product/$(TARGET_PRODUCT)
-endif
-
-ifeq ($(TARGET_OUT),)
-	TARGET_OUT := $(PRODUCT_OUT)/system
 endif
 
 ifeq ($(HOST_PREBUILT_TAG),)
@@ -89,7 +86,7 @@ PRODUCT_SPECIFIC_DEFCONFIGS := $(DEFCONFIGSRC)/tegra_secure_os_defconfig
 _TARGET_DEFCONFIG           := __ext_n1_defconfig
 TARGET_DEFCONFIG            := $(DEFCONFIGSRC)/$(_TARGET_DEFCONFIG)
 
-TARGET_MOD_INSTALL := $(TARGET_OUT)/lib/modules
+TARGET_MOD_INSTALL := $(PRODUCT_OUT)/system/lib/modules
 
 #WLAN_DHD_PATH := $(ROOTDIR)vendor/bcm/wlan/osrc/open-src/src/dhd/linux
 WLAN_DHD_PATH := $(KERNEL_SRC_DIR)/drivers/net/wireless/bcm4330
@@ -210,9 +207,13 @@ kernel: $(CONFIG_OUT)
 		zImage 2>&1 | tee $(KERNEL_ERR_LOG)
 	$(call kernel-check-gcc-warnings, $(KERNEL_ERR_LOG))
 
+
 LINUXVER=$(shell strings "$(KERNEL_BUILD_DIR)/.config"|grep 'Linux kernel version:'|head -n1|cut -f 5 -d ' ')
 
-MODULES_CFLAGS += -DUTS_RELEASE=\\\"$(LINUXVER)\\\"
+ifneq ($(TARGET_KERNEL_UTSRELEASE),)
+    LINUXVER := $(TARGET_KERNEL_UTSRELEASE)
+    MODULES_CFLAGS += -DUTS_RELEASE=\\\"$(TARGET_KERNEL_UTSRELEASE)\\\"
+endif
 
 #
 # make kernel modules
@@ -315,40 +316,38 @@ device_modules_clean:
 	$(API_MAKE) -C $(TARGET_KERNEL_MODULES_EXT) clean
 
 #
-# The below rules are for the Android build system
+# install kernel modules into system image
 #-------------------------------------------------
-ifneq ($(DO_NOT_REBUILD_THE_KERNEL),1)
+kernel_install:
+	@echo -e ${CL_PFX}"Install kernel and modules..."${CL_RST}
+	mkdir -p $(TARGET_MOD_INSTALL)
+	cp $(KERNEL_BUILD_DIR)/arch/arm/boot/zImage $(PRODUCT_OUT)/kernel
+	find $(KERNEL_BUILD_DIR) -name "*.ko" -exec cp -f {} $(TARGET_MOD_INSTALL)/ \;
+	find $(TARGET_MOD_INSTALL)/* -maxdepth 0 -type d -exec rm -r {} \;
+	find $(TARGET_MOD_INSTALL) -name "*.ko" -exec $(KERNEL_CROSS_COMPILE)strip --strip-debug {} \;
+	# add important kernel modules in bootimage, to always have them
+	mkdir -p $(PRODUCT_OUT)/root/lib
+	cp $(TARGET_MOD_INSTALL)/dhd.ko $(PRODUCT_OUT)/root/lib/
+	touch $(PRODUCT_OUT)/kernel_post_install
+
+#-------------------------------------------------
+ifeq ($(TARGET_BUILD_KERNEL),true)
 .PHONY: $(TARGET_PREBUILT_KERNEL)
 
-$(TARGET_PREBUILT_KERNEL): kernel
+$(TARGET_PREBUILT_KERNEL): kernel_config kernel kernel_modules_install wlan_dhd kernel_install
 
+# To update the device tree (kernel and modules)
+#-------------------------------------------------
 device/samsung/i9103/kernel: $(TARGET_PREBUILT_KERNEL)
 	cp $(KERNEL_BUILD_DIR)/arch/arm/boot/zImage $(ANDROID_BUILD_TOP)/device/samsung/i9103/kernel
-endif
+	rm -f $(ANDROID_BUILD_TOP)/device/samsung/i9103/modules/*.ko
+	cp $(TARGET_MOD_INSTALL)/*.ko $(ANDROID_BUILD_TOP)/device/samsung/i9103/modules/
 
 $(INSTALLED_KERNEL_TARGET): $(TARGET_PREBUILT_KERNEL) | $(ACP)
 	$(transform-prebuilt-to-target)
-
-#
-# install kernel modules into system image
-#-----------------------------------------
-# dummy.ko is used for system image dependency
-TARGET_DUMMY_MODULE := $(TARGET_MOD_INSTALL)/dummy.ko
-DUMMY_PREBUILT += $(TARGET_DUMMY_MODULE)
-$(TARGET_DUMMY_MODULE): kernel ext_kernel_modules kernel_modules_install
-	@echo -e ${CL_PFX}"Install kernel and modules..."${CL_RST}
-	$(API_MAKE) -C $(WLAN_DHD_PATH)
-	mkdir -p $(TARGET_MOD_INSTALL)
-	rm -f $(TARGET_MOD_INSTALL)/dummy.ko
-	find $(KERNEL_BUILD_DIR)/lib/modules -name "*.ko" -exec cp -f {} \
-		$(TARGET_MOD_INSTALL) \; || true
-	cp $(WLAN_DHD_PATH)/dhd.ko $(TARGET_MOD_INSTALL)
-	$(KERNEL_CROSS_COMPILE)strip --strip-debug $(TARGET_MOD_INSTALL)/*.ko
-	cp $(KERNEL_BUILD_DIR)/arch/arm/boot/zImage $(PRODUCT_OUT)/kernel
-	touch $(TARGET_MOD_INSTALL)/dummy.ko
+endif
 
 ROOTDIR :=
 
-endif # cm9 kernel build not used
-
+endif # cm9 kernel build system not used
 endif # device filter
