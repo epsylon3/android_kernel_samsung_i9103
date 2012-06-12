@@ -86,7 +86,7 @@ PRODUCT_SPECIFIC_DEFCONFIGS := $(DEFCONFIGSRC)/tegra_secure_os_defconfig
 _TARGET_DEFCONFIG           := __ext_n1_defconfig
 TARGET_DEFCONFIG            := $(DEFCONFIGSRC)/$(_TARGET_DEFCONFIG)
 
-TARGET_MOD_INSTALL := $(PRODUCT_OUT)/system/lib/modules
+TARGET_MOD_INSTALL := $(PRODUCT_OUT)/modules
 
 #WLAN_DHD_PATH := $(ROOTDIR)vendor/bcm/wlan/osrc/open-src/src/dhd/linux
 WLAN_DHD_PATH := $(KERNEL_SRC_DIR)/drivers/net/wireless/bcm4330
@@ -121,13 +121,13 @@ else
 endif
 
 
-ENG_BLD = 0
-#PRODUCT_SPECIFIC_DEFCONFIGS += ${LJAPDEFCONFIGSRC}/feature/cdrom.config
-#PRODUCT_SPECIFIC_DEFCONFIGS += ${LJAPDEFCONFIGSRC}/feature/networkfs.config
-#PRODUCT_SPECIFIC_DEFCONFIGS += ${LJAPDEFCONFIGSRC}/feature/zram.config
-#PRODUCT_SPECIFIC_DEFCONFIGS += ${LJAPDEFCONFIGSRC}/feature/ntfs.config
-#PRODUCT_SPECIFIC_DEFCONFIGS += ${LJAPDEFCONFIGSRC}/feature/kexec.config
-#PRODUCT_SPECIFIC_DEFCONFIGS += ${LJAPDEFCONFIGSRC}/feature/ext4.config
+ENG_BLD = 1
+PRODUCT_SPECIFIC_DEFCONFIGS += ${LJAPDEFCONFIGSRC}/feature/networkfs.config
+PRODUCT_SPECIFIC_DEFCONFIGS += ${LJAPDEFCONFIGSRC}/feature/ntfs.config
+PRODUCT_SPECIFIC_DEFCONFIGS += ${LJAPDEFCONFIGSRC}/feature/kexec.config
+# PRODUCT_SPECIFIC_DEFCONFIGS += ${LJAPDEFCONFIGSRC}/feature/zram.config
+# PRODUCT_SPECIFIC_DEFCONFIGS += ${LJAPDEFCONFIGSRC}/feature/cdrom.config
+
 
 ifeq ($(ENG_BLD),1)
     PRODUCT_SPECIFIC_DEFCONFIGS += ${LJAPDEFCONFIGSRC}/eng_bld.config
@@ -206,6 +206,7 @@ kernel: $(CONFIG_OUT)
 		CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) O=$(KERNEL_BUILD_DIR) \
 		zImage 2>&1 | tee $(KERNEL_ERR_LOG)
 	$(call kernel-check-gcc-warnings, $(KERNEL_ERR_LOG))
+	cp $(KERNEL_BUILD_DIR)/arch/arm/boot/zImage $(PRODUCT_OUT)/kernel
 
 
 LINUXVER=$(shell strings "$(KERNEL_BUILD_DIR)/.config"|grep 'Linux kernel version:'|head -n1|cut -f 5 -d ' ')
@@ -324,10 +325,10 @@ kernel_install:
 	cp $(KERNEL_BUILD_DIR)/arch/arm/boot/zImage $(PRODUCT_OUT)/kernel
 	find $(KERNEL_BUILD_DIR) -name "*.ko" -exec cp -f {} $(TARGET_MOD_INSTALL)/ \;
 	find $(TARGET_MOD_INSTALL)/* -maxdepth 0 -type d -exec rm -r {} \;
-	find $(TARGET_MOD_INSTALL) -name "*.ko" -exec $(KERNEL_CROSS_COMPILE)strip --strip-debug {} \;
+	-find $(TARGET_MOD_INSTALL) -name "*.ko" -exec $(KERNEL_CROSS_COMPILE)strip --strip-debug {} \;
 	# add important kernel modules in bootimage, to always have them
-	mkdir -p $(PRODUCT_OUT)/root/lib
-	cp $(TARGET_MOD_INSTALL)/dhd.ko $(PRODUCT_OUT)/root/lib/
+	mkdir -p $(PRODUCT_OUT)/root/lib/modules
+	cp $(TARGET_MOD_INSTALL)/*.ko $(PRODUCT_OUT)/root/lib/modules/
 	touch $(PRODUCT_OUT)/kernel_post_install
 
 #-------------------------------------------------
