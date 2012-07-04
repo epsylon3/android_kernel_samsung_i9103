@@ -1332,12 +1332,37 @@ static inline void blk_partition_remap(struct bio *bio)
 	if (bio_sectors(bio) && bdev != bdev->bd_contains) {
 		struct hd_struct *p = bdev->bd_part;
 
+		/*
+		* added for debugging and preventing
+		* the I9103 bootloader corruption
+		* (the hd_struct may be corrupted)
+		*/
+		if(p->start_sect == 0) {
+			printk(KERN_ERR "part : %d, invalid start sector: %llu\n",
+			p->partno, p->start_sect);
+			BUG();
+		}
+
 		bio->bi_sector += p->start_sect;
 		bio->bi_bdev = bdev->bd_contains;
 
 		trace_block_remap(bdev_get_queue(bio->bi_bdev), bio,
 				    bdev->bd_dev,
 				    bio->bi_sector - p->start_sect);
+	}
+
+	/* added for debugging and preventing
+	* the I9103 bootloader corruption
+	* (the bd_contains may be corrupted)
+	*/
+	if (bdev == bdev->bd_contains)
+	{
+		struct hd_struct *p = bdev->bd_part;
+		if(p->start_sect != 0) {
+			printk(KERN_ERR "part : %d, invalid start sector: %llu\n",
+			p->partno, p->start_sect);
+			BUG();
+		}
 	}
 }
 
