@@ -56,6 +56,9 @@ modules.builtin
 include/config
 include/linux/version.h
 include/generated
+drivers/net/wireless/bcm4330/include
+
+arch/arm/configs/__ext_n1_defconfig
 
 # stgit generated dirs
 patches-*

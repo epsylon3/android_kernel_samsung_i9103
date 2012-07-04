@@ -486,7 +486,6 @@ static void smdhsic_disconnect(struct usb_interface *intf)
 	* it makes huge delay on modem reset
 	*/
 	wake_lock_timeout(&g_usbdev.txwake, 20*HZ);
-
 	kfree(intfpriv);
 	usb_set_intfdata(intf, NULL);
 	g_usbdev.usbdev = NULL;
@@ -713,6 +712,7 @@ wait_active:
 					g_usbdev.hsic->resume_failcnt++ > 5) {
 					g_usbdev.hsic->resume_failcnt = 0;
 					smdctl_request_connection_recover(true);
+					return -EFAULT;
 				}
 				return -ETIMEDOUT;
 			}
@@ -778,6 +778,7 @@ retry:
 					g_usbdev.hsic->resume_failcnt++ > 5) {
 					g_usbdev.hsic->resume_failcnt = 0;
 					smdctl_request_connection_recover(true);
+					return -EFAULT;
 				}
 				return -ETIMEDOUT;
 			}
@@ -788,6 +789,8 @@ retry:
 				g_usbdev.hsic->resume_failcnt++ > 5) {
 				g_usbdev.hsic->resume_failcnt = 0;
 				smdctl_request_connection_recover(true);
+				smdctl_request_slave_wakeup(NULL);
+				return -EFAULT;
 			}
 			smdctl_request_slave_wakeup(NULL);
 			return -ETIMEDOUT;
@@ -807,6 +810,7 @@ retry:
 				g_usbdev.hsic->resume_failcnt++ > 5) {
 				g_usbdev.hsic->resume_failcnt = 0;
 				smdctl_request_connection_recover(true);
+				return -EFAULT;
 			}
 			return -ETIMEDOUT;
 		}
@@ -824,6 +828,18 @@ retry:
 	return 0;
 }
 EXPORT_SYMBOL_GPL(smdhsic_pm_resume_AP);
+
+bool smdhsic_pm_active(void)
+{
+	struct device *dev;
+
+	if (!g_usbdev.usbdev)
+		return false;
+
+	dev = &g_usbdev.usbdev->dev;
+	return (dev->power.runtime_status == RPM_ACTIVE);
+}
+EXPORT_SYMBOL_GPL(smdhsic_pm_active);
 
 int smdhsic_reset_resume(struct usb_interface *intf)
 {
