@@ -243,12 +243,26 @@ static void sec_jack_set_type(struct sec_jack_info *hi, int jack_type)
 	wake_lock_timeout(&hi->det_wake_lock, WAKE_LOCK_TIME);
 
 	switch_set_state(&switch_jack_detection, jack_type);
+#if defined(CONFIG_MACH_N1_CHN)
+	g_headset_status = jack_type;
+	pr_err("%s: g_headset_status =%d !!\n", __func__, g_headset_status);
+#endif
+#if defined(CONFIG_MACH_N1_CHN)
+	g_headset_status = jack_type;
+	//pr_err("%s: g_headset_status =%d !!\n", __func__, g_headset_status);
+#endif
 	if(jack_type)
 		wm8994_jack_changed();
 }
 
 static void handle_jack_not_inserted(struct sec_jack_info *hi)
 {
+#if defined(CONFIG_MACH_N1_CHN)
+	pr_err("%s: sec_jack_set_type(hi, SEC_JACK_NO_DEVICE) !!\n", __func__);
+#endif
+#if defined(CONFIG_MACH_N1_CHN)
+	//pr_err("%s: sec_jack_set_type(hi, SEC_JACK_NO_DEVICE) !!\n", __func__);
+#endif
 	sec_jack_set_type(hi, SEC_JACK_NO_DEVICE);
 #ifndef CONFIG_MACH_BOSE_ATT
 	if (!hi->boot_state) {
