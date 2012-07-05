@@ -217,9 +217,7 @@ int max8907c_power_off(void)
 	if (!max8907c_i2c_client)
 		return ret;
 
-	/* Clear ON OFF IRQ1 */
 	max8907c_reg_read(max8907c_i2c_client, MAX8907C_REG_ON_OFF_IRQ1);
-	
 	/* Set up LDO2 after resume, attach to SEQ01 and max power down count to 0x07 */
 	max8907c_set_bits(max8907c_i2c_client, MAX8907C_REG_LDOCTL2, MAX8907C_MASK_LDO_SEQ, 0x00);
 	max8907c_set_bits(max8907c_i2c_client, MAX8907C_REG_LDOSEQCNT2, MAX8907C_MASK_LDO_OFF_CNT, 0x07);
@@ -233,7 +231,11 @@ int max8907c_power_off(void)
 
 	max8907c_reg_write(max8907c_i2c_client, MAX8907C_REG_RESET_CNFG, 0x12);
 
-    max8907c_set_bits(max8907c_i2c_client, MAX8907C_REG_SYSENSEL, 0x10, 0x00);
+#if defined(CONFIG_MACH_N1_CHN)
+    max8907c_set_bits(max8907c_i2c_client, MAX8907C_REG_SYSENSEL, 0x10, 0x04);
+#else
+	max8907c_set_bits(max8907c_i2c_client, MAX8907C_REG_SYSENSEL, 0x10, 0x00);
+#endif /*--  CHN feature - power_on_alarm_bsystar --*/
 
 	/* Attach LDO3, 5, 10 to SEQ1 */
 	max8907c_set_bits(max8907c_i2c_client, MAX8907C_REG_LDOCTL3, MAX8907C_MASK_LDO_SEQ, 0x00);
@@ -611,7 +613,11 @@ int max8907c_pwr_en_attach(void)
 #ifdef CONFIG_MACH_N1
 static int max8907c_init_regs(struct i2c_client *i2c)
 {
+#ifdef CONFIG_MACH_N1_CHN
+	max8907c_reg_write(i2c, MAX8907C_REG_RESET_CNFG, (0x92 | 0x01));
+#else
 	max8907c_reg_write(i2c, MAX8907C_REG_RESET_CNFG, 0x92);
+#endif
 	
 	/* Attach SD2, LDO 4, 10, 11, 17 to SEQ02. */
 	max8907c_set_bits(i2c, MAX8907C_REG_SDCTL2, MAX8907C_MASK_LDO_SEQ, 0x04);
@@ -685,7 +691,7 @@ static int max8907c_i2c_probe(struct i2c_client *i2c,
 	max8907c_irq_init(max8907c, i2c->irq, pdata->irq_base);
 
 #ifdef CONFIG_MACH_N1
-	ret = max8907c_reg_write(i2c, MAX8907C_REG_SYSENSEL, 
+	ret = max8907c_reg_write(i2c, MAX8907C_REG_SYSENSEL,
 		MAX8907C_MASK_HRDRSTEN);
 	if (ret != 0)
 		return ret;
@@ -693,14 +699,23 @@ static int max8907c_i2c_probe(struct i2c_client *i2c,
 #if !defined(CONFIG_MACH_BOSE_ATT)
 	/* Set HRDRSTEN bit for HW Rev 15 or greater. */
 	if(system_rev > 14) {
-		ret = max8907c_reg_write(i2c, MAX8907C_REG_SYSENSEL, 
+		ret = max8907c_reg_write(i2c, MAX8907C_REG_SYSENSEL,
 			0xbf);
 		if (ret != 0)
 			return ret;
 	}
 #endif
-	ret = max8907c_set_bits(i2c, MAX8907C_REG_SYSENSEL, 
+
+#if defined(CONFIG_MACH_N1_CHN)
+	ret = max8907c_set_bits(i2c, MAX8907C_REG_SYSENSEL,
+		MAX8907C_MASK_ALARM0_WAKE | MAX8907C_MASK_ALARM1_WAKE, MAX8907C_MASK_ALARM1_WAKE);
+	if (ret != 0)
+		return ret;
+#else
+	ret = max8907c_set_bits(i2c, MAX8907C_REG_SYSENSEL,
 		MAX8907C_MASK_ALARM0_WAKE | MAX8907C_MASK_ALARM1_WAKE, 0x00);
+#endif /*--  CHN feature - power_on_alarm_bsystar --*/
+
 	if (ret != 0)
 		return ret;
 #endif
