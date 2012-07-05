@@ -1195,6 +1195,7 @@ static DEVICE_ATTR(bypassonoff, 0666, bypass_onoff_file_cmd_show, bypass_onoff_f
 
 #endif // BYPASS_ONOFF_TEST
 
+#if 0
 #ifdef CONFIG_HAS_EARLYSUSPEND
 static void early_suspend(struct early_suspend *h)
 {
@@ -1207,6 +1208,7 @@ static void late_resume(struct early_suspend *h)
 	struct i2c_client *client = NULL;
 	cmc623_resume(client);
 }
+#endif
 #endif
 
 static int cmc623_i2c_probe(struct i2c_client *client,

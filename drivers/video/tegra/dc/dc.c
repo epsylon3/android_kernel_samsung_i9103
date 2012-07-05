@@ -1307,7 +1307,7 @@ static bool _tegra_dc_controller_enable(struct tegra_dc *dc)
 	return true;
 }
 
-#ifdef CONFIG_MACH_N1_CHN
+#if defined(CONFIG_MACH_N1) || defined(CONFIG_MACH_N1_CHN)
 void tegra_dc_data_out(struct tegra_dc *dc)
 {
     tegra_dc_writel(dc, DISP_CTRL_MODE_C_DISPLAY, DC_CMD_DISPLAY_COMMAND);

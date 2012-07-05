@@ -437,7 +437,7 @@ static int tegra_fb_set_windowattr(struct tegra_fb_info *tegra_fb,
 		(((win->out_y + win->out_h) > yres) && (win->out_y < yres))) {
 		pr_warning("outside of FB: "
 				"FB=(%d,%d,%d,%d) "
-				"src=(%d,%d,%d,%d) ",
+				"src=(%d,%d,%d,%d) "
 				"dst=(%d,%d,%d,%d)",
 				0, 0, xres, yres,
 				win->x, win->y, win->w, win->h,
