@@ -493,11 +493,13 @@ config INPUT_CM3663
 	  This option enables proximity & light sensors using CM3663 driver.
 
 config INPUT_HALL
-	bool "HALL IC"
+	tristate "HALL IC"
+	default n
 	help
-	  Say Y here if you want HALL Slider IC to be confiured for device
+	  Say Y here if you want HALL Slider IC to be configured for device
 
-	  If unsure, say Y.
-	  
+	  EXPERIMENTAL code not finished
+
+	  If unsure, say N.
 endif
 
