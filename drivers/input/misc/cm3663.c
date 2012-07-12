@@ -860,7 +860,7 @@ static int cm3663_i2c_probe(struct i2c_client *client,
 	input_sync(cm3663->proximity_input_dev);
 	gProximity_state = false;
 
-	printk("CM3663 probe ok!!!n");
+	pr_notice("CM3663 probe ok!\n");
 	goto done;
 
 /* error, unwind it all */
@@ -899,7 +899,7 @@ err_setup_reg:
 	mutex_destroy(&cm3663->power_lock);
 	wake_lock_destroy(&cm3663->prx_wake_lock);
 	kfree(cm3663);
-	printk("CM3663 probe fail!!!n");
+	pr_err("CM3663 probe fail!!!\n");
 done:
 	return ret;
 }
