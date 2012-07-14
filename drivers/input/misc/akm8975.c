@@ -222,8 +222,8 @@ static int akm_aot_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static int akm_aot_ioctl(struct inode *inode, struct file *file,
-	      unsigned int cmd, unsigned long arg)
+static long akm_aot_ioctl(struct file *file,
+			  unsigned int cmd, unsigned long arg)
 {
 	void __user *argp = (void __user *) arg;
 	short flag;
@@ -316,8 +316,8 @@ static int akmd_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static int akmd_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
-		      unsigned long arg)
+static long akmd_ioctl(struct file *file, unsigned int cmd,
+		       unsigned long arg)
 {
 	void __user *argp = (void __user *) arg;
 
@@ -512,7 +512,7 @@ static int akm8975_init_client(struct i2c_client *client)
 	data = i2c_get_clientdata(client);
 
 	ret = request_irq(client->irq, akm8975_interrupt, IRQF_TRIGGER_RISING,
-				"akm8975", data);
+				"ak8975_int", data);
 
 	if (ret < 0) {
 		pr_err("akm8975_init_client: request irq failed\n");
@@ -537,14 +537,14 @@ static const struct file_operations akmd_fops = {
 	.owner = THIS_MODULE,
 	.open = akmd_open,
 	.release = akmd_release,
-	.ioctl = akmd_ioctl,
+	.unlocked_ioctl = akmd_ioctl,
 };
 
 static const struct file_operations akm_aot_fops = {
 	.owner = THIS_MODULE,
 	.open = akm_aot_open,
 	.release = akm_aot_release,
-	.ioctl = akm_aot_ioctl,
+	.unlocked_ioctl = akm_aot_ioctl,
 };
 
 static struct miscdevice akm_aot_device = {
@@ -692,7 +692,7 @@ static int __devexit akm8975_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id akm8975_id[] = {
-	{ "akm8975", 0 },
+	{ "ak8975", 0 },
 	{ }
 };
 
@@ -707,7 +707,7 @@ static struct i2c_driver akm8975_driver = {
 #endif
 	.id_table = akm8975_id,
 	.driver = {
-		.name = "akm8975",
+		.name = "ak8975",
 	},
 };
 

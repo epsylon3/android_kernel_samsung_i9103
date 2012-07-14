@@ -485,6 +485,13 @@ config SENSORS_AK8975
 	  If you say yes here you get support for Asahi Kasei's
 	  magnetometer sensor AK8975.
 
+config SENSORS_KXTF9
+	tristate "KXTF9"
+	default n
+	depends on I2C
+	help
+	  KXTF9 raw module, if the MPU hal is not used
+
 config INPUT_CM3663
 	depends on I2C && GENERIC_GPIO
 	tristate "Capella CM3663 ambient light and proximity sensor"

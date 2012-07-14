@@ -47,4 +47,6 @@ obj-$(CONFIG_INPUT_WISTRON_BTNS)	+= wistron_btns.o
 obj-$(CONFIG_INPUT_WM831X_ON)		+= wm831x-on.o
 obj-$(CONFIG_INPUT_YEALINK)		+= yealink.o
 obj-$(CONFIG_SENSORS_AK8975)		+= ak8975.o
+obj-$(CONFIG_SENSORS_AKM8975)		+= akm8975.o
+obj-$(CONFIG_SENSORS_KXTF9)		+= kxtf9.o
 obj-$(CONFIG_INPUT_HALL)		+= hall_slider_button.o
