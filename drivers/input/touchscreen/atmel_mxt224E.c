@@ -25,13 +25,18 @@
 *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
-#define	DEBUG_INFO      1
+#define DEBUG_INFO      1
 #define DEBUG_VERBOSE   2
-#define	DEBUG_MESSAGES  5
-#define	DEBUG_RAW       8
-#define	DEBUG_TRACE     10
-#define	TSP_BOOST
-#define	TS_100S_TIMER_INTERVAL 1
+#define DEBUG_MESSAGES  5
+#define DEBUG_RAW       8
+#define DEBUG_TRACE     10
+
+#define TSP_BOOST
+
+#define KEY_LED_CONTROL
+#define KEY_LED_TOUCH_OFF 1
+
+#define TS_100S_TIMER_INTERVAL 1
 
 #include <linux/kernel.h>
 #include <linux/init.h>
@@ -72,7 +77,7 @@
 
 #include <linux/reboot.h>
 #include <linux/regulator/consumer.h>
-#include	<linux/gpio.h>
+#include <linux/gpio.h>
 
 /*
 * This is a driver for the Atmel maXTouch Object Protocol
@@ -180,15 +185,21 @@ int tsp_4key_led_ctrl[NUMOF4KEYS] = {
 static u16 tsp_keystatus;
 #ifdef KEY_LED_CONTROL
 static u32 key_led_status = false;
+
+static int key_led_timeout = 2000;
+static struct timer_list key_led_timer;
+static void key_led_timer_callback(unsigned long);
 #endif
 
 bool mxt_reconfig_flag;
 EXPORT_SYMBOL(mxt_reconfig_flag);
+
 /* 0404 work */
 enum {
 	DISABLE,
 	ENABLE
 };
+
 static bool cal_check_flag;
 static u8 facesup_message_flag ;
 static u8 facesup_message_flag_T9 ;
@@ -252,7 +263,7 @@ static void mxt_palm_recovery(struct work_struct *work);
 static void check_chip_palm(struct mxt_data *mxt);
 
 #if 1/*for debugging, enable DEBUG_INFO */
-static int debug = DEBUG_MESSAGES;
+static int debug = DEBUG_INFO; //DEBUG_MESSAGES;
 #else
 static int debug = DEBUG_TRACE;  /* for debugging,  enable DEBUG_TRACE */
 #endif
@@ -276,13 +287,16 @@ extern struct class *sec_class;
 struct device *tsp_factory_mode;
 #endif
 
-#if	TS_100S_TIMER_INTERVAL
+#if (TS_100S_TIMER_INTERVAL)
 static struct workqueue_struct *ts_100s_tmr_workqueue;
 static void ts_100ms_timeout_handler(unsigned long data);
 static void ts_100ms_timer_start(struct mxt_data *mxt);
 static void ts_100ms_timer_stop(struct mxt_data *mxt);
 static void ts_100ms_timer_init(struct mxt_data *mxt);
 static void ts_100ms_tmr_work(struct work_struct *work);
+#else
+#define ts_100ms_timer_start(mxt)
+#define ts_100ms_timer_stop(mxt)
 #endif
 
 static int  mxt_identify(struct i2c_client *client, struct mxt_data *mxt);
@@ -495,7 +509,7 @@ static void mxt_release_all_fingers(struct mxt_data *mxt)
 }
 
 static void mxt_release_all_keys(struct mxt_data *mxt)
-{ 
+{
 	if (debug >= DEBUG_INFO)
 			pr_info("[TSP] %s, tsp_keystatus = %d \n", __func__, tsp_keystatus);
 	if (tsp_keystatus != TOUCH_KEY_NULL) {
@@ -511,7 +525,7 @@ static void mxt_release_all_keys(struct mxt_data *mxt)
 				break;
 			}
 #ifdef TSP_INFO_LOG
-			if (debug >= DEBUG_MESSAGES) 
+			if (debug >= DEBUG_MESSAGES)
 				pr_info("[TSP_KEY] r %s\n", tsp_2keyname[tsp_keystatus - 1]);
 #endif
 		} else {	/* board rev1.0~1.2, touch key is 4 key array */
@@ -1426,13 +1440,13 @@ void process_T15_message(u8 *message, struct mxt_data *mxt)
 				pr_info("[TSP_KEY] P %s\n", tsp_2keyname[tsp_keystatus - 1]);
 #endif
 #ifdef KEY_LED_CONTROL
-		if (mxt->pdata->board_rev <= 9) {
-			if (key_led_status) { 
-				key_led_on(mxt, tsp_2key_led_ctrl[tsp_keystatus-1]);
+			if (KEY_LED_TOUCH_OFF || mxt->pdata->board_rev <= 9 || mxt->pdata->board_rev >= 13) {
+				if (key_led_status) {
+					key_led_on(mxt, tsp_2key_led_ctrl[tsp_keystatus-1]);
+				}
 			}
-		}
 #endif
-		} else { 
+		} else {
 			switch (tsp_keystatus) {
 			case TOUCH_2KEY_MENU:
 				input_report_key(mxt->input, KEY_MENU, KEY_RELEASE);
@@ -1441,23 +1455,24 @@ void process_T15_message(u8 *message, struct mxt_data *mxt)
 				input_report_key(mxt->input, KEY_BACK, KEY_RELEASE);
 				break;
 			default:
+				pr_notice("[TSP_KEY] r key unhandled : %s(%hu)\n", tsp_keystatus, tsp_2keyname[tsp_keystatus - 1]);
 				break;
 			}
 #ifdef TSP_INFO_LOG
-			if (debug >= DEBUG_MESSAGES) 
+			if (debug >= DEBUG_MESSAGES)
 				pr_info("[TSP_KEY] r %s\n", tsp_2keyname[tsp_keystatus - 1]);
 #endif
-			tsp_keystatus = TOUCH_KEY_NULL;
 #ifdef KEY_LED_CONTROL
-			if (mxt->pdata->board_rev <= 9) {
-				if (key_led_status) { 
+			if (KEY_LED_TOUCH_OFF || mxt->pdata->board_rev <= 9 || mxt->pdata->board_rev >= 13) {
+				if (key_led_status) {
 					key_led_on(mxt, 0xFF);
 				}
 			}
 #endif
-
+			tsp_keystatus = TOUCH_KEY_NULL;
 		}
-	}		else {	/* board rev1.0~1.2, touch key is 4 key array, No LED blinking */
+	}
+	else {	/* board rev1.0~1.2, touch key is 4 key array, No LED blinking */
 		if (message[MXT_MSG_T15_STATUS] & MXT_MSGB_T15_DETECT) { /* TOUCH KEY PRESS */
 			if (tsp_keystatus != TOUCH_KEY_NULL) {	/* defence code, if there is any Pressed key, force release!! */
 				switch (tsp_keystatus) {
@@ -1648,7 +1663,7 @@ void process_T42_message(u8 *message, struct mxt_data *mxt)
 			timer_flag = ENABLE;
 			timer_ticks = 0;
 			ts_100ms_timer_start(mxt);
-			klogi_if("[TSP] Palm(T42) Timer start !!! \n");
+			klogi_if("[TSP] Palm(T42) Timer start !!!");
 		}
 	} else {
 		if (debug >= DEBUG_INFO)
@@ -1659,7 +1674,7 @@ void process_T42_message(u8 *message, struct mxt_data *mxt)
 		/* 100ms timer disable */
 		timer_flag = DISABLE;
 		timer_ticks = 0;
-		ts_100ms_timer_stop(mxt);		
+		ts_100ms_timer_stop(mxt);
 	}
 	return;
 }
@@ -1961,7 +1976,7 @@ static irqreturn_t mxt_threaded_irq(int irq, void *_mxt)
 /* boot initial delayed work */
 static void mxt_boot_delayed_initial(struct work_struct *work)
 { 
-	int error, i;
+	int error;
 	struct	mxt_data *mxt;
 	mxt = container_of(work, struct mxt_data, initial_dwork.work);
 
@@ -3086,30 +3101,30 @@ static ssize_t set_threshold_mode_show(struct device *dev, struct device_attribu
 
 
 static int chk_obj(u8 type)
-{ 
-	switch (type) { 
-		/*	case	MXT_GEN_MESSAGEPROCESSOR_T5:*/
-		/*	case	MXT_GEN_COMMANDPROCESSOR_T6:*/
+{
+	switch (type) {
+/*	case	MXT_GEN_MESSAGEPROCESSOR_T5:*/
+/*	case	MXT_GEN_COMMANDPROCESSOR_T6:*/
 	case	MXT_GEN_POWERCONFIG_T7:
 	case	MXT_GEN_ACQUIRECONFIG_T8:
 	case	MXT_TOUCH_MULTITOUCHSCREEN_T9:
 	case	MXT_TOUCH_KEYARRAY_T15:
-		/*	case	MXT_SPT_COMMSCONFIG_T18:*/
-		/*	case	MXT_PROCG_NOISESUPPRESSION_T22:*/
-		/*	case	MXT_PROCI_ONETOUCHGESTUREPROCESSOR_T24:*/
-		/*	case	MXT_SPT_SELFTEST_T25:*/
-		/*	case	MXT_PROCI_TWOTOUCHGESTUREPROCESSOR_T27:*/
-		/*	case	MXT_SPT_CTECONFIG_T28:*/
-		/*	case	MXT_DEBUG_DIAGNOSTICS_T37:*/
+/*	case	MXT_SPT_COMMSCONFIG_T18:*/
+/*	case	MXT_PROCG_NOISESUPPRESSION_T22:*/
+/*	case	MXT_PROCI_ONETOUCHGESTUREPROCESSOR_T24:*/
+/*	case	MXT_SPT_SELFTEST_T25:*/
+/*	case	MXT_PROCI_TWOTOUCHGESTUREPROCESSOR_T27:*/
+/*	case	MXT_SPT_CTECONFIG_T28:*/
+/*	case	MXT_DEBUG_DIAGNOSTICS_T37:*/
 	case	MXT_USER_INFO_T38:
-		/*	case	MXT_GEN_EXTENSION_T39:*/
+/*	case	MXT_GEN_EXTENSION_T39:*/
 	case	MXT_PROCI_GRIPSUPPRESSION_T40:
 	case	MXT_PROCI_TOUCHSUPPRESSION_T42:
 	case	MXT_SPT_CTECONFIG_T46:
 	case	MXT_PROCI_STYLUS_T47:
 	case	MXT_PROCG_NOISESUPPRESSION_T48:
-		/*	case	MXT_SPT_DIGITIZER_T43: */
-		/*	case	MXT_MESSAGECOUNT_T44:*/
+/*	case	MXT_SPT_DIGITIZER_T43: */
+/*	case	MXT_MESSAGECOUNT_T44:*/
 		return 0;
 	default:
 		return -1;
@@ -3160,20 +3175,17 @@ static ssize_t show_message(struct device *dev,
 
 
 static ssize_t show_object(struct device *dev, struct device_attribute *attr, char *buf)
-{ 
-	/*	struct qt602240_data *data = dev_get_drvdata(dev); */
-	/*	struct qt602240_object *object; */
-	struct mxt_data *mxt;
-	struct mxt_object	 *object_table;
+{
+	struct mxt_data *mxt = dev_get_drvdata(dev);
+	struct mxt_object *object_table;
 
 	int count = 0;
 	int i, j;
 	u8 val;
 
-	mxt = dev_get_drvdata(dev);
 	object_table = mxt->object_table;
 
-	for (i = 0; i < mxt->device_info.num_objs; i++) { 
+	for (i = 0; i < mxt->device_info.num_objs; i++) {
 		u8 obj_type = object_table[i].type;
 
 		if (chk_obj(obj_type))
@@ -3182,7 +3194,7 @@ static ssize_t show_object(struct device *dev, struct device_attribute *attr, ch
 		count += sprintf(buf + count, "%s: %d bytes\n",
 			object_type_name[obj_type], object_table[i].size);
 
-		for (j = 0; j < object_table[i].size; j++) { 
+		for (j = 0; j < object_table[i].size; j++) {
 			mxt_read_byte(mxt->client, MXT_BASE_ADDR(obj_type)+(u16)j, &val);
 			count += sprintf(buf + count,
 				"  Byte %2d: 0x%02x (%d)\n", j, val, val);
@@ -3191,16 +3203,14 @@ static ssize_t show_object(struct device *dev, struct device_attribute *attr, ch
 		count += sprintf(buf + count, "\n");
 	}
 
-	/* debug only */
-	/*
+/* debug only
 	count += sprintf(buf + count, "%s: %d bytes\n", "debug_config_T0", 32);
 
-	for (j = 0; j < 32; j++) { 
+	for (j = 0; j < 32; j++) {
 		count += sprintf(buf + count,
 			"  Byte %2d: 0x%02x (%d)\n", j, mxt->debug_config[j], mxt->debug_config[j]);
 	}
-	* */
-	
+*/
 
 #ifdef MXT_TUNNING_ENABLE
 	backup_to_nv(mxt);
@@ -3210,63 +3220,50 @@ static ssize_t show_object(struct device *dev, struct device_attribute *attr, ch
 }
 
 static ssize_t store_object(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
-{ 
-	/*	struct qt602240_data *data = dev_get_drvdata(dev); */
-	/*	struct qt602240_object *object; */
-	struct mxt_data *mxt;
-	/*	struct mxt_object	*object_table;//TO_CHK: not used now */
+{
+	struct mxt_data *mxt = dev_get_drvdata(dev);
 
 	unsigned int type, offset;
 	u8 val;
-	u16	chip_addr;
+	u16 chip_addr, val16;
 	int ret;
 
-	mxt = dev_get_drvdata(dev);
-
-	if ((sscanf(buf, "%u %u %u", &type, &offset, &val) != 3) || (type >= MXT_MAX_OBJECT_TYPES)) { 
+	if ((sscanf(buf, "%u %u %hu", &type, &offset, &val16) != 3) || (type >= MXT_MAX_OBJECT_TYPES)) {
 		pr_err("Invalid values");
 		return -EINVAL;
 	}
+	val = (u8) val16;
 
 	if (debug >= DEBUG_INFO)
-		pr_info("[TSP] Object type: %u, Offset: %u, Value: %u\n", type, offset, val);
+		pr_info("[TSP] Object type: %u, Offset: %u, Value: %hu\n", type, offset, val16);
 
 
-	/* debug only */
-	/*
-	count += sprintf(buf + count, "%s: %d bytes\n", "debug_config_T0", 32);
-	*/
+	if (type == 0) {
+		/* mxt->debug_config[offset] = (u8)val; */
+	} else {
 
+		chip_addr = get_object_address(type, 0, mxt->object_table,
+			mxt->device_info.num_objs);
+		if (chip_addr == 0) {
+			pr_err("[TSP] Invalid object type(%d)!", type);
+			return -EIO;
+		}
 
-	if(type == 0)
-	{
-		/* 
-		mxt->debug_config[offset] = (u8)val;
-		*/
-	} else { 
-	
-	chip_addr = get_object_address(type, 0, mxt->object_table,
-		mxt->device_info.num_objs);
-	if (chip_addr == 0) { 
-		pr_err("[TSP] Invalid object type(%d)!", type);
-		return -EIO;
-	}
+		ret = mxt_write_byte(mxt->client, chip_addr+(u16)offset, (u8)val);
+		pr_err("[TSP] store_object result: (%d)\n", ret);
+		if (ret < 0) {
+			return ret;
+		}
 
-	ret = mxt_write_byte(mxt->client, chip_addr+(u16)offset, (u8)val);
-	pr_err("[TSP] store_object result: (%d)\n", ret);
-	if (ret < 0) { 
-		return ret;
-	}
-	mxt_read_byte(mxt->client,
-		MXT_BASE_ADDR(MXT_USER_INFO_T38)+
-		MXT_ADR_T38_CFG_CTRL,
-		&val);
+		mxt_read_byte(mxt->client,
+			MXT_BASE_ADDR(MXT_USER_INFO_T38)+
+			MXT_ADR_T38_CFG_CTRL,
+			&val);
 
-	if (val == MXT_CFG_DEBUG) { 
-		backup_to_nv(mxt);
-		if (debug >= DEBUG_INFO)
-			pr_info("[TSP] backup_to_nv\n");
-	}
+		if (val == MXT_CFG_DEBUG) {
+			backup_to_nv(mxt);
+			if (debug >= DEBUG_INFO) pr_info("[TSP] backup_to_nv\n");
+		}
 
 	}
 
@@ -3306,38 +3303,67 @@ static ssize_t test_resume(struct device *dev, struct device_attribute *attr, ch
 #endif
 
 #ifdef KEY_LED_CONTROL
+void key_led_timer_callback(unsigned long data)
+{
+	struct mxt_data *mxt = (struct mxt_data *) data;
+	key_led_on(mxt, 0);
+}
+
 static void key_led_on(struct mxt_data *mxt, u32 val)
-{ 
-	if (mxt->pdata->key_led_en1 != NULL)
+{
+	if (mxt->pdata == NULL)
+		return;
+
+	if (val > 0) {
+		mod_timer(&key_led_timer, jiffies + msecs_to_jiffies(key_led_timeout));
+	} else {
+		mod_timer(&key_led_timer, jiffies - 1);
+	}
+
+	if (mxt->pdata->key_led_en1)
 		gpio_direction_output(mxt->pdata->key_led_en1, (val & 0x01) ? true : false);
-	if (mxt->pdata->key_led_en2 != NULL)
+	if (mxt->pdata->key_led_en2)
 		gpio_direction_output(mxt->pdata->key_led_en2, (val & 0x02) ? true : false);
-	if (mxt->pdata->key_led_en3 != NULL)
+	if (mxt->pdata->key_led_en3)
 		gpio_direction_output(mxt->pdata->key_led_en3, (val & 0x04) ? true : false);
-	if (mxt->pdata->key_led_en4 != NULL)
+	if (mxt->pdata->key_led_en4)
 		gpio_direction_output(mxt->pdata->key_led_en4, (val & 0x08) ? true : false);
 }
 
 static ssize_t key_led_store(struct device *dev, struct device_attribute *attr,
 			     const char *buf, size_t size)
-{ 
+{
 	struct mxt_data *mxt = dev_get_drvdata(dev);
 	u32 i = 0;
-	if (sscanf(buf, "%d", &i) != 1) { 
+
+	if (sscanf(buf, "%u", &i) < 1) {
 		pr_err("[TSP] keyled write error\n");
 	}
-	if (mxt->mxt_status) 
+
+	if (mxt->mxt_status)
 		key_led_on(mxt, i);
-	
-	if (debug >= DEBUG_INFO)
-		pr_info("[TSP] Called value by HAL = %d\n", i);
-	if (i) key_led_status = true;
-	else key_led_status = false;
+
+	if (debug > DEBUG_INFO) pr_info("[TSP] Called value by HAL = %d\n", i);
+
+	key_led_status = (i != 0);
 
 	return size;
 }
 
 static DEVICE_ATTR(brightness, S_IRUGO | S_IWUSR, NULL, key_led_store);
+
+static ssize_t key_led_timeout_read(struct device *dev, struct device_attribute *attr,
+                                    char *buf)
+{
+	return sprintf(buf, "%d\n", key_led_timeout);
+}
+
+static ssize_t key_led_timeout_store(struct device *dev, struct device_attribute *attr,
+                                     const char *buf, size_t size)
+{
+	sscanf(buf, "%d", &key_led_timeout);
+	return size;
+}
 #endif
 
 
@@ -3380,6 +3406,10 @@ static DEVICE_ATTR(set_delta4, S_IRUGO | S_IWUSR | S_IWOTH | S_IXOTH, set_delta4
 static DEVICE_ATTR(set_threshould, S_IRUGO | S_IWUSR | S_IWOTH | S_IXOTH, set_threshold_mode_show, NULL);
 #endif
 
+#ifdef KEY_LED_CONTROL
+static DEVICE_ATTR(key_led_timeout, S_IRUGO | S_IWUGO, key_led_timeout_read, key_led_timeout_store);
+#endif
+
 
 static struct attribute *maxTouch_attributes[] = { 
 	&dev_attr_deltas.attr,
@@ -3395,16 +3425,19 @@ static struct attribute *maxTouch_attributes[] = {
 		&dev_attr_firmware.attr,
 		&dev_attr_object.attr,
 		&dev_attr_message.attr,
-		/*	&dev_attr_suspend.attr, */
-		/*	&dev_attr_resume.attr, */
+#ifdef KEY_LED_CONTROL
+		&dev_attr_key_led_timeout.attr,
+#endif
+	/*	&dev_attr_suspend.attr, */
+	/*	&dev_attr_resume.attr, */
 		NULL,
 };
 
-static struct attribute_group maxtouch_attr_group = { 
+static struct attribute_group maxtouch_attr_group = {
 	.attrs = maxTouch_attributes,
 };
 
-static struct attribute *maxTouch_facotry_attributes[] = { 
+static struct attribute *maxTouch_facotry_attributes[] = {
 #ifdef MXT_FACTORY_TEST
 	&dev_attr_tsp_firm_update.attr,
 		&dev_attr_tsp_firm_update_status.attr,
@@ -3469,7 +3502,7 @@ static int calibrate_chip(struct mxt_data *mxt)
 	/* TSP, TouchKEY threshold */
 	ret = mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_TOUCH_KEYARRAY_T15) + MXT_ADR_T15_TCHTHR, T15_TCHTHR);
 	
-	klogi_if("[TSP] reset acq atchcalst=%d, atchcalsthr=%d\n", 0, 0 );
+	klogi_if("[TSP] reset acq atchcalst=%d, atchcalsthr=%d", 0, 0 );
 	/* restore settings to the local structure so that when we confirm the */
 	/* cal is good we can correct them in the chip */
 	/* this must be done before returning */
@@ -3539,8 +3572,8 @@ static void check_chip_palm(struct mxt_data *mxt)
 		msleep(2); 
 		try_ctr++; /* timeout counter */
 		mxt_read_block(client, diag_address, 2, data_buffer);
-		
-		klogi_if("[TSP] Waiting for diagnostic data to update, try %d\n", try_ctr);
+
+		klogi_if("[TSP] Waiting for diagnostic data to update, try %d", try_ctr);
 	}
 
 	if(try_ctr > 50){
@@ -3603,7 +3636,7 @@ static void check_chip_palm(struct mxt_data *mxt)
 
 
 		/* print how many channels we counted */
-		klogi_if("[TSP] Flags Counted channels: t:%d a:%d \n", tch_ch, atch_ch);
+		klogi_if("[TSP] Flags Counted channels: t:%d a:%d", tch_ch, atch_ch);
 
 		/* send page up command so we can detect when data updates next time,
 		 * page byte will sit at 1 until we next send F3 command */
@@ -3629,7 +3662,7 @@ static void check_chip_palm(struct mxt_data *mxt)
 
 		if ((tch_ch < 70) || ((tch_ch >= 70) && ((tch_ch - atch_ch) > 25))) palm_check_timer_flag = true;
 		
-		klogi_if("[TSP] Touch suppression State: %d \n", facesup_message_flag);
+		klogi_if("[TSP] Touch suppression State: %d", facesup_message_flag);
 	}
 }
 
@@ -3644,8 +3677,6 @@ static void check_chip_channel(struct mxt_data *mxt)
 	uint8_t i;
 	uint8_t j;
 	uint8_t x_line_limit;
-	uint8_t CAL_THR;
-	uint8_t num_of_antitouch;
 	struct i2c_client *client;
 
 	client = mxt->client;
@@ -3684,7 +3715,7 @@ static void check_chip_channel(struct mxt_data *mxt)
 		/* read_mem(diag_address, 2,data_buffer); */
 		mxt_read_block(client, diag_address, 2, data_buffer);
 		
-		klogi_if("[TSP] Waiting for diagnostic data to update, try %d\n", try_ctr);
+		klogi_if("[TSP] Waiting for diagnostic data to update, try %d", try_ctr);
 	}
 
 	if(try_ctr > 50){
@@ -3743,7 +3774,7 @@ static void check_chip_channel(struct mxt_data *mxt)
 
 
 		/* print how many channels we counted */
-		klogi_if("[TSP] Flags Counted channels: t:%d a:%d \n", tch_ch, atch_ch);
+		klogi_if("[TSP] Flags Counted channels: t:%d a:%d", tch_ch, atch_ch);
 
 		chk_touch_cnt = tch_ch;
 		chk_antitouch_cnt = atch_ch;
@@ -3833,7 +3864,7 @@ static void check_chip_calibration(struct mxt_data *mxt)
 		/* read_mem(diag_address, 2,data_buffer); */
 		mxt_read_block(client, diag_address, 3, data_buffer);
 		
-		klogi_if("[TSP] Waiting for diagnostic data to update, try %d\n", try_ctr);
+		klogi_if("[TSP] Waiting for diagnostic data to update, try %d", try_ctr);
 	}
 
 	if(try_ctr > 3){
@@ -3902,7 +3933,7 @@ static void check_chip_calibration(struct mxt_data *mxt)
 
 
 		/* print how many channels we counted */
-		klogi_if("[TSP] Flags Counted channels: t:%d a:%d \n", tch_ch, atch_ch);
+		klogi_if("[TSP] Flags Counted channels: t:%d a:%d", tch_ch, atch_ch);
 
 		/* send page up command so we can detect when data updates next time,
 		 * page byte will sit at 1 until we next send F3 command */
@@ -3918,22 +3949,22 @@ static void check_chip_calibration(struct mxt_data *mxt)
 		}
 
 		if (cal_check_flag != 1) {
-			klogi_if("[TSP] check_chip_calibration just return!! finger_cnt = %d\n", finger_cnt);
+			klogi_if("[TSP] check_chip_calibration just return!! finger_cnt = %d", finger_cnt);
 			return;
 		}
 		
 		/* process counters and decide if we must re-calibrate or if cal was good */ 
 		if ((tch_ch > 30) || (atch_ch > 20) || ((tch_ch + atch_ch) > 30)) { 
-			klogi_if("[TSP] maybe palm, re-calibrate!! \n");
+			klogi_if("[TSP] maybe palm, re-calibrate!!");
 			calibrate_chip(mxt);
 			/* 100ms timer disable */
 			timer_flag = DISABLE;
 			timer_ticks = 0;
 			ts_100ms_timer_stop(mxt);
 		} else if((tch_ch <= 30) && (atch_ch == 0)) {
-			klogi_if("[TSP] calibration maybe good\n");
+			klogi_if("[TSP] calibration maybe good");
 			if ((finger_cnt >= 2) && (tch_ch <= 3)) {
-				klogi_if("[TSP]finger_cnt = %d, re-calibrate!! \n", finger_cnt);	
+				klogi_if("[TSP]finger_cnt = %d, re-calibrate!!", finger_cnt);
 				calibrate_chip(mxt);
 				/* 100ms timer disable */
 				timer_flag = DISABLE;
@@ -3944,14 +3975,14 @@ static void check_chip_calibration(struct mxt_data *mxt)
 				not_yet_count = 0;
 			}
 		} else if (atch_ch > ((finger_cnt * num_of_antitouch) + 2)) { 
-			klogi_if("[TSP] calibration was bad (finger : %d, max_antitouch_num : %d)\n", finger_cnt, finger_cnt*num_of_antitouch);
+			klogi_if("[TSP] calibration was bad (finger : %d, max_antitouch_num : %d)", finger_cnt, finger_cnt*num_of_antitouch);
 			calibrate_chip(mxt);
 			/* 100ms timer disable */
 			timer_flag = DISABLE;
 			timer_ticks = 0;
 			ts_100ms_timer_stop(mxt);
 		} else if((tch_ch + CAL_THR /*10*/ ) <= atch_ch) { 
-			klogi_if("[TSP] calibration was bad (CAL_THR : %d)\n",CAL_THR);
+			klogi_if("[TSP] calibration was bad (CAL_THR : %d)",CAL_THR);
 			/* cal was bad - must recalibrate and check afterwards */
 			calibrate_chip(mxt);
 			/* 100ms timer disable */
@@ -3960,7 +3991,7 @@ static void check_chip_calibration(struct mxt_data *mxt)
 			ts_100ms_timer_stop(mxt);
 
 		} else if((tch_ch == 0 ) && (atch_ch >= 2)) { 
-			klogi_if("[TSP] calibration was bad, tch_ch = %d, atch_ch = %d)\n", tch_ch, atch_ch);
+			klogi_if("[TSP] calibration was bad, tch_ch = %d, atch_ch = %d)", tch_ch, atch_ch);
 			/* cal was bad - must recalibrate and check afterwards */
 			calibrate_chip(mxt);
 			/* 100ms timer disable */
@@ -3977,11 +4008,11 @@ static void check_chip_calibration(struct mxt_data *mxt)
 				ts_100ms_timer_start(mxt);
 			}
 			not_yet_count++;
-			klogi_if("[TSP] calibration was not decided yet, not_yet_count = %d\n", not_yet_count);
+			klogi_if("[TSP] calibration was not decided yet, not_yet_count = %d", not_yet_count);
 			if((tch_ch == 0) && (atch_ch == 0)) {
 				not_yet_count = 0;
 			} else if(not_yet_count >= 30) {
-				klogi_if("[TSP] not_yet_count over 30, re-calibrate!! \n");
+				klogi_if("[TSP] not_yet_count over 30, re-calibrate!!");
 				not_yet_count =0;
 				calibrate_chip(mxt);
 				/* 100ms timer disable */
@@ -4026,7 +4057,7 @@ static void cal_maybe_good(struct mxt_data *mxt)
 			ret = mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_TOUCH_KEYARRAY_T15) + MXT_ADR_T15_TCHTHR, 42);
 
 			mxt->check_auto_cal = 5;
-			klogi_if("[TSP] Calibration success!! \n");
+			klogi_if("[TSP] Calibration success!!");
 
 			if (metal_suppression_chk_flag == true) {
 				/* after 20 seconds, metal coin checking disable */
@@ -4084,12 +4115,12 @@ static void ts_100ms_tmr_work(struct work_struct *work)
 
 	timer_ticks++;
 
-	klogi_if("[TSP] 100ms T %d\n", timer_ticks);
+	klogi_if("[TSP] 100ms T %d", timer_ticks);
 
 	disable_irq(mxt->client->irq);
 	/* Palm but Not touch message */
 	if(facesup_message_flag ){
-	 	klogi_if("[TSP] facesup_message_flag = %d\n", facesup_message_flag);
+	 	klogi_if("[TSP] facesup_message_flag = %d", facesup_message_flag);
 	 	check_chip_palm(mxt);
 	}
 
@@ -4100,7 +4131,7 @@ static void ts_100ms_tmr_work(struct work_struct *work)
 		if (palm_check_timer_flag 
 			&& ((facesup_message_flag == 1) || (facesup_message_flag == 2)) 
 			&& (palm_release_flag == false)) {
-			klogi_if("[TSP] calibrate_chip\n");
+			klogi_if("[TSP] calibrate_chip");
 			calibrate_chip(mxt);	
 			palm_check_timer_flag = false;
 		}
@@ -4416,12 +4447,16 @@ static void mxt_early_suspend(struct early_suspend *h)
 
 	if (debug >= DEBUG_INFO)
 		pr_info("[TSP] mxt_early_suspend has been called!");
+
+	key_led_on(mxt, 0);
+
 #if defined(MXT_FACTORY_TEST) || defined(MXT_FIRMUP_ENABLE)
 	/*start firmware updating : not yet finished*/
 	while (mxt->firm_status_data == 1) { 
 		if (debug >= DEBUG_INFO)
 			pr_info("[TSP] mxt firmware is Downloading : mxt suspend must be delayed!");
-		msleep(1000);
+		//msleep(1000);
+		mdelay(1000);
 	}
 #endif
 
@@ -4480,7 +4515,7 @@ if (mxt->set_mode_for_ta) {	/* if TA -> TSP go to sleep mode */
 }
 
 static void mxt_late_resume(struct early_suspend *h)
-{ 
+{
 	u8 cnt;
 	struct	mxt_data *mxt = container_of(h, struct mxt_data, early_suspend);
 	if (debug >= DEBUG_INFO)
@@ -4552,7 +4587,7 @@ static void mxt_late_resume(struct early_suspend *h)
 
 static int __devinit mxt_probe(struct i2c_client *client,
 			       const struct i2c_device_id *id)
-{ 
+{
 	struct mxt_data          *mxt;
 	struct mxt_platform_data *pdata;
 	struct input_dev         *input;
@@ -4630,7 +4665,7 @@ param_check_ok:
 		pr_info("[TSP] maXTouch driver identifying chip\n");
 
 	if (debug >= DEBUG_INFO)
-		pr_info("\tboard-revision:\t\"%d\"\n",	mxt->pdata->board_rev);
+		pr_info("\tboard-revision:\t\"%d\"\n", mxt->pdata->board_rev);
 
 	mxt->client = client;
 	mxt->input  = input;
@@ -4795,11 +4830,11 @@ param_check_ok:
 
 	/* touch key */
 	if ((mxt->pdata->board_rev <= 9) || (mxt->pdata->board_rev >= 13)) {
-		for (i = 0; i < NUMOFKEYS; i++) { 
+		for (i = 0; i < NUMOFKEYS; i++) {
 			__set_bit(tsp_keycodes[i], input->keybit);
 		}
 	} else {	/* board rev1.0~1.2, touch key is 4 key array */
-		for (i = 0; i < NUMOF4KEYS; i++) { 
+		for (i = 0; i < NUMOF4KEYS; i++) {
 			__set_bit(tsp_4keycodes[i], input->keybit);
 		}
 	}
@@ -4912,17 +4947,18 @@ param_check_ok:
 #ifdef KEY_LED_CONTROL
 	/* create sysfs */
 	leds_class = class_create(THIS_MODULE, "leds");
-	if (IS_ERR(leds_class)) { 
+	if (IS_ERR(leds_class)) {
 		return PTR_ERR(leds_class);
 	}
 	led_dev = device_create(leds_class, NULL, 0, mxt, "button-backlight");
-	if (device_create_file(led_dev, &dev_attr_brightness) < 0) { 
+	if (device_create_file(led_dev, &dev_attr_brightness) < 0) {
 		pr_err("[TSP] Failed to create device file(%s)!\n", dev_attr_brightness.attr.name);
 	}
+	setup_timer(&key_led_timer, key_led_timer_callback, (unsigned long) &mxt);
 #endif
 
 	error = sysfs_create_group(&client->dev.kobj, &maxtouch_attr_group);
-	if (error) { 
+	if (error) {
 		unregister_early_suspend(&mxt->early_suspend);
 		pr_err("[TSP] fail sysfs_create_group\n");
 		goto err_after_interrupt_register;
@@ -4949,7 +4985,7 @@ param_check_ok:
 	}
 #endif
 
-#if	TS_100S_TIMER_INTERVAL
+#if TS_100S_TIMER_INTERVAL
 		INIT_WORK(&mxt->tmr_work, ts_100ms_tmr_work);
 		
 		ts_100s_tmr_workqueue = create_singlethread_workqueue("ts_100_tmr_workqueue");
@@ -4977,7 +5013,12 @@ err_after_attr_group:
 err_after_interrupt_register:
 	if (mxt->irq)
 		free_irq(mxt->irq, mxt);
-err_after_input_register:
+
+#ifdef KEY_LED_CONTROL
+	del_timer(&key_led_timer);
+#endif
+
+//err_after_input_register:
 	input_free_device(input);
 
 err_after_get_regulator:
@@ -4989,7 +5030,7 @@ err_after_get_regulator:
 	regulator_put(mxt->pdata->reg_avdd);
 	regulator_put(mxt->pdata->reg_vdd_lvsio);
 err_after_kmalloc:
-	if (mxt != NULL) { 
+	if (mxt != NULL) {
 		kfree(mxt->rid_map);
 		kfree(mxt->delta);
 		kfree(mxt->reference);
@@ -5005,7 +5046,7 @@ err_after_kmalloc:
 }
 
 static int __devexit mxt_remove(struct i2c_client *client)
-{ 
+{
 	struct mxt_data *mxt;
 
 	mxt = i2c_get_clientdata(client);
@@ -5016,6 +5057,10 @@ static int __devexit mxt_remove(struct i2c_client *client)
 	/* Close down sysfs entries */
 	sysfs_remove_group(&client->dev.kobj, &maxtouch_attr_group);
 
+#ifdef KEY_LED_CONTROL
+	del_timer(&key_led_timer);
+#endif
+
 	/* Release IRQ so no queue will be scheduled */
 	if (mxt->irq)
 		free_irq(mxt->irq, mxt);
@@ -5025,7 +5070,7 @@ static int __devexit mxt_remove(struct i2c_client *client)
 	input_unregister_device(mxt->input);
 	/* Should dealloc deltas, references, CTE structures, if allocated */
 
-	if (mxt != NULL) { 
+	if (mxt != NULL) {
 		kfree(mxt->rid_map);
 		kfree(mxt->delta);
 		kfree(mxt->reference);
@@ -5044,7 +5089,7 @@ static int __devexit mxt_remove(struct i2c_client *client)
 
 #if defined(CONFIG_PM) && !defined(CONFIG_HAS_EARLYSUSPEND)
 static int mxt_suspend(struct i2c_client *client, pm_message_t mesg)
-{ 
+{
 	struct mxt_data *mxt = i2c_get_clientdata(client);
 
 	if (device_may_wakeup(&client->dev))
@@ -5054,7 +5099,7 @@ static int mxt_suspend(struct i2c_client *client, pm_message_t mesg)
 }
 
 static int mxt_resume(struct i2c_client *client)
-{ 
+{
 	struct mxt_data *mxt = i2c_get_clientdata(client);
 
 	if (device_may_wakeup(&client->dev))
@@ -5067,15 +5112,15 @@ static int mxt_resume(struct i2c_client *client)
 #define mxt_resume NULL
 #endif
 
-static const struct i2c_device_id mxt_idtable[] = { 
-	{ "mxt_touch", 0,},
-	{  }
+static const struct i2c_device_id mxt_idtable[] = {
+	{ "mxt_touch", 0 },
+	{ }
 };
 
 MODULE_DEVICE_TABLE(i2c, mxt_idtable);
 
-static struct i2c_driver mxt_driver = { 
-	.driver = { 
+static struct i2c_driver mxt_driver = {
+	.driver = {
 		.name	= "mxt_touch",
 			.owner  = THIS_MODULE,
 	},
@@ -5089,22 +5134,19 @@ static struct i2c_driver mxt_driver = {
 };
 
 static int __init mxt_init(void)
-{ 
+{
 	int err;
 	err = i2c_add_driver(&mxt_driver);
-	/*	if (err) { 
-	*		pr_warning("Adding mXT224E driver failed "
-	*			"(errno = %d)\n", err);
-	*	} else { 
-	*		pr_info("Successfully added driver %s\n",
-	*			mxt_driver.driver.name);
-	*	}
-	*/
+	if (err) {
+		pr_warning("Adding mXT224E driver failed (err %d)\n", err);
+	} else {
+		pr_info("Successfully added driver %s\n", mxt_driver.driver.name);
+	}
 	return err;
 }
 
 static void __exit mxt_cleanup(void)
-{ 
+{
 	i2c_del_driver(&mxt_driver);
 }
 
