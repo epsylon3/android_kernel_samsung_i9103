@@ -260,8 +260,8 @@ extern int kernel_sec_get_debug_level(void);
 extern kernel_sec_path_type kernel_sec_get_path(kernel_sec_port_type port_type);
 extern bool kernel_sec_set_path(kernel_sec_port_type port_type, kernel_sec_path_type path_type);
 
-extern void dump_all_task_info();
-extern void dump_cpu_stat();
+extern void dump_all_task_info(void);
+extern void dump_cpu_stat(void);
 
 
 #define KERNEL_SEC_LEN_BUILD_TIME 16

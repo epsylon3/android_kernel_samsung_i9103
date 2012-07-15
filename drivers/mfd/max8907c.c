@@ -633,12 +633,16 @@ static int max8907c_init_regs(struct i2c_client *i2c)
 	/* Set up LDO2 for suspend, attach to SEQ02 and max power down count to 0x0F */
 	max8907c_set_bits(i2c, MAX8907C_REG_LDOCTL2, MAX8907C_MASK_LDO_SEQ, 0x04);
 	max8907c_set_bits(i2c, MAX8907C_REG_LDOSEQCNT2, MAX8907C_MASK_LDO_OFF_CNT, 0x0F);
+
+	return 0;
 }
 
 static int max8907c_suspend_regs(struct i2c_client *i2c)
 {
 	/* Register LDO11 to SEQ2 in suspend because of voltage drop problem */
 	max8907c_set_bits(i2c, MAX8907C_REG_LDOCTL11, MAX8907C_MASK_LDO_SEQ, 0x04);
+
+	return 0;
 }	
 #endif /* CONFIG_MACH_N1 */
 

@@ -666,7 +666,6 @@ static int xmm6260_on(struct str_smdctl *smdctl)
 
 static int xmm6260_reset(struct str_smdctl *smdctl)
 {
-	int ret;
 	struct str_ctl_gpio *gpio = smdctl->gpio;
 	if (!gpio) {
 		pr_err("%s:gpio not allocated\n", __func__);
