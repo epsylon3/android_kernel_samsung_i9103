@@ -109,7 +109,7 @@ static spt_cteconfig_t46_config_t			cte_t46_config = { 0 };
 static proci_stylus_t47_config_t			stylus_t47_config = { 0 };
 static procg_noisesuppression_t48_config_t		noisesuppression_t48_config = { 0 };
 
-static spt_userdata_t38_t				userdata_t38 = { 0 };
+static spt_userdata_t38_t				userdata_t38 = { };
 
 /*   */
 /* PROCI_STYLUS_T47 */

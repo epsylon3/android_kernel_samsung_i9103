@@ -185,6 +185,7 @@ int tsp_4key_led_ctrl[NUMOF4KEYS] = {
 static u16 tsp_keystatus;
 #ifdef KEY_LED_CONTROL
 static u32 key_led_status = false;
+static void key_led_on(struct mxt_data *mxt, u32 val);
 
 static int key_led_timeout = 2000;
 static struct timer_list key_led_timer;
@@ -1455,7 +1456,8 @@ void process_T15_message(u8 *message, struct mxt_data *mxt)
 				input_report_key(mxt->input, KEY_BACK, KEY_RELEASE);
 				break;
 			default:
-				pr_notice("[TSP_KEY] r key unhandled : %s(%hu)\n", tsp_keystatus, tsp_2keyname[tsp_keystatus - 1]);
+				pr_notice("[TSP_KEY] r key unhandled : %s(%hu)\n",
+					tsp_2keyname[tsp_keystatus - 1], tsp_keystatus);
 				break;
 			}
 #ifdef TSP_INFO_LOG
@@ -3330,6 +3332,14 @@ static void key_led_on(struct mxt_data *mxt, u32 val)
 		gpio_direction_output(mxt->pdata->key_led_en4, (val & 0x08) ? true : false);
 }
 
+static ssize_t key_led_read(struct device *dev, struct device_attribute *attr,
+                            char *buf)
+{
+	int brightness = (key_led_status ? 0xFF : 0);
+
+	return sprintf(buf, "%d\n", brightness);
+}
+
 static ssize_t key_led_store(struct device *dev, struct device_attribute *attr,
 			     const char *buf, size_t size)
 {
@@ -3340,17 +3350,23 @@ static ssize_t key_led_store(struct device *dev, struct device_attribute *attr,
 		pr_err("[TSP] keyled write error\n");
 	}
 
-	if (mxt->mxt_status)
-		key_led_on(mxt, i);
+	if (!mxt) {
+		return -EIO;
+	}
 
-	if (debug > DEBUG_INFO) pr_info("[TSP] Called value by HAL = %d\n", i);
-
+	key_led_on(mxt, i);
 	key_led_status = (i != 0);
+	if (mxt->mxt_status) {
+		pr_notice("[TSP] Button backlight set with screen off = %d\n", i);
+	}
+	else if (debug > DEBUG_INFO) {
+		pr_info("[TSP] Button backligh set by HAL = %d\n", i);
+	}
 
 	return size;
 }
 
-static DEVICE_ATTR(brightness, S_IRUGO | S_IWUSR, NULL, key_led_store);
+static DEVICE_ATTR(brightness, S_IRUGO | S_IWUSR, key_led_read, key_led_store);
 
 static ssize_t key_led_timeout_read(struct device *dev, struct device_attribute *attr,
                                     char *buf)
