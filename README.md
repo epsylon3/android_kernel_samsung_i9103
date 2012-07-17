@@ -29,17 +29,23 @@ Available targets:
 
   make kernel_clean            # clean output
 
+  make kernel_config           # create the final .config with repo features (ext_config)
+
   make kernel                  # build the zImage
 
   make kernel_modules          # build the kernel modules
 
   make wlan_dhd                # build wlan module
 
+  make wlan_dhd_clean          # clean the wlan temporary build files
+
   make device_modules          # build the modules present in device project under modules/
 
-  make kernel_modules_install  # copy the kernel modules to output folder system/lib/modules
+  make kernel_modules_install  # copy the kernel modules to output folder root/lib/modules
 
+
+  then, you can use 'make bootimage' to create the flashable boot.img
 
 ---
 
-'Tanguy Pruvot, June 2012'
+'Tanguy Pruvot, July 2012'
