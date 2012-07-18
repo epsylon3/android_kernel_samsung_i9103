@@ -253,7 +253,7 @@ static int nvhost_debug_show(struct seq_file *s, void *unused)
 		fifostat = readl(regs + HOST1X_CHANNEL_FIFOSTAT);
 		if ((fifostat & 1 << 10) == 0 ) {
 
-                    seq_printf(s, "\n%d: fifo:\n", i);
+			seq_printf(s, "\n%d: fifo:\n", i);
 			writel(0x0, m->aperture + HOST1X_SYNC_CFPEEK_CTRL);
 			writel(1 << 31 | i << 16, m->aperture + HOST1X_SYNC_CFPEEK_CTRL);
 			rd_ptr = readl(m->aperture + HOST1X_SYNC_CFPEEK_PTRS) & 0x1ff;
