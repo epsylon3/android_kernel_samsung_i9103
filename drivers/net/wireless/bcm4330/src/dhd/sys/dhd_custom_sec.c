@@ -391,15 +391,14 @@ int check_module_cid(dhd_pub_t *dhd)
 	unsigned char cis_buf[128] = {0};
 	unsigned char cid_buf[10] = {0};
 	const char* cidfilepath = "/data/.cid.info";
-	int nread;
 
 	/* Try reading out from CIS */
 	cis_rw_t *cish = (cis_rw_t *)&cis_buf[8];
 	struct file *fp_cid = NULL;
 
 	fp_cid = filp_open(cidfilepath, O_RDONLY, 0);
-	if (!IS_ERR(fp_cid)) { 
-		kernel_read(fp_cid, fp_cid->f_pos, &cid_buf, sizeof(cid_buf)); 
+	if (!IS_ERR(fp_cid)) {
+		kernel_read(fp_cid, fp_cid->f_pos, (char*) cid_buf, sizeof(cid_buf));
 		if(strstr(cid_buf,"samsung")||strstr(cid_buf,"murata")) {
 		/* file does exist, just return */
 		filp_close(fp_cid, NULL);

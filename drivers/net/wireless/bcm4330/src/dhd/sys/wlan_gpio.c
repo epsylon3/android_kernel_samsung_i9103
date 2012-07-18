@@ -8,7 +8,7 @@
 #include <dngl_stats.h>
 #include <dhd.h>
 
-extern void tegra_sdhci_force_presence_change();
+extern void tegra_sdhci_force_presence_change(void);
 extern int n1_wifi_power(int on);
 
 //this is called by exit()
