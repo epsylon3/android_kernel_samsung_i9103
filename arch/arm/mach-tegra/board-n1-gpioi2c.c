@@ -814,6 +814,7 @@ static struct i2c_board_info sec_gpio_i2c12_info[] = {
 };
 #endif
 
+#ifdef CONFIG_MHL_SII9234
 static struct i2c_board_info sec_gpio_i2c13_info[] = {
 };
 
@@ -831,8 +832,7 @@ static struct i2c_board_info sec_gpio_i2c14_info[] = {
 		I2C_BOARD_INFO("SII9234C", 0xC8>>1),
 	},
 };
-
-
+#endif
 
 static void nct1008_temp_register_callbacks(
 		struct nct1008_temp_callbacks *ptr)

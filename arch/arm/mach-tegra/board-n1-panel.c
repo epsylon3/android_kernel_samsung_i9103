@@ -42,18 +42,17 @@
 
 #define n1_ld9040 0
 
-/* TODO: find GPIO for hdmi */
-/*#define n1_hdmi_hpd	TEGRA_GPIO_PN7*/
-/*#define n1_hdmi_enb	TEGRA_GPIO_PV5*/
+#ifdef CONFIG_MHL_SII9234
 
-#if 0
+/* TODO: check GPIO for hdmi */
+#define n1_hdmi_hpd	TEGRA_GPIO_PN7
+#define n1_hdmi_enb	TEGRA_GPIO_PV5
+
 static struct regulator *n1_hdmi_reg = NULL;
 static struct regulator *n1_hdmi_pll = NULL;
-#endif
 
 static int n1_hdmi_enable(void)
 {
-#if 0
 	if (!n1_hdmi_reg) {
 		n1_hdmi_reg = regulator_get(NULL, "AVDD_HDMI_3V3");
 		if (IS_ERR_OR_NULL(n1_hdmi_reg)) {
@@ -75,19 +74,17 @@ static int n1_hdmi_enable(void)
 		}
 	}
 	regulator_enable(n1_hdmi_pll);
-#endif
 	return 0;
 }
 
 static int n1_hdmi_disable(void)
 {
-#if 0
 	regulator_disable(n1_hdmi_reg);
 	regulator_disable(n1_hdmi_pll);
-#endif
 
 	return 0;
 }
+#endif
 
 static struct resource n1_disp1_resources[] = {
 	{
@@ -107,7 +104,7 @@ static struct resource n1_disp1_resources[] = {
 		.flags	= IORESOURCE_MEM,
 	},
 };
-/*
+#ifdef CONFIG_MHL_SII9234
 static struct resource n1_disp2_resources[] = {
 	{
 		.name	= "irq",
@@ -132,7 +129,7 @@ static struct resource n1_disp2_resources[] = {
 		.flags	= IORESOURCE_MEM,
 	},
 };
-*/
+#endif
 
 #if n1_ld9040
 static struct tegra_dc_mode n1_panel_modes[] = {
@@ -177,14 +174,14 @@ static struct tegra_fb_data n1_fb_data = {
 	.bits_per_pixel	= 32,
 };
 
-/*
+#ifdef CONFIG_MHL_SII9234
 static struct tegra_fb_data n1_hdmi_fb_data = {
 	.win		= 0,
-	.xres		= 480,
-	.yres		= 800,
-	.bits_per_pixel	= 32,
+	.xres		= 720,
+	.yres		= 1280,
+	.bits_per_pixel	= 16,
 };
-*/
+#endif
 	
 #if n1_ld9040
 static struct tegra_dc_out_pin n1_dc_out_pins[] = {
@@ -239,7 +236,7 @@ static struct tegra_dc_out n1_disp1_out = {
 	.n_out_pins	= ARRAY_SIZE(n1_dc_out_pins),
 };
 
-/*
+#ifdef CONFIG_MHL_SII9234
 static struct tegra_dc_out n1_disp2_out = {
 	.type		= TEGRA_DC_OUT_HDMI,
 	.flags		= TEGRA_DC_OUT_HOTPLUG_HIGH,
@@ -253,7 +250,7 @@ static struct tegra_dc_out n1_disp2_out = {
 	.enable		= n1_hdmi_enable,
 	.disable	= n1_hdmi_disable,
 };
-*/
+#endif
 
 static struct tegra_dc_platform_data n1_disp1_pdata = {
 	.flags		= TEGRA_DC_FLAG_ENABLED,
@@ -261,13 +258,13 @@ static struct tegra_dc_platform_data n1_disp1_pdata = {
 	.fb		= &n1_fb_data,
 };
 
-/*
+#ifdef CONFIG_MHL_SII9234
 static struct tegra_dc_platform_data n1_disp2_pdata = {
 	.flags		= 0,
 	.default_out	= &n1_disp2_out,
 	.fb		= &n1_hdmi_fb_data,
 };
-*/
+#endif
 
 static struct nvhost_device n1_disp1_device = {
 	.name		= "tegradc",
@@ -279,7 +276,7 @@ static struct nvhost_device n1_disp1_device = {
 	},
 };
 
-/*
+#ifdef CONFIG_MHL_SII9234
 static struct nvhost_device n1_disp2_device = {
 	.name		= "tegradc",
 	.id		= 1,
@@ -289,7 +286,7 @@ static struct nvhost_device n1_disp2_device = {
 		.platform_data = &n1_disp2_pdata,
 	},
 };
-*/
+#endif
 
 static struct nvmap_platform_carveout n1_carveouts[] = {
 	[0] = {
@@ -397,14 +394,16 @@ int __init n1_panel_init(void)
 	int err;
 	struct resource *res;
 
-/*	tegra_gpio_enable(n1_hdmi_enb);
+#ifdef CONFIG_MHL_SII9234
+	tegra_gpio_enable(n1_hdmi_enb);
 	gpio_request(n1_hdmi_enb, "hdmi_5v_en");
 	gpio_direction_output(n1_hdmi_enb, 1);
 
 	tegra_gpio_enable(n1_hdmi_hpd);
 	gpio_request(n1_hdmi_hpd, "hdmi_hpd");
 	gpio_direction_input(n1_hdmi_hpd);
-*/
+#endif
+
 	n1_carveouts[1].base = tegra_carveout_start;
 	n1_carveouts[1].size = tegra_carveout_size;
 
@@ -423,19 +422,20 @@ int __init n1_panel_init(void)
 	res->start = tegra_fb_start;
 	res->end = tegra_fb_start + tegra_fb_size - 1;
 
-/*	res = nvhost_get_resource_byname(&n1_disp2_device,
+#ifdef CONFIG_MHL_SII9234
+	res = nvhost_get_resource_byname(&n1_disp2_device,
 		IORESOURCE_MEM, "fbmem");
 	res->start = tegra_fb2_start;
 	res->end = tegra_fb2_start + tegra_fb2_size - 1;
-*/
+#endif
 	spi_register_board_info(n1_spi_device2, ARRAY_SIZE(n1_spi_device2));
 
 	if (!err)
 		err = nvhost_device_register(&n1_disp1_device);
 
-/*	if (!err)
-		err = nvhost_device_register(&n1_disp2_device);
-*/
+#ifdef CONFIG_MHL_SII9234
+	nvhost_device_register(&n1_disp2_device);
+#endif
 	return err;
 }
 
