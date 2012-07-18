@@ -3344,9 +3344,9 @@ static ssize_t key_led_store(struct device *dev, struct device_attribute *attr,
 			     const char *buf, size_t size)
 {
 	struct mxt_data *mxt = dev_get_drvdata(dev);
-	u32 i = 0;
+	int i = 0;
 
-	if (sscanf(buf, "%u", &i) < 1) {
+	if (sscanf(buf, "%d", &i) < 1) {
 		pr_err("[TSP] keyled write error\n");
 	}
 
@@ -3354,10 +3354,11 @@ static ssize_t key_led_store(struct device *dev, struct device_attribute *attr,
 		return -EIO;
 	}
 
-	key_led_on(mxt, i);
+	key_led_on(mxt, (u32) i);
 	key_led_status = (i != 0);
-	if (mxt->mxt_status) {
-		pr_notice("[TSP] Button backlight set with screen off = %d\n", i);
+
+	if (!mxt->mxt_status) {
+		pr_info("[TSP] Button backlight set with screen off = %d\n", i);
 	}
 	else if (debug > DEBUG_INFO) {
 		pr_info("[TSP] Button backligh set by HAL = %d\n", i);
