@@ -13,6 +13,8 @@
 #include <linux/mfd/wm8994/wm8994_pdata.h>
 #include <mach/tegra_das.h>
 
+#define AUDIO_COMMON_DEBUG 1
+
 extern struct snd_soc_codec_device soc_codec_dev_wm8994;
 
 /* Sources for AIF1/2 SYSCLK - use with set_dai_sysclk() */
@@ -32,8 +34,6 @@ extern struct snd_soc_dai wm8994_dai;
 
 #define WM8994_SYSCLK_MCLK     1
 #define WM8994_SYSCLK_FLL      2
-
-#define AUDIO_COMMON_DEBUG	1
 
 #define WM8994_FACTORY_LOOPBACK
 
@@ -248,10 +248,13 @@ struct gain_info_t {
 	unsigned short gain;
 };
 
-#if AUDIO_COMMON_DEBUG
+#if AUDIO_COMMON_DEBUG > 1
 #define DEBUG_LOG(format, ...)\
 	printk(KERN_INFO "[ "SUBJECT " (%s,%d) ] " format "\n", \
 			__func__, __LINE__, ## __VA_ARGS__);
+#elif AUDIO_COMMON_DEBUG
+#define DEBUG_LOG(format, ...)\
+	printk(KERN_INFO SUBJECT": "format"\n", ## __VA_ARGS__);
 #else
 #define DEBUG_LOG(format, ...)
 #endif

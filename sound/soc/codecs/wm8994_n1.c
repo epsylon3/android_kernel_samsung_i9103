@@ -22,7 +22,7 @@
 /*
  * Debug Feature
  */
-#define SUBJECT "wm8994_n1.c"
+#define SUBJECT "wm8994_n1"
 
 /*
  * Definitions of tunning volumes for wm8994

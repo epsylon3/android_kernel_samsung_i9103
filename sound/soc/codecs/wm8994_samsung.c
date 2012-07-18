@@ -41,7 +41,7 @@
 #include <linux/timer.h>
 
 #define WM8994_VERSION "0.1"
-#define SUBJECT "wm8994_samsung.c"
+#define SUBJECT "wm8994_samsung"
 
 #if defined(CONFIG_VIDEO_TV20) && defined(CONFIG_SND_S5P_WM8994_MASTER)
 #define HDMI_USE_AUDIO

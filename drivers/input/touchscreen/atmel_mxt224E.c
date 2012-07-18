@@ -3696,7 +3696,7 @@ static void check_chip_channel(struct mxt_data *mxt)
 	struct i2c_client *client;
 
 	client = mxt->client;
-	if (debug >= DEBUG_INFO)
+	if (debug > DEBUG_INFO)
 		pr_info("[TSP] %s\n", __func__);
 
 	/* we have had the first touchscreen or face suppression message 
@@ -3726,7 +3726,7 @@ static void check_chip_channel(struct mxt_data *mxt)
 			pr_err("[TSP] Diagnostic Data did not update!!\n");
 				break;
 		}
-		msleep(2); 
+		msleep(4);
 		try_ctr++; /* timeout counter */
 		/* read_mem(diag_address, 2,data_buffer); */
 		mxt_read_block(client, diag_address, 2, data_buffer);
@@ -4043,8 +4043,9 @@ static void check_chip_calibration(struct mxt_data *mxt)
 static void cal_maybe_good(struct mxt_data *mxt)
 {
 	int ret;
-	if (debug >= DEBUG_INFO)
+	if (debug > DEBUG_INFO)
 		pr_info("[TSP] %s\n", __func__);
+
 	/* Check if the timer is enabled */
 	if (mxt_time_point != 0) {
 		/* Check if the timer timedout of 0.3seconds */

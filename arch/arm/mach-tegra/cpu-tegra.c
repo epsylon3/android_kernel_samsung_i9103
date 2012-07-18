@@ -343,9 +343,10 @@ void tegra_cpu_lock_speed(int min_rate, int timeout_ms)
 	}
 
 	mutex_lock(&tegra_cpulock_lock);
-
+#ifdef CONFIG_CPU_FREQ_DEBUG
 	printk(KERN_DEBUG "%s: min_rate(%d),timeout(%d)\n",
 	       __func__, min_rate, timeout_ms);
+#endif
 	cpulock_freq = min_rate;
 	is_cpufreq_locked = true;
 	tegra_update_cpu_speed(tegra_getspeed(0));
@@ -376,8 +377,9 @@ static enum hrtimer_restart tegra_cpulock_timer_func(struct hrtimer *timer)
 {
 	cpulock_freq = 0;
 	is_cpufreq_locked = false;
+#ifdef CONFIG_CPU_FREQ_DEBUG
 	printk(KERN_DEBUG "%s is called\n", __func__);
-
+#endif
 	return HRTIMER_NORESTART;
 }
 #endif /* CONFIG_TEGRA_CPU_FREQ_LOCK */
