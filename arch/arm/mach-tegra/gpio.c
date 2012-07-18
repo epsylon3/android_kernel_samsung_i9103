@@ -276,7 +276,7 @@ static void tegra_gpio_irq_handler(unsigned int irq, struct irq_desc *desc)
 #define GPIO_LEVEL_LOW		0
 #define GPIO_LEVEL_NONE		(-1)
 
-typedef struct sec_gpio_cfg_st {
+struct sec_gpio_cfg_st {
 	int slp_ctrl;
 	unsigned int gpio;
 	int dir;
@@ -470,7 +470,7 @@ void tegra_reconfig_sfio_sleep(void)
 	}
 }
 
-typedef struct sec_init_gpio_cfg_st {
+struct sec_init_gpio_cfg_st {
 	int attr;
 	unsigned int gpio;
 	int dir;

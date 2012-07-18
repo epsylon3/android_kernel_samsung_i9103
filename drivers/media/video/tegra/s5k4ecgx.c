@@ -514,10 +514,11 @@ static int s5k4ecgx_read_reg(struct i2c_client *client, u16 val, u8 *r_data, u16
 static int s5k4ecgx_check_vender(struct s5k4ecgx_info *info)
 {
 	int err;
+/*
 	struct i2c_msg msg[2];
 	unsigned char data[2];
 	u8 r_data[2] = {0, 0};
-
+*/
 	FUNC_ENTR;
 
 	if (!info->i2c_client->adapter)
@@ -5762,11 +5763,11 @@ static DEVICE_ATTR(camtype, 0660, camtype_file_cmd_show, camtype_file_cmd_store)
 
 static int s5k4ecgx_open(struct inode *inode, struct file *file)
 {
+	int err = -1;
 	struct s5k4ecgx_info * pinfo;
 	file->private_data = info;
 	//struct s5k4ecgx_info * pinfo = (struct s5k4ecgx_info *)file->private_data;
 	pinfo = (struct s5k4ecgx_info *)file->private_data;
-	int err = -1;
 
 	FUNC_ENTR;
 

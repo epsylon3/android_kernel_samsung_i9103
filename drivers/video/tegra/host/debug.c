@@ -106,7 +106,7 @@ static void nvhost_debug_handle_word(struct seq_file *s, int *state, int *count,
 	switch (*state) {
 	case NVHOST_DBG_STATE_CMD:
 		if (addr)
-			seq_printf(s, "%d: %08lx: %08x:", channel, addr, val);
+			seq_printf(s, "%d: %08x: %08x:", channel, addr, val);
 		else
 			seq_printf(s, "%d: %08x:", channel, val);
 

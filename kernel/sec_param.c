@@ -28,13 +28,14 @@ sec_param_data *param_data = NULL;
 #if 1
 static bool misc_sec_operation(void *value, int offset, int size, int direction)
 {
-	printk("%s %p %x %d %d\n", __func__, value, offset, size, direction);
 	/* Read from MSC(misc) partition  */
-	struct file *filp;
+	struct file *filp = NULL;
 	mm_segment_t fs;
 	int ret = true;
 	int flag = (direction == MISC_WR) ? O_WRONLY : O_RDONLY;
 	int fd;
+
+	pr_notice("%s: %p %x %d %d\n", __func__, value, offset, size, direction);
 
 	fs = get_fs();
 	set_fs(KERNEL_DS);
@@ -47,7 +48,7 @@ static bool misc_sec_operation(void *value, int offset, int size, int direction)
 
 	filp = fget(fd);
 	if ( !filp ) {
-		printk(KERN_INFO "failed to fget(flag)\n");
+		pr_info("failed to fget(flag)\n");
 		return 0;
 	}
 
@@ -70,7 +71,7 @@ misc_sec_debug_out:
 	sys_close(fd);
 	set_fs(fs);
 
-	printk("%s -\n", __func__);
+	pr_debug("%s ret = %d\n", __func__, ret);
 
 	return ret;
 }
