@@ -34,7 +34,7 @@
 #define TSP_BOOST
 
 #define KEY_LED_CONTROL
-#define KEY_LED_TOUCH_OFF 1
+#define KEY_LED_TOUCH_OFF 0 /* this force lights off on menu key touch */
 
 #define TS_100S_TIMER_INTERVAL 1
 
@@ -1441,7 +1441,7 @@ void process_T15_message(u8 *message, struct mxt_data *mxt)
 				pr_info("[TSP_KEY] P %s\n", tsp_2keyname[tsp_keystatus - 1]);
 #endif
 #ifdef KEY_LED_CONTROL
-			if (KEY_LED_TOUCH_OFF || mxt->pdata->board_rev <= 9 || mxt->pdata->board_rev >= 13) {
+			if (KEY_LED_TOUCH_OFF || mxt->pdata->board_rev <= 9) {
 				if (key_led_status) {
 					key_led_on(mxt, tsp_2key_led_ctrl[tsp_keystatus-1]);
 				}
@@ -1465,7 +1465,7 @@ void process_T15_message(u8 *message, struct mxt_data *mxt)
 				pr_info("[TSP_KEY] r %s\n", tsp_2keyname[tsp_keystatus - 1]);
 #endif
 #ifdef KEY_LED_CONTROL
-			if (KEY_LED_TOUCH_OFF || mxt->pdata->board_rev <= 9 || mxt->pdata->board_rev >= 13) {
+			if (KEY_LED_TOUCH_OFF || mxt->pdata->board_rev <= 9) {
 				if (key_led_status) {
 					key_led_on(mxt, 0xFF);
 				}
