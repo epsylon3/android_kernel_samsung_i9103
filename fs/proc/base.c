@@ -812,8 +812,7 @@ static ssize_t mem_read(struct file * file, char __user * buf,
 	ret = 0;
  
 	while (count > 0) {
-		int retval;
-
+		int retval = (count > PAGE_SIZE) ? PAGE_SIZE : count;
 		if (copy_to_user(buf, page, retval)) {
 			ret = -EFAULT;
 			break;
