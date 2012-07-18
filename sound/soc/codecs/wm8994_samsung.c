@@ -373,7 +373,6 @@ static int wm8994_set_loopback_path(struct snd_kcontrol *kcontrol, struct snd_ct
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
 	struct wm8994_priv *wm8994 = codec->drvdata;
 	struct soc_enum *mc = (struct soc_enum *)kcontrol->private_value;
-	int val;
 	int path_num = ucontrol->value.integer.value[0];
 	wm8994->loopback_path_control = path_num;
 
@@ -3753,7 +3752,7 @@ static int wm8994_readable_register(unsigned int reg)
 	return access_masks[reg].readable != 0;
 }
 
-int Is_call_active()
+int Is_call_active(void)
 {
 	int ret = 0;
 	struct snd_soc_codec *codec = wm8994_codec;
@@ -3958,7 +3957,7 @@ static int wm8994_i2c_probe(struct i2c_client *i2c,
 
 err_init:
 	gpio_free(pdata->ldo);
-err_ldo:
+//err_ldo:
 err_bad_pdata:
 	kfree(wm8994_priv);
 	codec->drvdata = 0;
@@ -4067,12 +4066,18 @@ static int wm8994_probe(struct platform_device *pdev)
 		DEBUG_LOG_ERR("failed to create pcms");
 
 #if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)
-	if (setup->i2c_address)
+	if (setup->i2c_address) {
 		ret = wm8994_add_i2c_device(pdev, setup);
+		if (ret < 0)
+			DEBUG_LOG_ERR("failed to add i2c device");
+	}
 #else
 	/* Add other interfaces here */
 #endif
-	device_create_file(&(pdev->dev), &dev_attr_wm8994_test);
+	ret = device_create_file(&(pdev->dev), &dev_attr_wm8994_test);
+	if (ret < 0)
+		DEBUG_LOG_ERR("failed to create device attribute");
+
 	init_timer(&jack_change_timer);
 	jack_change_timer.function = jack_change_timer_handler;
 	return ret;

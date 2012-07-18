@@ -120,21 +120,22 @@ static int max8907c_poewer_vchg_r_f_cb(int vchg_on)
 	struct power_supply *psy = power_supply_get_by_name("battery");
 	union power_supply_propval value;
 
-	if (vchg_on ) {
+	if (vchg_on) {
 		set_cable_status = CABLE_TYPE_AC;
 		value.intval = POWER_SUPPLY_TYPE_MAINS;
-	}else {
+	} else {
 		set_cable_status = CABLE_TYPE_NONE;
 		value.intval = POWER_SUPPLY_TYPE_BATTERY;
-	}	
+	}
 
 	if (!psy) {
 		pr_err("%s: fail to get battery ps\n", __func__);
-		return ;
+		return -ENODEV;
 	}
 
 	psy->set_property(psy, POWER_SUPPLY_PROP_ONLINE, &value);
-}	
+	return 0;
+}
 
 static int max8907c_power_topoff_cb(void)
 {
@@ -167,6 +168,7 @@ static struct pda_power_pdata n1_pda_data = {
 	.set_charge	= set_charge,
 };
 
+#if 0
 static struct platform_device n1_pda_power_device = {
 	.name		= "pda-power",
 	.id		= -1,
@@ -176,12 +178,13 @@ static struct platform_device n1_pda_power_device = {
 		.platform_data	= &n1_pda_data,
 	},
 };
+#endif
 
 static struct max8907c_charger_pdata n1_charger_pdata = {
-	.irq 			= INT_EXTERNAL_PMU,
-    .topoff_cb = max8907c_power_topoff_cb,
-    .vchg_f_cb = max8907c_power_vchg_f_cb,
-    .vchg_r_f_cb = max8907c_poewer_vchg_r_f_cb, /* FACTORY TEST BINARY */
+	.irq			= INT_EXTERNAL_PMU,
+	.topoff_cb		= max8907c_power_topoff_cb,
+	.vchg_f_cb		= max8907c_power_vchg_f_cb,
+	.vchg_r_f_cb		= max8907c_poewer_vchg_r_f_cb, /* FACTORY TEST BINARY */
 	.topoff_threshold	= MAX8907C_TOPOFF_20PERCENT,
 	.restart_hysteresis	= MAX8907C_RESTART_100MV,
 	.fast_charging_current	= MAX8907C_FASTCHARGE_460MA,
@@ -458,6 +461,7 @@ int __init n1_regulator_init(void)
 	i2c_register_board_info(4, n1_regulators, ARRAY_SIZE(n1_regulators));
 
 #ifdef CONFIG_SAMSUNG_LPM_MODE
+{
 	extern int charging_mode_from_boot;
 
 	if (!charging_mode_from_boot) {
@@ -465,6 +469,7 @@ int __init n1_regulator_init(void)
 		n1_suspend_data.wake_low |= TEGRA_WAKE_GPIO_PW2;
 		n1_suspend_data.wake_any |= (TEGRA_WAKE_GPIO_PV2 | TEGRA_WAKE_GPIO_PW3 | TEGRA_WAKE_GPIO_PV3);
 	}
+}
 #else
 	n1_suspend_data.wake_enb |= (TEGRA_WAKE_GPIO_PW2 | TEGRA_WAKE_GPIO_PV2 | TEGRA_WAKE_GPIO_PW3 | TEGRA_WAKE_GPIO_PV3);
 	n1_suspend_data.wake_low |= TEGRA_WAKE_GPIO_PW2;

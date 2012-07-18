@@ -289,7 +289,7 @@ static ssize_t kxtf9_get_data(struct device *dev,
 	if (err != sizeof(acc_data)) {
 		pr_err("%s : failed to read %d bytes for getting x/y/z\n",
 			__func__, sizeof(acc_data));
-		return;
+		return -EIO;
 	}
 
 	temp = ((acc_data[1] << 4) | (acc_data[0] >> 4));

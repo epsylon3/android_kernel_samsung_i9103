@@ -87,13 +87,13 @@ EXPORT_SYMBOL(notify_control_line_state);
 #define GS_CDC_NOTIFY_SERIAL_STATE	_IOW('S', 1, int)
 #define GS_IOC_NOTIFY_DTR_TEST		_IOW('S', 3, int)
 
-static int 
+static long
 modem_ioctl (/*struct inode *inode,*/ struct file *file, unsigned int  cmd,unsigned long arg)
 {
-	printk("modem_ioctl: cmd=0x%x, arg=%lu\n", cmd, arg);
+	pr_debug("modem_ioctl: cmd=0x%x, arg=%lu\n", cmd, arg);
 
 	/* handle ioctls */
-	switch (cmd) 
+	switch (cmd)
 	{
 		case GS_CDC_NOTIFY_SERIAL_STATE:
 			acm_notify(acm_data, __constant_cpu_to_le16(arg));
@@ -105,7 +105,7 @@ modem_ioctl (/*struct inode *inode,*/ struct file *file, unsigned int  cmd,unsig
 			notify_control_line_state((int)arg);
 			break;
 			}
-		
+
 		default:
 			printk("modem_ioctl: Unknown ioctl cmd(0x%x).\n", cmd);
 			return -ENOIOCTLCMD;
@@ -121,7 +121,7 @@ static struct file_operations modem_fops = {
 	.read 		= modem_read,
 	.poll 		= modem_poll,
 	.llseek 	= no_llseek,
-	.unlocked_ioctl		= modem_ioctl,
+	.unlocked_ioctl	= modem_ioctl,
 };
 
 static struct miscdevice modem_device = {

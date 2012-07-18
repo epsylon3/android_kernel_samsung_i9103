@@ -277,7 +277,7 @@ static void sec_bat_alarm(struct alarm *alarm)
 	struct sec_bat_info *info = container_of(alarm, struct sec_bat_info,
 			wakeup_alarm);
 
-	printk("%s\n", __func__);
+	pr_debug("%s\n", __func__);
 	wake_lock(&info->monitor_wake_lock);
 	queue_work(info->monitor_wqueue, &info->monitor_work);
 }
@@ -288,7 +288,7 @@ static void sec_program_alarm(struct sec_bat_info *info, int seconds)
 	ktime_t slack = ktime_set(20, 0);
 	ktime_t next;
 
-	printk("%s \n", __func__);
+	pr_debug("%s\n", __func__);
 	next = ktime_add(info->last_poll, low_interval);
 	alarm_start_range(&info->wakeup_alarm, next, ktime_add(next, slack));
 }
@@ -334,13 +334,14 @@ static int sec_bat_get_temp(struct sec_bat_info *info)
 	int temp = info->batt_temp;
 	int temp_adc = sec_bat_read_temp(info);
 	int health = info->batt_health;
-	int low = 0;
-	int high = info->adc_arr_size - 1;
-	int mid = 0;
 
 #ifdef CONFIG_SENSORS_NCT1008
 	temp = temp_adc;
 #else
+	int low = 0;
+	int high = info->adc_arr_size - 1;
+	int mid = 0;
+
 	if (!info->adc_table || !info->adc_arr_size) {
 		/* using fake temp*/
 		info->batt_temp = 250;
@@ -422,7 +423,7 @@ static void sec_bat_update_info(struct sec_bat_info *info)
 
 	if (!psy_main &&  !psy_sub) {
 		dev_err(info->dev, "%s: fail to get charger ps\n", __func__);
-		return -ENODEV;
+		return;
 	}
 
 	info->batt_soc = sec_bat_get_fuelgauge_data(info, FG_T_SOC);
@@ -682,7 +683,7 @@ static void sec_bat_check_vf(struct sec_bat_info *info)
 
 	if (!psy) {
 		dev_err(info->dev, "%s: fail to get charger ps\n", __func__);
-		return -ENODEV;
+		return;
 	}
 
 	/* first vf check */
@@ -1129,7 +1130,7 @@ static ssize_t sec_bat_show_property(struct device *dev,
 	return i;
 }
 
-extern void max17043_reset_soc();
+extern void max17043_reset_soc(void);
 
 static ssize_t sec_bat_store(struct device *dev,
 			     struct device_attribute *attr,
@@ -1449,7 +1450,7 @@ static int sec_bat_suspend(struct device *dev)
 	return 0;
 }
 
-static int sec_bat_resume(struct device *dev)
+static void sec_bat_resume(struct device *dev)
 {
 	struct sec_bat_info *info = dev_get_drvdata(dev);
 
@@ -1460,8 +1461,6 @@ static int sec_bat_resume(struct device *dev)
 
 	wake_lock(&info->monitor_wake_lock);
 	queue_work(info->monitor_wqueue, &info->monitor_work);
-
-	return 0;
 }
 
 static const struct dev_pm_ops sec_bat_pm_ops = {

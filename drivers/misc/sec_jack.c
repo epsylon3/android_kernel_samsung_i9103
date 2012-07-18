@@ -119,7 +119,7 @@ static struct gpio_event_platform_data sec_jack_input_data = {
 };
 
 #ifndef CONFIG_MACH_BOSE_ATT
-int sec_jack_detect_on_buttons_filter(struct work_struct *work);
+void sec_jack_detect_on_buttons_filter(struct work_struct *work);
 #endif
 
 /* gpio_input driver does not support to read adc value.
@@ -205,8 +205,6 @@ extern void wm8994_jack_changed(void);
 
 static void sec_jack_set_type(struct sec_jack_info *hi, int jack_type)
 {
-	struct sec_jack_platform_data *pdata = hi->pdata;
-
 	/* this can happen during slow inserts where we think we identified
 	 * the type but then we get another interrupt and do it again
 	 */
@@ -229,9 +227,12 @@ static void sec_jack_set_type(struct sec_jack_info *hi, int jack_type)
 			platform_device_unregister(hi->send_key_dev);
 			hi->send_key_dev = NULL;
 		}
-		/* micbias is left enabled for 4pole and disabled otherwise */
 #ifdef CONFIG_MACH_BOSE_ATT
-		pdata->set_micbias_state(false);
+		/* micbias is left enabled for 4pole and disabled otherwise */
+		{
+			struct sec_jack_platform_data *pdata = hi->pdata;
+			pdata->set_micbias_state(false);
+		}
 #endif
 	}
 
@@ -457,14 +458,13 @@ void sec_jack_buttons_work(struct work_struct *work)
 }
 
 #ifndef CONFIG_MACH_BOSE_ATT
-int sec_jack_detect_on_buttons_filter(struct work_struct *work)
+void sec_jack_detect_on_buttons_filter(struct work_struct *work)
 {
 	struct sec_jack_info *hi = container_of(work, struct sec_jack_info, buttons_work_det);
 	if (gpio_get_value(hi->pdata->det_gpio) && hi->cur_jack_type) {
 		pr_info("%s : headset removed\n", __func__);
 		determine_jack_type(hi);
 	}
-	return 1;
 }
 #endif
 
@@ -660,9 +660,9 @@ static int sec_jack_remove(struct platform_device *pdev)
 }
 
 #ifndef CONFIG_MACH_BOSE_ATT
-static int sec_jack_suspend(struct platform_device *pdev)
+static int sec_jack_suspend(struct platform_device *pdev, pm_message_t state)
 {
-	struct sec_jack_info *hi = dev_get_drvdata(&pdev->dev);
+//	struct sec_jack_info *hi = dev_get_drvdata(&pdev->dev);
 
 	return 0;
 }

@@ -132,10 +132,10 @@ static void tegra_sdhci_set_clock(struct sdhci_host *sdhci, unsigned int clock)
 }
 
 #ifdef CONFIG_MACH_N1
-void tegra_sdhci_force_presence_change()
+void tegra_sdhci_force_presence_change(void)
 {
 	struct tegra_sdhci_host *host = platform_get_drvdata (tegra_sdhci_device0_ptr);
-	printk ("*************INto function %s*****************\n", __func__);
+	pr_debug("*************INto function %s*****************\n", __func__);
 
 //	struct tegra_sdio_platform_data *pdata = tegra_wlan_pdevice->dev.platform_data;
 	//printk("%s:tegra_wlan_pdevice->name %s  tegra_wlan_pdevice->id %d\n",__func__, tegra_sdhci_device0_ptr->name, tegra_sdhci_device0_ptr->id);
@@ -143,11 +143,11 @@ void tegra_sdhci_force_presence_change()
 	//sdhci_card_detect_callback(sdhost);
 	if (host->sdhci && host->sdhci->mmc){
 		host->sdhci->mmc->pm_flags |= MMC_PM_KEEP_POWER;
-		mmc_detect_change(host->sdhci->mmc,msecs_to_jiffies(0));
+		mmc_detect_change(host->sdhci->mmc, msecs_to_jiffies(0));
 		msleep(200);
 	}
 	else
-		printk ("Invalid pointers %x\n",host);
+		pr_warning("%s: Invalid pointer %p\n", __func__, host);
 }
 EXPORT_SYMBOL(tegra_sdhci_force_presence_change);
 #endif

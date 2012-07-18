@@ -98,10 +98,10 @@ struct sain_touch_platform_data {
 
 /* 0xF0  */
 #define	SAIN_INT_ENABLE_FLAG		0xf0
-/*--------------------------------------------------------------------- */
 
-/* Interrupt & status register flag bit
-/*------------------------------------------------- */
+/*-------------------------------------------------
+ * Interrupt & status register flag bit
+ *------------------------------------------------- */
 #define	BIT_PT_CNT_CHANGE			0
 #define	BIT_DOWN				1
 #define	BIT_MOVE				2

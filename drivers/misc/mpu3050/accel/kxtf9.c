@@ -592,7 +592,6 @@ static int kxtf9_read(void *mlsl_handle,
 		      unsigned char *data)
 {
 	int result;
-	unsigned char reg;
 	int x,y,z;
 
 	result = MLSLSerialRead(mlsl_handle, pdata->address,

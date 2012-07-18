@@ -1437,8 +1437,6 @@ void tegra_usb_phy_postresume(struct tegra_usb_phy *phy)
 		uhsic_phy_postresume(phy);
 	else if (!phy_is_ulpi(phy))
 		utmi_phy_postresume(phy);
-
-	return 0;
 }
 
 void tegra_ehci_phy_restore_start(struct tegra_usb_phy *phy,

@@ -21,7 +21,7 @@
 
 /* i2s controller */
 
-static void *das_base = IO_ADDRESS(TEGRA_APB_MISC_BASE);
+// static void *das_base = IO_ADDRESS(TEGRA_APB_MISC_BASE);
 
 struct tegra_i2s_info {
 	struct platform_device *pdev;

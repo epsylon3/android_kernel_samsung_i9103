@@ -1387,7 +1387,6 @@ static int s5k6aafx_set_capture_mode
 
 static int s5k6aafx_get_exif_info(struct s5k6aafx_info *info, struct s5k6aafx_exif_info *exifinfo)
 {
-	int i;
 	u8 shutter_data0[2] = {0,0};
 	u8 shutter_data1[2] = {0,0};
 	int shutter_for_exif = 0, shutter_exif0 = 0, shutter_exif1 = 0;
@@ -1397,7 +1396,9 @@ static int s5k6aafx_get_exif_info(struct s5k6aafx_info *info, struct s5k6aafx_ex
 	int iso_value = 0;
 	int iso_for_exif = 0, iso_exif = 0;
 	static char str_iso_value[8];
-	
+
+#ifdef CONFIG_MACH_BOSE_ATT
+	int i;
 	/* standard values */
 	u16 iso_std_values[] = { 10, 12, 16, 20, 25, 32, 40, 50, 64, 80,
 		100, 125, 160, 200, 250, 320, 400, 500, 640, 800,
@@ -1406,7 +1407,7 @@ static int s5k6aafx_get_exif_info(struct s5k6aafx_info *info, struct s5k6aafx_ex
 	u16 iso_qtable[] = { 11, 14, 17, 22, 28, 35, 44, 56, 71, 89,
 		112, 141, 178, 224, 282, 356, 449, 565, 712, 890,
 		1122, 1414, 1782, 2245, 2828, 3564, 4490, 5657, 7127, 8909};
-	
+#endif
 	FUNC_ENTR;
 
 	/* get shutter speed(exposure time) for exif */

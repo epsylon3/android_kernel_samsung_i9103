@@ -66,6 +66,7 @@ static void dump_address(unsigned int Add, unsigned int data_size)
     }
 }
 
+#if 0
 static void debug_registers(void)
 {
     dump_address(0xc8000000, 0x200);
@@ -92,7 +93,7 @@ static void verify_readwrite_registers(struct sdhci_host *host)
 	printk(" sys_address = 0x%x, blk_size = 0x%x \n", sys_address, blk_size);
 
 }
-
+#endif
 
 void sdhci_dumpregs(struct sdhci_host *host)
 {

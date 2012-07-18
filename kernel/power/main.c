@@ -45,7 +45,7 @@ int pm_notifier_call_chain(unsigned long val)
 	int nr_calls = 0;
 	ret = __blocking_notifier_call_chain(&pm_chain_head, val, NULL, -1, &nr_calls);
 	if ((ret & NOTIFY_STOP_MASK) == NOTIFY_STOP_MASK) {
-		pr_notice("pm notifier call chain(%d) might be stopped by returning 0x%x in %dth callback\n", val, ret, nr_calls);
+		pr_notice("pm notifier call chain(%lu) might be stopped by returning 0x%x in %dth callback\n", val, ret, nr_calls);
 		if (val == PM_POST_SUSPEND) {
 			/* notifier call chain for PM_POST_SUSPEND never be stopped. */
 			/* insert here strong debug routine */

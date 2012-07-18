@@ -28,7 +28,7 @@ sec_param_data *param_data = NULL;
 #if 1
 static bool misc_sec_operation(void *value, int offset, int size, int direction)
 {
-	printk("%s %x %x %d %d\n", __func__, value, offset, size, direction);
+	printk("%s %p %x %d %d\n", __func__, value, offset, size, direction);
 	/* Read from MSC(misc) partition  */
 	struct file *filp;
 	mm_segment_t fs;
@@ -96,15 +96,15 @@ bool sec_open_param(void)
 
 #if 1
 	printk("************* PARAM ***************\n");
-	printk("signature : 0x%x\n", param_data->signature);
-	printk("size : 0x%x\n", param_data->size);
-	printk("oemlock : 0x%x\n", param_data->oemlock);
-	printk("sud : 0x%x\n", param_data->sud);
-	printk("secure : 0x%x\n", param_data->secure);
+	printk("signature   : 0x%x\n", param_data->signature);
+	printk("size        : 0x%x\n", param_data->size);
+	printk("oemlock     : 0x%x\n", param_data->oemlock);
+	printk("sud         : 0x%x\n", param_data->sud);
+	printk("secure      : 0x%x\n", param_data->secure);
 	printk("fusetrigger : 0x%x\n", param_data->fusetrigger);
-	printk("debuglevel : 0x%x\n", param_data->debuglevel);
-	printk("uartsel : 0x%x\n", param_data->uartsel);
-	printk("usbsel : 0x%x\n", param_data->usbsel);
+	printk("debuglevel  : 0x%x\n", param_data->debuglevel);
+	printk("uartsel     : 0x%x\n", param_data->uartsel);
+	printk("usbsel      : 0x%x\n", param_data->usbsel);
 	printk("************* PARAM ***************\n");
 #endif
 
@@ -162,10 +162,10 @@ bool sec_set_param(sec_param_index index, void *value)
 {
 	int ret = true;
 	int offset = SEC_MISC_FILE_OFFSET;
-	printk(KERN_NOTICE "(sec_set_param) The debug value is 0x%x !!\n", value);	
+	pr_notice("(sec_set_param) The debug value is %p !!\n", value);
 	ret = sec_open_param();
 	if (!ret) {
-		printk(KERN_NOTICE "(sec_open_param) return error !!\n");	
+		pr_warning("(sec_open_param) return error !!\n");	
 		return ret;
 	}
 	

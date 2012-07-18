@@ -7845,7 +7845,7 @@ void __init sched_init(void)
 	GAFINFO.cfs_rq_struct_rq_struct = 0x1224;
 #endif
 	unsigned short *checksum = &(GAFINFO.GAFINFOCheckSum);
-	unsigned char *memory = &GAFINFO;
+	unsigned char *memory = (unsigned char *)&GAFINFO;
 	unsigned char address;
 	for (*checksum = 0,address = 0; address < (sizeof(GAFINFO) - sizeof(GAFINFO.GAFINFOCheckSum)); address++) {
 		if ((*checksum) & 0x8000)

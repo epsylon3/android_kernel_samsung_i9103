@@ -204,7 +204,7 @@ static void nct1008_re_enable(struct i2c_client *client)
 
 static void nct1008_enable(struct i2c_client *client)
 {
-	int ret;
+//	int ret;
 	struct nct1008_data *data = i2c_get_clientdata(client);
 	struct regulator *reg = regulator_get(NULL, "VADC_3V3");
 

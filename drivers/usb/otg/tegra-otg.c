@@ -145,13 +145,11 @@ void tegra_start_host(struct tegra_otg_data *tegra)
 {
 	struct tegra_otg_platform_data *pdata = tegra->otg.dev->platform_data;
 #ifdef CONFIG_MACH_N1
-	unsigned int batt_level = 0;
-
 	dev_info(tegra->otg.dev, "tegra_start_host+\n");
 	wake_lock(&tegra->wake_lock);
 #if 0
 	if (*pdata->batt_level) {
-		batt_level = **pdata->batt_level;
+		unsigned int batt_level = **pdata->batt_level;
 		if (batt_level < 15) {
 #ifdef CONFIG_USB_HOST_NOTIFY
 			host_state_notify(&tegra->ndev, NOTIFY_HOST_LOWBATT);

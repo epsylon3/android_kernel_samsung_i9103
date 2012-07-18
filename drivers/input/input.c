@@ -338,14 +338,15 @@ static void enter_upload_mode(unsigned long val)
 	return;
 
 	int debuglevel = kernel_sec_get_debug_level();
-    if (forced_upload
+	if (forced_upload
 		&& (debuglevel == KERNEL_SEC_DEBUG_LEVEL_MID
-		    || debuglevel == KERNEL_SEC_DEBUG_LEVEL_HIGH)) {
-        printk(KERN_ERR "[debug] forced upload mode!!!!\n");
-	dump_all_task_info();
-	dump_cpu_stat();
-	panic("Forced_Upload");
-    }
+		    || debuglevel == KERNEL_SEC_DEBUG_LEVEL_HIGH))
+	{
+	        printk(KERN_ERR "[debug] forced upload mode!!!!\n");
+		dump_all_task_info();
+		dump_cpu_stat();
+		panic("Forced_Upload");
+	}
 }
 #endif
 

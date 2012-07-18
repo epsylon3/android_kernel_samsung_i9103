@@ -1204,7 +1204,6 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 	u16				w_length = le16_to_cpu(ctrl->wLength);
 	struct usb_function		*f = NULL;
 	u8				endp;
-	unsigned long			flags;
 
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
 	int i;
@@ -1223,6 +1222,7 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 #  endif
 #endif
 #ifndef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+	unsigned long flags;
 	spin_lock_irqsave(&cdev->lock, flags);
 	if (!cdev->connected) {
 		cdev->connected = 1;
@@ -1652,16 +1652,15 @@ composite_switch_work(struct work_struct *data)
 	struct usb_composite_dev	*cdev =
 		container_of(data, struct usb_composite_dev, switch_work);
 	struct usb_configuration *config = cdev->config;
-	int connected;
-	unsigned long flags;
 
 	CSY_DBG("[composite_switch_work]config=0x%p, cdev->connected=%d, cdev->sw_connected.state=%d\n",
 		(void*)config, cdev->connected, cdev->sw_connected.state );
 
 #ifndef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+	unsigned long flags;
 	spin_lock_irqsave(&cdev->lock, flags);
 	if (cdev->connected != cdev->sw_connected.state) {
-		connected = cdev->connected;
+		int connected = cdev->connected;
 		spin_unlock_irqrestore(&cdev->lock, flags);
 		switch_set_state(&cdev->sw_connected, connected);
 	} else {

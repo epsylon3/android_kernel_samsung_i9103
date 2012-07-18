@@ -89,7 +89,7 @@ static void max17043_reset(struct i2c_client *client)
 	max17043_write_reg(client, MAX17043_MODE, rst_cmd);
 	msleep(500);
 
-	dev_info(&client->dev, "MAX17043 Quick star! \n");
+	dev_info(&client->dev, "MAX17043 Quick start! \n");
 }
 
 static void max17043_set_rcomp(struct i2c_client *client, u8 rcomp)
@@ -153,17 +153,19 @@ static int max17043_set_property(struct power_supply *psy,
 {
 	struct max17043_chip *chip = container_of(psy,
 				struct max17043_chip, battery);
-
 	int temp;
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_TEMP_AMBIENT: 
 		temp = val->intval/10;	
 		max17043_calc_rcomp_from_temp(chip->client, temp);
+		pr_notice("%s: temp = %d°c\n", __func__, val->intval);
 		break;
 	default:
 		return -EINVAL;
 	}
+
+	return 0;
 }
 
 void max17043_reset_soc(void)
@@ -187,7 +189,7 @@ static void max17043_get_soc(struct i2c_client *client)
 {
 	struct max17043_chip *chip = i2c_get_clientdata(client);
 	u16 data;
-	int pure_soc, adj_soc, soc;
+	int pure_soc, adj_soc;
 
 	data = max17043_read_reg(client, MAX17043_SOC);
 	pure_soc = ((data * 100)>> 8);
@@ -469,14 +471,14 @@ static int __devexit max17043_remove(struct i2c_client *client)
 static int max17043_suspend(struct i2c_client *client,
 		pm_message_t state)
 {
-	struct max17043_chip *chip = i2c_get_clientdata(client);
+//	struct max17043_chip *chip = i2c_get_clientdata(client);
 
 	return 0;
 }
 
 static int max17043_resume(struct i2c_client *client)
 {
-	struct max17043_chip *chip = i2c_get_clientdata(client);
+//	struct max17043_chip *chip = i2c_get_clientdata(client);
 
 	return 0;
 }

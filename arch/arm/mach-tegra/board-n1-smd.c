@@ -23,7 +23,7 @@
 #define P3_GPIO_CP_RST		TEGRA_GPIO_PX1
 #define P3_GPIO_CP_ON		TEGRA_GPIO_PO3
 #define P3_GPIO_AP_ACT		TEGRA_GPIO_PV1
-#define P3_GPIO_SIM_DETECT	NULL
+#define P3_GPIO_SIM_DETECT	0
 #define P3_GPIO_CP_REQ		TEGRA_GPIO_PQ3
 #define P3_GPIO_HSIC_EN		TEGRA_GPIO_PV0
 #define P3_GPIO_HSIC_ACTIVE	TEGRA_GPIO_PQ5
@@ -132,8 +132,8 @@ int __init register_smd_resource(void)
 		smd_res[10].end	 = P3_GPIO_HOST_WAKEUP_OLD;
 	}
 		
-	for (i = 0; i < ARRAY_SIZE(smd_res); i++) {
-		if (smd_res[i].start != NULL)
+	for (i = 0; i < (int) ARRAY_SIZE(smd_res); i++) {
+		if (smd_res[i].start)
 			tegra_gpio_enable(smd_res[i].start);
 	}
 

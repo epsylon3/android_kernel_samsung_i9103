@@ -21,6 +21,7 @@
 #include <linux/platform_device.h>
 #include <linux/input.h>
 #include <linux/device.h>
+#include <linux/clk.h>
 
 #include <mach/clk.h>
 #include <mach/iomap.h>

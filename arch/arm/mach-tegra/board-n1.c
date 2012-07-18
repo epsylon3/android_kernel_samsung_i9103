@@ -17,7 +17,7 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
- 
+
 
 #include <linux/kernel.h>
 #include <linux/init.h>
@@ -256,8 +256,8 @@ static int write_bootloader_message(char *cmd, int mode)
 	if (mode == REBOOT_MODE_RECOVERY) {
 		strcpy(bootmsg.command, "boot-recovery");
 		kernel_sec_set_path(SEC_PORT_USB, SEC_PORT_PATH_AP);
-		kernel_sec_set_path(SEC_PORT_UART, SEC_PORT_PATH_CP);		
-        kernel_sec_set_debug_level(KERNEL_SEC_DEBUG_LEVEL_LOW);
+		kernel_sec_set_path(SEC_PORT_UART, SEC_PORT_PATH_CP);
+		kernel_sec_set_debug_level(KERNEL_SEC_DEBUG_LEVEL_LOW);
 	}
 	else if (mode == REBOOT_MODE_FASTBOOT)
 		strcpy(bootmsg.command, "boot-fastboot");
@@ -266,7 +266,7 @@ static int write_bootloader_message(char *cmd, int mode)
 	else if (mode == REBOOT_MODE_NONE)
 		strcpy(bootmsg.command, "boot-normal");
 	else if (mode == REBOOT_MODE_FOTA)
-		strcpy(bootmsg.command, "boot-fota");	
+		strcpy(bootmsg.command, "boot-fota");
 	else
 		strcpy(bootmsg.command, cmd);
 
@@ -317,7 +317,7 @@ static int n1_notifier_call(struct notifier_block *this,
 			if (!strcmp((char *)_cmd, "recovery"))
 				mode = REBOOT_MODE_RECOVERY;
 			else if (!strcmp((char *)_cmd, "arm11_fota"))
-				mode = REBOOT_MODE_FOTA;			
+				mode = REBOOT_MODE_FOTA;
 			else if (!strcmp((char *)_cmd, "bootloader"))
 				mode = REBOOT_MODE_FASTBOOT;
 			else if (!strcmp((char *)_cmd, "download"))
@@ -598,7 +598,7 @@ static char *usb_functions_ums[] = {
 	
 	/* mtp only mode */
 	static char *usb_functions_mtp[] = {"mtp",};
-#ifdef CONFIG_USB_ANDROID_ACCESSORY
+# ifdef CONFIG_USB_ANDROID_ACCESSORY
 /* accessory mode */
 static char *usb_functions_accessory[] = {
 	"accessory",
@@ -607,16 +607,18 @@ static char *usb_functions_accessory_adb[] = {
 	"accessory",
 	"adb",
 };
-#endif
+# endif
 #endif
 
 static char *usb_functions_all[] = {
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
 	#ifdef CONFIG_USB_ANDROID_SAMSUNG_ESCAPE /* USE DEVGURU HOST DRIVER */
-#ifdef CONFIG_USB_ANDROID_ACCESSORY
-	"accessory",
-#endif	
-		"usb_mass_storage",	"acm", "adb",
+		#ifdef CONFIG_USB_ANDROID_ACCESSORY
+			"accessory",
+		#endif
+		"usb_mass_storage",
+		"acm",
+		"adb",
 		#ifdef CONFIG_USB_ANDROID_RNDIS
 			"rndis",
 		#endif
@@ -624,11 +626,12 @@ static char *usb_functions_all[] = {
 			"mtp",
 		#endif
 	#else /* USE MCCI HOST DRIVER */
-		"acm", "usb_mass_storage", "adb",
+		"acm",
+		"usb_mass_storage",
+		"adb",
 		#ifdef CONFIG_USB_ANDROID_RNDIS
 			"rndis",
 		#endif
-
 		"mtp",
 	#endif
 
@@ -636,7 +639,8 @@ static char *usb_functions_all[] = {
 	#ifdef CONFIG_USB_ANDROID_RNDIS
 		"rndis",
 	#endif
-	"usb_mass_storage",	"adb",
+		"usb_mass_storage",
+		"adb",
 	#ifdef CONFIG_USB_ANDROID_ACM
 		"acm",
 	#endif
@@ -724,7 +728,7 @@ static struct android_usb_product usb_products[] = {
 				.s		= ANDROID_KIES_CONFIG_STRING,
 				.mode		= USBSTATUS_SAMSUNG_KIES,
 				.multi_conf_functions[0] = usb_functions_mtp,
-				.multi_conf_functions[1] = usb_functions_mtp_acm,					
+				.multi_conf_functions[1] = usb_functions_mtp_acm,
 			},
 			{
 				.product_id	= SAMSUNG_UMS_PRODUCT_ID,
@@ -736,7 +740,7 @@ static struct android_usb_product usb_products[] = {
 				.s		= ANDROID_UMS_CONFIG_STRING,
 				.mode		= USBSTATUS_UMS,
 			},
-#ifdef CONFIG_USB_ANDROID_ACCESSORY	
+#ifdef CONFIG_USB_ANDROID_ACCESSORY
 	{
 		.vendor_id	= USB_ACCESSORY_VENDOR_ID,
 		.product_id	= USB_ACCESSORY_PRODUCT_ID,
@@ -758,8 +762,8 @@ static struct android_usb_product usb_products[] = {
 		.bDeviceProtocol= 0,
 		.s		= ANDROID_ACCESSORY_ADB_CONFIG_STRING,
 		.mode		= USBSTATUS_ACCESSORY,
-	},		
-#endif	
+	},
+#endif
 
 			#ifdef CONFIG_USB_ANDROID_RNDIS
 			{
@@ -1622,12 +1626,12 @@ static struct sec_bat_platform_data sec_bat_pdata = {
 #ifdef CONFIG_MAX8922_CHARGER
 	.sub_charger_name	= "max8922-charger",
 #endif
-	.adc_arr_size			= NULL,
-	.adc_table			= NULL,
-	.adc_channel			= NULL,
+	.adc_arr_size		= 0,
+	.adc_table		= NULL,
+	.adc_channel		= 0,
 	.get_init_cable_state	= sec_bat_get_init_cable_state,
-	.get_temperature		= sec_bat_get_temperature,
-	.get_batt_level	        = sec_bat_get_level,
+	.get_temperature	= sec_bat_get_temperature,
+	.get_batt_level		= sec_bat_get_level,
 };
 
 static struct platform_device sec_device_battery = {
@@ -1777,10 +1781,12 @@ static struct i2c_board_info sain_i2c_touch_info[] = {
 };
 
 /*n1 touch : atmel_mxt224E*/
-static void n1_touch_init_hw(struct mxt_platform_data *pdata)
+static void n1_touch_init_hw(void *data)
 {
+	struct mxt_platform_data *pdata = (struct mxt_platform_data *) data;
 	int error;
-	pr_info("(%s,%d)\n", __func__, __LINE__);
+
+	pr_info("%s:%d\n", __func__, __LINE__);
 
 	/* TSP INT GPIO initialize */
 	tegra_gpio_enable(pdata->irq_gpio);
@@ -1861,31 +1867,38 @@ static void n1_touch_init_hw(struct mxt_platform_data *pdata)
 	pdata->board_rev = system_rev;
 }
 
-static void n1_touch_exit_hw(struct mxt_platform_data *pdata)
+static void n1_touch_exit_hw(void *data)
 {
-	pr_info("(%s,%d)\n", __func__, __LINE__);
+	struct mxt_platform_data *pdata = (struct mxt_platform_data *) data;
+
+	pr_info("%s:%d\n", __func__, __LINE__);
+
 	gpio_free(pdata->irq_gpio);
 	gpio_free(pdata->key_led_en1);
-	if (pdata->key_led_en2 != NULL)
-	gpio_free(pdata->key_led_en2);
-	if (pdata->key_led_en3 != NULL)
+	if (pdata->key_led_en2)
+		gpio_free(pdata->key_led_en2);
+	if (pdata->key_led_en3)
 		gpio_free(pdata->key_led_en3);
-	if (pdata->key_led_en4 != NULL)
+	if (pdata->key_led_en4)
 		gpio_free(pdata->key_led_en4);
 
 	tegra_gpio_disable(pdata->irq_gpio);
 	tegra_gpio_disable(pdata->key_led_en1);
-	if (pdata->key_led_en2 != NULL)
-	tegra_gpio_disable(pdata->key_led_en2);
-	if (pdata->key_led_en3 != NULL)
+	if (pdata->key_led_en2)
+		tegra_gpio_disable(pdata->key_led_en2);
+
+	if (pdata->key_led_en3)
 		tegra_gpio_disable(pdata->key_led_en3);
-	if (pdata->key_led_en4 != NULL)
+	if (pdata->key_led_en4)
 		tegra_gpio_disable(pdata->key_led_en4);
 }
 
-static void n1_touch_suspend_hw(struct mxt_platform_data *pdata)
+static void n1_touch_suspend_hw(void *data)
 {
-	pr_info("(%s,%d)\n", __func__, __LINE__);
+	struct mxt_platform_data *pdata = (struct mxt_platform_data *) data;
+
+	pr_info("%s:%d\n", __func__, __LINE__);
+
 	/* first power off (off sequence: avdd -> vdd) */
 	regulator_disable(pdata->reg_avdd);
 	regulator_disable(pdata->reg_vdd_lvsio);
@@ -1897,9 +1910,12 @@ static void n1_touch_suspend_hw(struct mxt_platform_data *pdata)
 	pr_info("[TSP] Power Off!!");
 }
 
-static void n1_touch_resume_hw(struct mxt_platform_data *pdata)
+static void n1_touch_resume_hw(void *data)
 {
-	pr_info("(%s,%d)\n", __func__, __LINE__);
+	struct mxt_platform_data *pdata = (struct mxt_platform_data *) data;
+
+	pr_info("%s:%d\n", __func__, __LINE__);
+
 	/* first pin configuration */
 	gpio_direction_input(pdata->irq_gpio);
 	tegra_pinmux_set_pullupdown(pdata->i2c_pingroup, pdata->i2c_resume_pupd);
@@ -1923,7 +1939,7 @@ EXPORT_SYMBOL(n1_inform_charger_connection);
 
 static void n1_register_touch_callbacks(struct mxt_callbacks *cb)
 {
-	 inform_charger_callbacks = cb;
+	inform_charger_callbacks = cb;
 }
 
 static struct mxt_platform_data n1_mxt224E_platform_data = {
@@ -1931,25 +1947,26 @@ static struct mxt_platform_data n1_mxt224E_platform_data = {
 	.numtouch = 10,
 	.max_x = 480,
 	.max_y = 800,
+
 	.init_platform_hw = n1_touch_init_hw,
 	.exit_platform_hw = n1_touch_exit_hw,
 	.suspend_platform_hw = n1_touch_suspend_hw,
 	.resume_platform_hw = n1_touch_resume_hw,
 	.register_cb = n1_register_touch_callbacks,
-	
-	.key_led_en1 = NULL,
-	.key_led_en2 = NULL,	
-	.key_led_en3 = NULL,
-	.key_led_en4 = NULL,
-	
+
+	.key_led_en1 = 0,
+	.key_led_en2 = 0,
+	.key_led_en3 = 0,
+	.key_led_en4 = 0,
+
 	.reg_vdd_name = "TSP_VDD_1V8",
 	.reg_vdd = NULL,
 	.reg_vdd_level = 1800000,
-	
+
 	.reg_avdd_name = "TSP_AVDD_3V3",
 	.reg_avdd = NULL,
 	.reg_avdd_level = 3300000,
-	
+
 	.reg_vdd_lvsio_name = "TSP_VDD_LVSIO",
 	.reg_vdd_lvsio = NULL,
 	.reg_vdd_lvsio_level = 2800000,
@@ -1958,7 +1975,7 @@ static struct mxt_platform_data n1_mxt224E_platform_data = {
 	.i2c_resume_pupd = TEGRA_PUPD_PULL_UP,
 	.i2c_suspend_pupd = TEGRA_PUPD_PULL_DOWN,
 	.irq_gpio = GPIO_TSP_INT,
-	.board_rev = NULL,
+	.board_rev = 0,
 };
 
 static struct i2c_board_info atmel_i2c_touch_info[] = {
@@ -2039,7 +2056,7 @@ static struct s5k4ecgx_reg_8 s5k4ecgx_power_on_2[] = {
 
 struct i2c_client *i2c_client_pmic;
 
-static void n1_s5k4ecgx_power_on()
+static void n1_s5k4ecgx_power_on(void)
 {
 	pr_err("%s,\n", __func__);
 
@@ -2090,16 +2107,16 @@ static struct s5k4ecgx_reg_8 s5k4ecgx_power_off_1[] = {
 	{S5K4ECGX_TABLE_WAIT_MS_8, 0x02},
 	{0x00, 0x81},				// 1.8V - LDO5
 
-	{S5K4ECGX_TABLE_END, 0x0},
+	{S5K4ECGX_TABLE_END_8, 0x0},
 };
 
 static struct s5k4ecgx_reg_8 s5k4ecgx_power_off_2[] = {
 	{0x00, 0x01},				// CAM_CORE_1.2V - BUCK
 
-	{S5K4ECGX_TABLE_END, 0x0},
+	{S5K4ECGX_TABLE_END_8, 0x0},
 };
 
-static void n1_s5k4ecgx_power_off()
+static void n1_s5k4ecgx_power_off(void)
 {
 	pr_err("%s,\n", __func__);
 
@@ -2138,16 +2155,14 @@ static void n1_s5k4ecgx_power_off()
 
 }
 
-static int n1_s5k4ecgx_flash(int enable)
+static void n1_s5k4ecgx_flash(int enable)
 {
 	/* Turn main flash on or off by asserting a value on the EN line. */
 	printk("========== flash enable = %d \n", enable);
 	gpio_set_value(GPIO_CAM_FLASH_EN, enable);
-
-	return 0;
 }
 
-static int n1_s5k4ecgx_torch(int enable)
+static void n1_s5k4ecgx_torch(int enable)
 {
 	printk("========== torch enable = %d \n", enable);
 	switch(enable) {
@@ -2160,8 +2175,6 @@ static int n1_s5k4ecgx_torch(int enable)
 			gpio_set_value(GPIO_CAM_FLASH_SET, 1);
 			break;
 	}
-
-	return 0;
 }
 
 struct s5k4ecgx_platform_data n1_s5k4ecgx_data = {
@@ -2383,8 +2396,8 @@ void tegra_usb1_ldo_en(int active, int instance)
 			if (ret == 0)
 				usb_data.usb_regulator_on[instance] = 1;
 			else
-				pr_err("%s: failed to turn on \\
-				VAP_USB_3V3 regulator\n", __func__);
+				pr_err("%s: failed to turn on "
+				"VAP_USB_3V3 regulator\n", __func__);
 		}
 	} else {
 		regulator_disable(reg);
@@ -2409,7 +2422,7 @@ void tegra_usb1_power(int active)
 }
 
 static void tegra_set_otg_func(void (*check_detection)(int *, int), 
-				int * clk_cause)
+				unsigned int * clk_cause)
 {
 	otg_clk_data.check_detection = check_detection;
 	otg_clk_data.clk_cause = clk_cause;
@@ -2894,11 +2907,14 @@ static void __init tegra_n1_init(void)
 	console_suspend_enabled = 0;
 
 #ifdef CONFIG_KERNEL_DEBUG_SEC
-	/* Add debug level node */
-	struct device *platform = n1_devices[0]->dev.parent;
-	ret = device_create_file(platform, &dev_attr_sec_debug_level);
-	if (ret)
-		printk("Fail to create sec_debug_level file\n");
+	if (true)
+	{
+		/* Add debug level node */
+		struct device *platform = n1_devices[0]->dev.parent;
+		ret = device_create_file(platform, &dev_attr_sec_debug_level);
+		if (ret)
+			printk("Fail to create sec_debug_level file\n");
+	}
 #endif
 }
 

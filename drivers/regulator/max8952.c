@@ -222,7 +222,7 @@ static int max8952_set_voltage(struct regulator_dev *rdev, int min_uV,
 static int max8952_set_fpwm(struct regulator_dev *rdev, int en)
 {
 	struct max8952 *max8952 = rdev_get_drvdata(rdev);
-	const struct max8952_info *reg = &max8952_regulators[rdev_get_id(rdev)];
+	struct max8952_info *reg = &max8952_regulators[rdev_get_id(rdev)];
 
 	return max8952_set_bits(max8952, reg->reg_base, MAX8952_MASK_FPWM_EN,
 				en ? MAX8952_MASK_FPWM_EN : 0);
@@ -231,7 +231,7 @@ static int max8952_set_fpwm(struct regulator_dev *rdev, int en)
 static int max8952_get_voltage(struct regulator_dev *rdev)
 {
 	struct max8952 *max8952 = rdev_get_drvdata(rdev);
-	const struct max8952_info *reg = &max8952_regulators[rdev_get_id(rdev)];
+	struct max8952_info *reg = &max8952_regulators[rdev_get_id(rdev)];
 	int val;
 
 	val = max8952_read(max8952, reg->reg_base);
@@ -245,7 +245,7 @@ static int __devinit max8952_probe(struct i2c_client *i2c,
 {
 	struct max8952 *max8952;
 	struct max8952_platform_data *pdata = i2c->dev.platform_data;
-	struct regulator_dev *rdev;
+	struct regulator_dev *rdev = NULL;
 	int id;
 	int i;
 

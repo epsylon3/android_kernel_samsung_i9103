@@ -29,6 +29,7 @@ static const struct attribute_group levelctl_group = {
 	.attrs = levelctl_attributes,
 };
 
+#if 0
 static unsigned int convert_debug_level_str(const char *str) {
 	if (strncmp(str, "0xA0A0", 6) == 0 || strncmp(str, "0xa0a0", 6) == 0)
 		return KERNEL_SEC_DEBUG_LEVEL_LOW;
@@ -41,6 +42,7 @@ static unsigned int convert_debug_level_str(const char *str) {
 
 	return 0;
 }
+#endif
 
 static void convert_debug_level_int(unsigned int val, char *str) {
 	if (val == KERNEL_SEC_DEBUG_LEVEL_LOW) {
@@ -59,7 +61,7 @@ static void convert_debug_level_int(unsigned int val, char *str) {
 	}
 }
 
-static void set_debug_level()
+static void set_debug_level(void)
 {
 	switch(kernel_sec_get_debug_level())
 	{

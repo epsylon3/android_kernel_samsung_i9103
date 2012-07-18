@@ -503,7 +503,7 @@ static ssize_t keyshort_test(struct device *dev, struct device_attribute *attr, 
 
 		ret = gpio_get_value(button->gpio);
 
-		if(button->active_low && !ret || !button->active_low && ret)
+		if((button->active_low && !ret) || (ret && !button->active_low))
 		{
 			bKeyPressed=true;
 			break;
