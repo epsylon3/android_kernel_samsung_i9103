@@ -159,7 +159,7 @@ static int max17043_set_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_TEMP_AMBIENT: 
 		temp = val->intval/10;	
 		max17043_calc_rcomp_from_temp(chip->client, temp);
-		pr_notice("%s: temp = %d°c\n", __func__, val->intval);
+		pr_debug("%s: temp = %d°c\n", __func__, (val->intval / 10));
 		break;
 	default:
 		return -EINVAL;
