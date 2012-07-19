@@ -3322,14 +3322,19 @@ static void key_led_on(struct mxt_data *mxt, u32 val)
 		mod_timer(&key_led_timer, jiffies - 1);
 	}
 
-	if (mxt->pdata->key_led_en1)
+	if (mxt->pdata->key_led_en1) {
+		int ret = gpio_request(mxt->pdata->key_led_en1, "tsp_key_led1");
+		if (!ret) return;
 		gpio_direction_output(mxt->pdata->key_led_en1, (val & 0x01) ? true : false);
+	}
+#ifndef CONFIG_MACH_N1
 	if (mxt->pdata->key_led_en2)
 		gpio_direction_output(mxt->pdata->key_led_en2, (val & 0x02) ? true : false);
 	if (mxt->pdata->key_led_en3)
 		gpio_direction_output(mxt->pdata->key_led_en3, (val & 0x04) ? true : false);
 	if (mxt->pdata->key_led_en4)
 		gpio_direction_output(mxt->pdata->key_led_en4, (val & 0x08) ? true : false);
+#endif
 }
 
 static ssize_t key_led_read(struct device *dev, struct device_attribute *attr,
