@@ -23,20 +23,16 @@
 #include <linux/power_supply.h>
 #include <linux/power/max8922-charger.h>
 
-#define GPIO_LEVEL_LOW      	0
-#define GPIO_LEVEL_HIGH     	1
+#define GPIO_LEVEL_LOW  0
+#define GPIO_LEVEL_HIGH 1
 
 extern int stmpe_get_topoff_value(void);
 
 //20110517_HDLNC_PMIC
 #if defined (CONFIG_MACH_BOSE_ATT)
 extern int lpm_mode_flag;
-#endif
-
-#if defined (CONFIG_MACH_BOSE_ATT)
-// none
 #else
-#define CHG_EN_USING_TR	0
+#define CHG_EN_USING_TR 0
 #endif
 
 struct max8922_info {
@@ -63,7 +59,7 @@ static inline int max8922_is_charging(struct max8922_info *info)
 	chg_ing = gpio_get_value(info->pdata->gpio_chg_ing);
 #endif
 
-	dev_info(info->dev, "%s: charging state = 0x%x\n", __func__,
+	pr_debug("%s: charging state = 0x%x\n", __func__,
 		 (ta_nconnected << 1) | chg_ing);
 
 	/*return (ta_nconnected == 0 && chg_ing == 0); */
@@ -111,10 +107,10 @@ static int max8922_enable_charging(struct max8922_info *info, bool enable)
 		 info->is_usb_cable ? "USB" : "TA");
 
 #if defined (CONFIG_MACH_BOSE_ATT)
-	if(system_rev <= 7){		// USING TR
+	if (system_rev <= 7) {		// USING TR
 #else
- 	if(CHG_EN_USING_TR){ 
-#endif 
+	if (CHG_EN_USING_TR) {
+#endif
 		if (enable) {
 			if (info->is_usb_cable) {
 				/* Charging by USB cable */
@@ -184,7 +180,7 @@ static int max8922_set_property(struct power_supply *psy,
 	    container_of(psy, struct max8922_info, psy_bat);
 	bool enable;
 //20110517_HDLNC_PMIC
-#if defined (CONFIG_MACH_BOSE_ATT)	
+#if defined(CONFIG_MACH_BOSE_ATT)
 	int gpio_chg_en = info->pdata->gpio_chg_en;
 #endif 
 
@@ -196,7 +192,7 @@ static int max8922_set_property(struct power_supply *psy,
 		enable = (val->intval == POWER_SUPPLY_STATUS_CHARGING);
 
 		max8922_enable_charging(info, enable);
-#if !defined (CONFIG_MACH_BOSE_ATT)  
+#if !defined(CONFIG_MACH_BOSE_ATT)
 		max8922_enable_irq_wake(info, enable);
 #endif
 		break;
@@ -215,7 +211,7 @@ static irqreturn_t max8922_chg_ing_irq(int irq, void *data)
 
 	dev_info(info->dev, "chg_ing IRQ occurred!\n");
 
-#if defined (CONFIG_MACH_USA_ATT)
+#if defined(CONFIG_MACH_USA_ATT)
 	ta_nconnected = gpio_get_value(info->pdata->gpio_ta_nconnected);
 	chg_ing = gpio_get_value(info->pdata->gpio_chg_ing);
 
@@ -223,7 +219,6 @@ static irqreturn_t max8922_chg_ing_irq(int irq, void *data)
 
 	if (chg_ing == 1 && ta_nconnected == 0) {
 #else
-
 	msleep(100);
 
 	ta_nconnected = gpio_get_value(info->pdata->gpio_ta_nconnected);
@@ -264,12 +259,12 @@ static __devinit int max8922_probe(struct platform_device *pdev)
 	info->pdata = pdata;
 
 	info->psy_bat.name = "max8922-charger",
-	    info->psy_bat.type = POWER_SUPPLY_TYPE_BATTERY,
-	    info->psy_bat.properties = max8922_battery_props,
-	    info->psy_bat.num_properties = ARRAY_SIZE(max8922_battery_props),
-	    info->psy_bat.get_property = max8922_get_property,
-	    info->psy_bat.set_property = max8922_set_property,
-	    ret = power_supply_register(&pdev->dev, &info->psy_bat);
+	info->psy_bat.type = POWER_SUPPLY_TYPE_BATTERY,
+	info->psy_bat.properties = max8922_battery_props,
+	info->psy_bat.num_properties = ARRAY_SIZE(max8922_battery_props),
+	info->psy_bat.get_property = max8922_get_property,
+	info->psy_bat.set_property = max8922_set_property,
+	ret = power_supply_register(&pdev->dev, &info->psy_bat);
 	if (ret) {
 		dev_err(info->dev, "Failed to register psy_bat\n");
 		goto err_kfree;
@@ -322,7 +317,6 @@ static __devinit int max8922_probe(struct platform_device *pdev)
 #endif
 
 #if !defined (CONFIG_MACH_BOSE_ATT)	// 20110516_HDLNC_PMIC_shinjh
-#if 1
 	info->irq_chg_ing = gpio_to_irq(pdata->gpio_chg_ing);
 
 	ret = request_threaded_irq(info->irq_chg_ing, NULL,
@@ -333,13 +327,12 @@ static __devinit int max8922_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "%s: fail to request chg_ing IRQ:"
 			" %d: %d\n", __func__, info->irq_chg_ing, ret);
 
-#if defined (CONFIG_MACH_BOSE_ATT)
+# if 0
 	ret = enable_irq_wake(info->irq_chg_ing);
 	if (ret < 0)
 		dev_err(&pdev->dev,
 			"failed to enable wakeup src %d\n", ret);
-#endif
-#endif
+# endif
 #endif
 
 	return 0;
@@ -367,10 +360,10 @@ static int __devexit max8922_remove(struct platform_device *pdev)
 
 static struct platform_driver max8922_driver = {
 	.driver = {
-		   .name = "max8922-charger",
-		   .owner = THIS_MODULE,
-		   },
-	.probe = max8922_probe,		   
+		.name = "max8922-charger",
+		.owner = THIS_MODULE,
+	},
+	.probe = max8922_probe,
 	.remove = __devexit_p(max8922_remove),
 };
 
