@@ -17,17 +17,17 @@
 #include <linux/ioctl.h>
 #include <linux/gpio.h>
 #include <linux/delay.h>
+
 #ifdef CONFIG_MACH_N1
-#include <mach/gpio.h>
-#if defined (CONFIG_MACH_BOSE_ATT)
-#include <mach/gpio-bose.h>
+# include <mach/gpio.h>
+# if defined (CONFIG_MACH_BOSE_ATT)
+#  include <mach/gpio-bose.h>
+# else
+#  include <mach/gpio-n1.h>
+# endif
 #else
-#include <mach/gpio-n1.h>
-#endif
-//#include <mach/gpio-names.h>
-#else
-#include <plat/gpio-cfg.h>
-#include <mach/gpio.h>
+# include <plat/gpio-cfg.h>
+# include <mach/gpio.h>
 #endif //CONFIG_MACH_N1
 
 #include "Si4709_i2c_drv.h"
