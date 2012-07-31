@@ -913,7 +913,12 @@ static void mmc_power_up(struct mmc_host *host)
 	 */
 	mmc_delay(10);
 
-	host->ios.clock = host->f_min;
+	if (host->f_min > 400000) {
+		pr_warning("%s: Minimum clock frequency too high for "
+			"identification mode\n", mmc_hostname(host));
+		host->ios.clock = host->f_min;
+	} else
+		host->ios.clock = 400000;
 
 	host->ios.power_mode = MMC_POWER_ON;
 	mmc_set_ios(host);
@@ -1835,7 +1840,8 @@ int mmc_pm_notify(struct notifier_block *notify_block,
 	case PM_POST_RESTORE:
 
 		spin_lock_irqsave(&host->lock, flags);
-		if (mmc_bus_manual_resume(host)) {
+		if (mmc_bus_manual_resume(host) &&
+			!mmc_bus_needs_rescan(host)) {
 			spin_unlock_irqrestore(&host->lock, flags);
 			break;
 		}
@@ -1853,6 +1859,31 @@ int mmc_pm_notify(struct notifier_block *notify_block,
 	return 0;
 }
 #endif
+
+int mmc_reinit_host(struct mmc_host *host)
+{
+	int err = -1;
+
+	mmc_bus_get(host);
+
+	if (!host->bus_ops || !host->bus_ops->resume || host->bus_dead) {
+		mmc_bus_put(host);
+		goto out;
+	}
+
+	mmc_power_off(host);
+	mmc_power_up(host);
+	mmc_select_voltage(host, host->ocr);
+	err = host->bus_ops->resume(host);
+	if (err)
+		pr_warning("%s: error %d during reinit\n",
+			mmc_hostname(host), err);
+	mmc_bus_put(host);
+out:
+	mmc_detect_change(host, 1);
+	return err;
+}
+EXPORT_SYMBOL(mmc_reinit_host);
 
 #ifdef CONFIG_MMC_EMBEDDED_SDIO
 void mmc_set_embedded_sdio_data(struct mmc_host *host,

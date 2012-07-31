@@ -33,6 +33,7 @@
 #include <linux/scatterlist.h>
 #include <linux/string_helpers.h>
 
+#include <linux/mmc/core.h>
 #include <linux/mmc/card.h>
 #include <linux/mmc/host.h>
 #include <linux/mmc/mmc.h>
@@ -50,6 +51,7 @@
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
+#include <asm/setup.h>
 
 #include "queue.h"
 
@@ -63,9 +65,9 @@ MODULE_ALIAS("mmc:block");
 #define INAND_CMD38_ARG_SECTRIM2 0x88
 
 /*
- * max 8 partitions per card
+ * max 16 partitions per card
  */
-#define MMC_SHIFT	3
+#define MMC_SHIFT	4
 #define MMC_NUM_MINORS	(256 >> MMC_SHIFT)
 
 #if defined(CONFIG_MACH_BOSE_ATT) || defined(CONFIG_MACH_N1)
@@ -92,6 +94,188 @@ struct mmc_blk_data {
 };
 
 static DEFINE_MUTEX(open_lock);
+static LIST_HEAD(mmcpart_notifiers);
+
+#define MAX_MMC_HOST 3
+/* mutex used to control both the table and the notifier list */
+DEFINE_MUTEX(mmcpart_table_mutex);
+struct mmcpart_alias {
+	struct raw_hd_struct hd;
+	char partname[BDEVNAME_SIZE];
+};
+static struct mmcpart_alias mmcpart_table[MAX_MMC_HOST][1 << MMC_SHIFT];
+static struct raw_mmc_panic_ops mmc_panic_ops_table[MAX_MMC_HOST];
+
+void register_mmcpart_user(struct mmcpart_notifier *new)
+{
+	int i, j;
+
+	mutex_lock(&mmcpart_table_mutex);
+	list_add(&new->list, &mmcpart_notifiers);
+	__module_get(THIS_MODULE);
+
+	for (i = 0; i < MAX_MMC_HOST; i++) {
+		for (j = 0; j < (1 << MMC_SHIFT); j++) {
+			if (!strncmp(mmcpart_table[i][j].partname,
+				new->partname, BDEVNAME_SIZE) &&
+				mmcpart_table[i][j].hd.nr_sects)
+			{
+				new->add(&mmcpart_table[i][j].hd,
+				&mmc_panic_ops_table[i]);
+				break;
+			}
+		}
+	}
+	mutex_unlock(&mmcpart_table_mutex);
+}
+
+int unregister_mmcpart_user(struct mmcpart_notifier *old)
+{
+	int i, j;
+
+	mutex_lock(&mmcpart_table_mutex);
+	module_put(THIS_MODULE);
+
+	for (i = 0; i < MAX_MMC_HOST; i++) {
+		for (j = 0; j < (1 << MMC_SHIFT); j++) {
+			if (!strncmp(mmcpart_table[i][j].partname,
+				old->partname, BDEVNAME_SIZE))
+			{
+				old->remove(&mmcpart_table[i][j].hd);
+				break;
+			}
+		}
+	}
+	list_del(&old->list);
+	mutex_unlock(&mmcpart_table_mutex);
+	return 0;
+}
+
+/*
+ * split string to substrings according to char pattern
+ * deal with multiple characters of pattern
+ * more parameters than max_param are ignored
+ * the input string is modified
+ * return value range from 1~max_param
+ */
+static int split(char *string, char **index_array, char pattern,
+	int max_param)
+{
+	char *ptr;
+	int count;
+
+	for (ptr = string, count = 0; count < max_param; count++, ptr++)
+	{
+		/* find the start of substring */
+		while (*ptr == pattern) ptr++;
+		if (*ptr == '\0') break;
+		*(index_array + count) = ptr;
+
+		/* find the end of substring */
+		while (*ptr != pattern && *ptr != '\0') ptr++;
+		if (*ptr != '\0')
+			*ptr = '\0';
+		else {
+			count++;
+			break;
+		}
+	}
+
+	return count;
+}
+
+#define MMCPARTS_STR_LEN 512
+static int __init mmcpart_setup(char *arg)
+{
+	int host_num;
+	int part_num;
+	int i, j;
+	int host_index;
+	int part_index;
+	char mmcparts_str[MMCPARTS_STR_LEN];
+	char *mmcparts_str_trim[1];
+	char *subhost_index[MAX_MMC_HOST];
+	char *subhostname_index[3];
+	char *subpart_index[1 << MMC_SHIFT];
+	char *subpartstr_index[2];
+	char *subpartname_index[2];
+	int ret;
+
+	memset(mmcparts_str, 0, MMCPARTS_STR_LEN);
+	memset(mmcpart_table, 0, sizeof(mmcpart_table));
+	strncpy(mmcparts_str, arg, MMCPARTS_STR_LEN - 1);
+	split(mmcparts_str, mmcparts_str_trim, ' ', 1);
+	host_num = split(mmcparts_str_trim[0], subhost_index, ';',
+			MAX_MMC_HOST);
+	for (i = 0; i < host_num; i++) {
+		if (split(subhost_index[i], subhostname_index, ':', 3) != 2)
+			continue;
+		if ((strlen(subhostname_index[0]) != 7) ||
+		    (strncmp(subhostname_index[0], "mmcblk", 6) != 0) ||
+		    (subhostname_index[0][6] < '0') ||
+		    (subhostname_index[0][6] > 0x30 + MAX_MMC_HOST - 1))
+			continue;
+		host_index = subhostname_index[0][6] - 0x30;
+		part_num = split(subhostname_index[1], subpart_index, ',',
+				1 << MMC_SHIFT);
+		for (j = 0; j < part_num; j++) {
+			if (split(subpart_index[j], subpartstr_index, ')', 2)
+			    != 1)
+				continue;
+			if (split(subpartstr_index[0], subpartname_index,
+			    '(', 2) != 2)
+				continue;
+			if (strlen(subpartname_index[0]) < 2)
+				continue;
+			ret = strict_strtol(&subpartname_index[0][1], 0,
+				(long *)&part_index);
+			if ((subpartname_index[0][0] != 'p') || ret ||
+			    part_index >= (1 << MMC_SHIFT))
+				continue;
+			strncpy(mmcpart_table[host_index][part_index].partname,
+				subpartname_index[1], BDEVNAME_SIZE - 1);
+		}
+	}
+	return 0;
+}
+early_param("mmcparts", mmcpart_setup);
+
+void get_mmcalias_by_id(char *buf, int major, int minor)
+{
+	int host_index, partno;
+
+	buf[0] = '\0';
+	if (major != MMC_BLOCK_MAJOR)
+		return;
+
+	mutex_lock(&mmcpart_table_mutex);
+	host_index = minor / (1 << MMC_SHIFT);
+	partno = minor % (1 << MMC_SHIFT);
+	strncpy(buf, mmcpart_table[host_index][partno].partname, BDEVNAME_SIZE);
+	buf[BDEVNAME_SIZE - 1] = '\0';
+	mutex_unlock(&mmcpart_table_mutex);
+}
+
+int get_mmcpart_by_name(char *part_name, char *dev_name)
+{
+	int i, j;
+
+	mutex_lock(&mmcpart_table_mutex);
+	for (i = 0; i < MAX_MMC_HOST; i++) {
+		for (j = 0; j < (1 << MMC_SHIFT); j++) {
+			if (!strncmp(part_name, mmcpart_table[i][j].partname,
+			    BDEVNAME_SIZE))
+			{
+				snprintf(dev_name, BDEVNAME_SIZE,
+					"mmcblk%dp%d", i, j);
+				mutex_unlock(&mmcpart_table_mutex);
+				return 0;
+			}
+		}
+	}
+	mutex_unlock(&mmcpart_table_mutex);
+	return -1;
+}
 
 static struct mmc_blk_data *mmc_blk_get(struct gendisk *disk)
 {
@@ -472,15 +656,20 @@ out:
 	return err ? 0 : 1;
 }
 
+#define R1_ERROR_MASK 0xffff0000
+#define BUSY_TIMEOUT_MS (8 * 1024)
 static int mmc_blk_issue_rw_rq(struct mmc_queue *mq, struct request *req)
 {
 	struct mmc_blk_data *md = mq->data;
 	struct mmc_card *card = md->queue.card;
 	struct mmc_blk_request brq;
-	int ret = 1, disable_multi = 0;
+	int ret = 1;
+	int disable_multi = 0;
+	int retry = 0;
+	unsigned long timeout = 0;
 
 #ifdef CONFIG_MACH_N1
- 	int write_retry = 2;
+	int write_retry = 2;
 #endif
 
 	mmc_claim_host(card->host);
@@ -572,6 +761,8 @@ static int mmc_blk_issue_rw_rq(struct mmc_queue *mq, struct request *req)
 
 		mmc_queue_bounce_post(mq);
 
+		ret = 0;
+
 		/*
 		 * Check for errors here, but don't jump to cmd_err
 		 * until later as we need to wait for the card to leave
@@ -583,14 +774,17 @@ static int mmc_blk_issue_rw_rq(struct mmc_queue *mq, struct request *req)
 				printk(KERN_WARNING "%s: retrying using single "
 				       "block read\n", req->rq_disk->disk_name);
 				disable_multi = 1;
+				retry = 1;
 				continue;
 			}
 			status = get_card_status(card, req);
 		} else if (disable_multi == 1) {
 			disable_multi = 0;
 		}
+		retry = 0;
 
 		if (brq.cmd.error) {
+			ret = brq.cmd.error;
 			printk(KERN_ERR "%s: error %d sending read/write "
 			       "command, response %#x, card status %#x\n",
 			       req->rq_disk->disk_name, brq.cmd.error,
@@ -599,6 +793,7 @@ static int mmc_blk_issue_rw_rq(struct mmc_queue *mq, struct request *req)
 
 
 		if (brq.data.error) {
+			ret = brq.cmd.error;
 			if (brq.data.error == -ETIMEDOUT && brq.mrq.stop)
 				/* 'Stop' response contains card status */
 				status = brq.mrq.stop->resp[0];
@@ -610,6 +805,7 @@ static int mmc_blk_issue_rw_rq(struct mmc_queue *mq, struct request *req)
 		}
 
 		if (brq.stop.error) {
+			ret = brq.cmd.error;
 			printk(KERN_ERR "%s: error %d sending stop command, "
 			       "response %#x, card status %#x\n",
 			       req->rq_disk->disk_name, brq.stop.error,
@@ -617,7 +813,9 @@ static int mmc_blk_issue_rw_rq(struct mmc_queue *mq, struct request *req)
 		}
 
 
-		if (!mmc_host_is_spi(card->host) && rq_data_dir(req) != READ) {
+		if (!mmc_host_is_spi(card->host) && rq_data_dir(req) != READ &&
+		    !brq.cmd.error && !brq.data.error && !brq.stop.error) {
+			timeout = jiffies + msecs_to_jiffies(BUSY_TIMEOUT_MS);
 			do {
 				int err;
 
@@ -628,18 +826,37 @@ static int mmc_blk_issue_rw_rq(struct mmc_queue *mq, struct request *req)
 				if (err) {
 					printk(KERN_ERR "%s: error %d requesting status\n",
 					       req->rq_disk->disk_name, err);
-					goto cmd_err;
+					ret = err;
+					break;
+				}
+				if (cmd.resp[0] & R1_ERROR_MASK) {
+					printk(KERN_ERR "%s: card err %#x\n",
+					    req->rq_disk->disk_name,
+					    cmd.resp[0]);
+					/* ignored, as transfer is done */
+					break;
 				}
 				/*
 				 * Some cards mishandle the status bits,
 				 * so make sure to check both the busy
 				 * indication and the card state.
 				 */
-			} while (!(cmd.resp[0] & R1_READY_FOR_DATA) ||
-				(R1_CURRENT_STATE(cmd.resp[0]) == 7));
+				if (!(cmd.resp[0] & R1_READY_FOR_DATA) &&
+				    (R1_CURRENT_STATE(cmd.resp[0]) != 7));
+					break;
+
+			} while (time_before(jiffies, timeout));
+
+			if (R1_CURRENT_STATE(cmd.resp[0]) == 7) {
+				printk(KERN_WARNING "%s: card stay in prg "
+				        "timeout, re-init the card\n",
+				        md->disk->disk_name);
+				mmc_reinit_host(card->host);
+				ret = -ETIMEDOUT;
+			}
 #ifdef CONFIG_MACH_N1
-			if( brq.data.error){
-				if (!mmc_host_is_spi(card->host) && rq_data_dir(req) != READ && write_retry>0) {
+			if (!ret && brq.data.error){
+				if (!mmc_host_is_spi(card->host) && rq_data_dir(req) != READ && write_retry > 0) {
 					printk(KERN_ERR "%s: write error and retry (%d)\n",
 					       req->rq_disk->disk_name, 3 - write_retry);
 
@@ -647,13 +864,6 @@ static int mmc_blk_issue_rw_rq(struct mmc_queue *mq, struct request *req)
 					continue;
 				}
 			}
-#endif
-#if 0
-			if (cmd.resp[0] & ~0x00000900)
-				printk(KERN_ERR "%s: status = %08x\n",
-				       req->rq_disk->disk_name, cmd.resp[0]);
-			if (mmc_decode_status(cmd.resp))
-				goto cmd_err;
 #endif
 		}
 
@@ -678,11 +888,11 @@ static int mmc_blk_issue_rw_rq(struct mmc_queue *mq, struct request *req)
 		spin_lock_irq(&md->lock);
 		ret = __blk_end_request(req, 0, brq.data.bytes_xfered);
 		spin_unlock_irq(&md->lock);
-	} while (ret);
+	} while (retry);
 
 	mmc_release_host(card->host);
 
-	return 1;
+	return ret;
 
  cmd_err:
  	/*
@@ -883,6 +1093,8 @@ static const struct mmc_fixup blk_fixups[] =
 static int mmc_blk_probe(struct mmc_card *card)
 {
 	struct mmc_blk_data *md;
+	struct mmcpart_notifier *nt;
+	int i, index;
 	int err;
 
 	char cap_str[10];
@@ -929,17 +1141,54 @@ static int mmc_blk_probe(struct mmc_card *card)
 	mmc_set_bus_resume_policy(card->host, 1);
 #endif
 #if defined(CONFIG_MACH_BOSE_ATT) || defined(CONFIG_MACH_N1)
-       wake_lock(&mmc_chkpart_wake_lock);
-	printk(KERN_INFO "%s: %s wake lock for check partition+++\n",
+	wake_lock(&mmc_chkpart_wake_lock);
+	printk(KERN_INFO "%s: %s wake lock to check partition +++\n",
 		    __func__, md->disk->disk_name);
 #endif
 
 	add_disk(md->disk);
 #if defined(CONFIG_MACH_BOSE_ATT) || defined(CONFIG_MACH_N1)
-       wake_unlock(&mmc_chkpart_wake_lock);
-	printk(KERN_INFO "%s: %s wake lock for check partition---\n",
+	wake_unlock(&mmc_chkpart_wake_lock);
+	printk(KERN_INFO "%s: %s wake lock to check partition ---\n",
 		    __func__, md->disk->disk_name);
 #endif
+
+	mutex_lock(&mmcpart_table_mutex);
+	index = md->disk->first_minor >> MMC_SHIFT;
+	if (md->queue.card) {
+		mmc_panic_ops_table[index].type = md->queue.card->type;
+		mmc_panic_ops_table[index].panic_probe =
+			md->queue.card->host->ops->panic_probe;
+		mmc_panic_ops_table[index].panic_write =
+			md->queue.card->host->ops->panic_write;
+		mmc_panic_ops_table[index].panic_erase =
+			md->queue.card->host->ops->panic_erase;
+	}
+	for (i = 0; i < md->disk->part_tbl->len; i++) {
+		if (!md->disk->part_tbl->part[i])
+			continue;
+		mmcpart_table[index][i].hd.start_sect =
+			md->disk->part_tbl->part[i]->start_sect;
+		mmcpart_table[index][i].hd.nr_sects =
+			md->disk->part_tbl->part[i]->nr_sects;
+		mmcpart_table[index][i].hd.partno = i;
+		mmcpart_table[index][i].hd.major = md->disk->major;
+		mmcpart_table[index][i].hd.first_minor = md->disk->first_minor;
+
+		list_for_each_entry(nt, &mmcpart_notifiers, list) {
+			if (strlen(nt->partname) && !strncmp(nt->partname,
+				mmcpart_table[index][i].partname,
+				BDEVNAME_SIZE))
+			{
+				pr_info("%s: adding mmcblk%dp%d:%s\n",
+					__func__, index, i,
+					mmcpart_table[index][i].partname);
+				nt->add(&mmcpart_table[index][i].hd,
+					&mmc_panic_ops_table[index]);
+			}
+		}
+	}
+	mutex_unlock(&mmcpart_table_mutex);
 
 	return 0;
 
@@ -957,8 +1206,27 @@ static int mmc_blk_probe(struct mmc_card *card)
 static void mmc_blk_remove(struct mmc_card *card)
 {
 	struct mmc_blk_data *md = mmc_get_drvdata(card);
+	struct mmcpart_notifier *nt;
+	int i, index;
 
 	if (md) {
+		index = md->disk->first_minor >> MMC_SHIFT;
+
+		mutex_lock(&mmcpart_table_mutex);
+		for (i = 0; i < md->disk->part_tbl->len; i++) {
+			list_for_each_entry(nt, &mmcpart_notifiers, list)
+				if (strlen(nt->partname) &&
+				    !strncmp(nt->partname,
+					mmcpart_table[index][i].partname,
+					BDEVNAME_SIZE))
+					nt->remove(&mmcpart_table[index][i].hd);
+			memset(&mmcpart_table[index][i].hd, 0,
+				sizeof(struct raw_hd_struct));
+		}
+		memset(&mmc_panic_ops_table[index], 0,
+			sizeof(struct raw_mmc_panic_ops));
+		mutex_unlock(&mmcpart_table_mutex);
+
 		/* Stop new requests from getting into the queue */
 		del_gendisk(md->disk);
 
@@ -1025,7 +1293,7 @@ static int __init mmc_blk_init(void)
 	int res;
 
 #if defined(CONFIG_MACH_BOSE_ATT) || defined(CONFIG_MACH_N1)
-       wake_lock_init(&mmc_chkpart_wake_lock,WAKE_LOCK_SUSPEND,"mmc_chkpart");
+	wake_lock_init(&mmc_chkpart_wake_lock,WAKE_LOCK_SUSPEND,"mmc_chkpart");
 #endif
 
 	res = register_blkdev(MMC_BLOCK_MAJOR, "mmc");
@@ -1062,7 +1330,7 @@ static void __exit mmc_blk_exit(void)
 	unregister_blkdev(MMC_BLOCK_MAJOR, "mmc");
 
 #if defined(CONFIG_MACH_BOSE_ATT) || defined(CONFIG_MACH_N1)
-		wake_lock_destroy(&mmc_chkpart_wake_lock);
+	wake_lock_destroy(&mmc_chkpart_wake_lock);
 #endif
 }
 

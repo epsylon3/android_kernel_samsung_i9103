@@ -26,6 +26,10 @@
 #include <linux/mmc/host.h>
 #include <linux/mmc/card.h>
 
+#include <linux/fs.h>
+#include <linux/file.h>
+#include <linux/syscalls.h>
+
 #include "sdhci.h"
 
 #define DRIVER_NAME "sdhci"
@@ -46,28 +50,28 @@ static void sdhci_finish_data(struct sdhci_host *);
 static void sdhci_send_command(struct sdhci_host *, struct mmc_command *);
 static void sdhci_finish_command(struct sdhci_host *);
 
+#ifdef CONFIG_APANIC_MMC
+static struct raw_hd_struct sdhci_kpanic = { .partno = 0 };
+#endif
 
-static void dump_address(unsigned int Add, unsigned int data_size)
+static void dump_address(unsigned int addr, unsigned int data_size)
 {
-	   int i;
-    int offset =0;
-    unsigned int add = Add;
-    int size = data_size;
+	int i, offset = 0;
+	unsigned int add = addr;
+	int size = data_size;
 
-    pr_err(" Address dump 0x%x and size 0x%x\n",Add, data_size);
-    for (i =0; i< size/16;++i) {
-        pr_err("%08x %08x %08x %08x %08x\n",
-            (add+offset),
-            readl(IO_ADDRESS(add + offset + 0)),
-            readl(IO_ADDRESS(add + offset + 4)),
-            readl(IO_ADDRESS(add + offset + 8)),
-            readl(IO_ADDRESS(add + offset + 12)));
-            offset+= 16;
-    }
+	pr_err("Address dump 0x%x and size 0x%x\n", addr, data_size);
+	for (i = 0; i < (size / 16); i++) {
+		pr_err("%08x: %08x %08x %08x %08x\n", (add + offset),
+		      readl(IO_ADDRESS(add + offset + 0)),
+		      readl(IO_ADDRESS(add + offset + 4)),
+		      readl(IO_ADDRESS(add + offset + 8)),
+		      readl(IO_ADDRESS(add + offset + 12)));
+		offset += 16;
+	}
 }
 
-#if 0
-static void debug_registers(void)
+inline void debug_registers(void)
 {
     dump_address(0xc8000000, 0x200);
     dump_address(0xc8000200, 0x200);
@@ -77,6 +81,7 @@ static void debug_registers(void)
     dump_address(0x60006000, 0x300);
 }
 
+#if 0
 static void verify_readwrite_registers(struct sdhci_host *host)
 {	
 	u32 sys_address, blk_size;
@@ -1349,6 +1354,101 @@ int sdhci_disable(struct mmc_host *mmc, int lazy)
 	return 0;
 }
 
+#ifdef CONFIG_APANIC_MMC
+static int sdhci_raw_mmc_probe_emmc(struct raw_hd_struct *rhd)
+{
+	char partname[BDEVNAME_SIZE] = {0};
+
+	get_mmcalias_by_id(partname, rhd->major, rhd->first_minor + rhd->partno);
+	if (strncmp(partname, CONFIG_APANIC_PLABEL, BDEVNAME_SIZE)) {
+		return -1;
+	}
+
+	pr_notice("%s: found kpanic partition\n", __func__);
+	memcpy(&sdhci_kpanic, rhd, sizeof(sdhci_kpanic));
+
+	return 0;
+}
+
+int sdhci_raw_mmc_panic_probe(struct raw_hd_struct *rhd, int type)
+{
+	pr_info("%s: type=%d\n", __func__, type);
+	if (type == MMC_TYPE_MMC)
+		return sdhci_raw_mmc_probe_emmc(rhd);
+	else if (type == MMC_TYPE_SD)
+		return -1;
+	else
+		return -1;
+}
+
+static int sdhci_raw_write_mmc(char *buf, sector_t start_sect, sector_t nr_sects,
+	unsigned int offset, unsigned int len)
+{
+	int fd, ret = 0;
+	struct file *filp;
+	mm_segment_t oldfs = get_fs();
+	loff_t pos = offset;
+	char blockpart[64];
+
+	sprintf(blockpart, "/dev/block/mmcblk0p%d", sdhci_kpanic.partno);
+
+	pr_debug("%s : start_sect=%u, offset=0x%x, len=%u\n",
+		__func__, (unsigned int)start_sect, offset, len);
+
+	set_fs(KERNEL_DS);
+	fd = sys_open(blockpart, O_WRONLY, 0);
+
+	if (fd < 0) {
+		pr_info("failed to open '%s' to write. %d\n", blockpart, fd);
+		return 0;
+	}
+
+	filp = fget(fd);
+	if (!filp) {
+		pr_warning("%s: failed to fget filp\n", __func__);
+		return 0;
+	}
+
+	ret = vfs_write(filp, (const char *)buf, len, &pos);
+	if (ret < 0)
+		pr_warning("%s: failed to write\n", __func__);
+
+	fput(filp);
+	filp_close(filp, NULL);
+	set_fs(oldfs);
+
+	return ret;
+}
+
+int sdhci_raw_mmc_panic_write(struct raw_hd_struct *rhd, char *buf,
+				unsigned int offset, unsigned int len)
+{
+	if (sdhci_kpanic.partno == 0) {
+		pr_warning("%s: kpanic partition not set !\n", __func__);
+		return 0;
+	}
+	return sdhci_raw_write_mmc(buf, rhd->start_sect, rhd->nr_sects,
+		offset, len);
+}
+
+int sdhci_raw_mmc_panic_erase(struct raw_hd_struct *rhd, unsigned int offset,
+				unsigned int len)
+{
+	int ret = -1;
+	char* buf = kzalloc(len, GFP_KERNEL);
+
+	if (!buf) {
+		pr_warning("%s: unable to alloc the empty buffer", __func__);
+		return -ENOMEM;
+	}
+
+	ret = sdhci_raw_write_mmc(buf, rhd->start_sect, rhd->nr_sects, offset, len);
+	kfree(buf);
+
+	return ret;
+}
+#endif
+
 static const struct mmc_host_ops sdhci_ops = {
 	.request	= sdhci_request,
 	.set_ios	= sdhci_set_ios,
@@ -1356,6 +1456,11 @@ static const struct mmc_host_ops sdhci_ops = {
 	.enable	= sdhci_enable,
 	.disable	= sdhci_disable,
 	.enable_sdio_irq = sdhci_enable_sdio_irq,
+#ifdef CONFIG_APANIC_MMC
+	.panic_probe = sdhci_raw_mmc_panic_probe,
+	.panic_write = sdhci_raw_mmc_panic_write,
+	.panic_erase = sdhci_raw_mmc_panic_erase,
+#endif
 };
 
 void sdhci_card_detect_callback(struct sdhci_host *host)

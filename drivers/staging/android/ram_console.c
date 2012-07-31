@@ -26,6 +26,12 @@
 #include <linux/rslib.h>
 #endif
 
+#ifdef CONFIG_APANIC
+extern int has_apanic_dump;
+#endif
+#ifdef CONFIG_APANIC_MMC
+extern int has_apanic_mmc_dump;
+#endif
 struct ram_console_buffer {
 	uint32_t    sig;
 	uint32_t    start;
@@ -158,11 +164,13 @@ static void __init
 ram_console_save_old(struct ram_console_buffer *buffer, char *dest)
 {
 	size_t old_log_size = buffer->size;
+	size_t total_size = old_log_size;
+	char *ptr;
 #ifdef CONFIG_ANDROID_RAM_CONSOLE_ERROR_CORRECTION
 	uint8_t *block;
 	uint8_t *par;
 	char strbuf[80];
-	int strbuf_len;
+	int strbuf_len = 0;
 
 	block = buffer->data;
 	par = ram_console_par_buffer;
@@ -197,11 +205,11 @@ ram_console_save_old(struct ram_console_buffer *buffer, char *dest)
 				      "\nNo errors detected\n");
 	if (strbuf_len >= sizeof(strbuf))
 		strbuf_len = sizeof(strbuf) - 1;
-	old_log_size += strbuf_len;
+	total_size += strbuf_len;
 #endif
 
 	if (dest == NULL) {
-		dest = kmalloc(old_log_size, GFP_KERNEL);
+		dest = kmalloc(total_size, GFP_KERNEL);
 		if (dest == NULL) {
 			printk(KERN_ERR
 			       "ram_console: failed to allocate buffer\n");
@@ -210,14 +218,15 @@ ram_console_save_old(struct ram_console_buffer *buffer, char *dest)
 	}
 
 	ram_console_old_log = dest;
-	ram_console_old_log_size = old_log_size;
+	ram_console_old_log_size = total_size;
 	memcpy(ram_console_old_log,
 	       &buffer->data[buffer->start], buffer->size - buffer->start);
 	memcpy(ram_console_old_log + buffer->size - buffer->start,
 	       &buffer->data[0], buffer->start);
+	ptr = ram_console_old_log + old_log_size;
 #ifdef CONFIG_ANDROID_RAM_CONSOLE_ERROR_CORRECTION
-	memcpy(ram_console_old_log + old_log_size - strbuf_len,
-	       strbuf, strbuf_len);
+	memcpy(ptr, strbuf, strbuf_len);
+	ptr += strbuf_len;
 #endif
 }
 
@@ -385,6 +394,14 @@ static int __init ram_console_late_init(void)
 
 	if (ram_console_old_log == NULL)
 		return 0;
+#ifdef CONFIG_APANIC
+	if (has_apanic_dump)
+		return 0;
+#endif
+#ifdef CONFIG_APANIC_MMC
+	if (has_apanic_mmc_dump)
+		return 0;
+#endif
 #ifdef CONFIG_ANDROID_RAM_CONSOLE_EARLY_INIT
 	ram_console_old_log = kmalloc(ram_console_old_log_size, GFP_KERNEL);
 	if (ram_console_old_log == NULL) {

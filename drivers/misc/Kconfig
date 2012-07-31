@@ -436,12 +436,22 @@ config APANIC
 	 Driver which handles kernel panics and attempts to write
 	 critical debugging data to flash.
 
+config APANIC_MMC
+	bool "Android kernel panic diagnostics driver on mmc"
+	default n
+	---help---
+	  Driver which handles kernel panics and attempts to write
+	  critical debugging data through mmc.
+
+	  Require partition labels in cmdline if not parsed automatically
+	  mmcparts=mmcparts=mmcblk0:p1(EFS),p2(APP),p3(CAC);mmcblk1:...
+
 config APANIC_PLABEL
 	string "Android panic dump flash partition label"
-	depends on APANIC
+	depends on APANIC_MMC || APANIC
 	default "kpanic"
 	---help---
-	 If your platform uses a different flash partition label for storing
+	 If your platform uses a different flash partition label to store
  	 crashdumps, enter it here.
 
 config BCM4329_RFKILL
