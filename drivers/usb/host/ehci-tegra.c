@@ -23,11 +23,13 @@
 #include <linux/usb/otg.h>
 #include <mach/usb_phy.h>
 #include <mach/suspend.h>
+
 #ifdef CONFIG_MACH_N1
 #ifdef CONFIG_USB_HOST_NOTIFY
 #include <linux/host_notify.h>
 #endif
 #endif
+
 #include <mach/iomap.h>
 #ifdef CONFIG_USB_EHCI_ONOFF_FEATURE
 #include <linux/pm_runtime.h>
@@ -70,9 +72,11 @@ struct tegra_ehci_hcd {
 	struct ehci_hcd *ehci;
 	struct tegra_usb_phy *phy;
 	struct clk *clk;
+#ifdef CONFIG_TEGRA_CLOCK_USBMIN
 	struct clk *clk_min;
-	struct clk *emc_clk;
 	struct clk *sclk_clk;
+#endif
+	struct clk *emc_clk;
 	struct otg_transceiver *transceiver;
 	int hub_suspend_req;
 	int host_resumed;
@@ -100,8 +104,10 @@ static void tegra_ehci_power_up(struct usb_hcd *hcd)
 {
 	struct tegra_ehci_hcd *tegra = dev_get_drvdata(hcd->self.controller);
 
-	clk_enable(tegra->emc_clk);
+#ifdef CONFIG_TEGRA_CLOCK_USBMIN
 	clk_enable(tegra->sclk_clk);
+#endif
+	clk_enable(tegra->emc_clk);
 	clk_enable(tegra->clk);
 #if (defined CONFIG_USB_EHCI_ONOFF_FEATURE) && (defined CONFIG_MACH_N1)
 	if (ehci_power_up_by_sysfs && tegra->phy->instance == 1) {
@@ -121,12 +127,16 @@ static void tegra_ehci_power_down(struct usb_hcd *hcd)
 	tegra->host_resumed = 0;
 	tegra_usb_phy_power_off(tegra->phy);
 	if (tegra->bus_is_power_down)  {
+#ifdef CONFIG_TEGRA_CLOCK_USBMIN
 		clk_disable(tegra->clk_min);
+#endif
 		return;
 	}
 	clk_disable(tegra->clk);
-	clk_disable(tegra->sclk_clk);
 	clk_disable(tegra->emc_clk);
+#ifdef CONFIG_TEGRA_CLOCK_USBMIN
+	clk_disable(tegra->sclk_clk);
+#endif
 	tegra->hub_suspend_req = 0;
 }
 
@@ -679,11 +689,11 @@ static int tegra_ehci_bus_suspend(struct usb_hcd *hcd)
 	struct tegra_ehci_hcd *tegra = dev_get_drvdata(hcd->self.controller);
 
 #ifdef CONFIG_MACH_N1
-	printk(KERN_INFO "%s %d\n", __func__, __LINE__);
+	pr_info("%s\n", __func__);
 
 	if (tegra->phy->instance == 1) {
 		if (shutdown == 1) {
-			printk(KERN_INFO "%s %d, return by shutdown\n", __func__, __LINE__);
+			pr_info("%s: return by shutdown\n", __func__);
 			return ret;
 		}
 	}
@@ -696,11 +706,12 @@ static int tegra_ehci_bus_suspend(struct usb_hcd *hcd)
 	    tegra->hub_suspend_req) {
 		tegra_usb_set_phy_clock(tegra->phy, 0);
 
+#ifdef CONFIG_TEGRA_CLOCK_USBMIN
 		if (0 != (ret = clk_enable(tegra->clk_min))) {
 			pr_err("HSIC USB core clk enable failed\n");
 			return ret;
 		}
-
+#endif
 		clk_disable(tegra->clk);
 
 		clk_disable(tegra->emc_clk);
@@ -724,8 +735,9 @@ static int tegra_ehci_bus_resume(struct usb_hcd *hcd)
 		if (0 != (ret = clk_enable(tegra->emc_clk)))
 			pr_err("HSIC USB EMC clk enable failed\n");
 
+#ifdef CONFIG_TEGRA_CLOCK_USBMIN
 		clk_disable(tegra->clk_min);
-
+#endif
 		tegra_usb_set_phy_clock(tegra->phy, 1);
 
 		msleep(50);
@@ -1105,6 +1117,7 @@ static int tegra_ehci_probe(struct platform_device *pdev)
 	if (err)
 		goto fail_clken;
 
+#ifdef CONFIG_TEGRA_CLOCK_USBMIN
 	tegra->clk_min = clk_get(&pdev->dev, "usb2min");
 	if (IS_ERR(tegra->clk_min)) {
 		dev_err(&pdev->dev, "Can't get ehci clock fast\n");
@@ -1121,11 +1134,13 @@ static int tegra_ehci_probe(struct platform_device *pdev)
                 err = PTR_ERR(tegra->sclk_clk);
                 goto fail_sclk_clk;
         }
+
+	clk_enable(tegra->sclk_clk);
 	if (instance == 0) 
         	clk_set_rate(tegra->sclk_clk, 240000000);
 	else 
         	clk_set_rate(tegra->sclk_clk, 80000000);
-        clk_enable(tegra->sclk_clk);
+#endif
 
 	tegra->emc_clk = clk_get(&pdev->dev, "emc");
 	if (IS_ERR(tegra->emc_clk)) {
@@ -1134,16 +1149,18 @@ static int tegra_ehci_probe(struct platform_device *pdev)
 		goto fail_emc_clk;
 	}
 
-
-#ifdef CONFIG_MACH_N1
+	clk_enable(tegra->emc_clk);
+#if defined(CONFIG_MACH_N1)
 	if (instance == 0)
 		clk_set_rate(tegra->emc_clk, 600000000);
 	else 
 		clk_set_rate(tegra->emc_clk, 150000000);
 #else
-	clk_set_rate(tegra->emc_clk, 150000000);
+	if (instance == 0)
+		clk_set_rate(tegra->emc_clk, 400000000);
+	else
+		clk_set_rate(tegra->emc_clk, 150000000);
 #endif
-	clk_enable(tegra->emc_clk);
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!res) {
@@ -1263,13 +1280,17 @@ fail_io:
 	clk_disable(tegra->emc_clk);
 	clk_put(tegra->emc_clk);
 fail_emc_clk:
+#ifdef CONFIG_TEGRA_CLOCK_USBMIN
         clk_disable(tegra->sclk_clk);
         clk_put(tegra->sclk_clk);
 fail_sclk_clk:
+#endif
 	clk_disable(tegra->clk);
 fail_clken:
+#ifdef CONFIG_TEGRA_CLOCK_USBMIN
 	clk_put(tegra->clk_min);
 fail_clk_min:
+#endif
 	clk_put(tegra->clk);
 fail_clk:
 	usb_put_hcd(hcd);
@@ -1348,9 +1369,10 @@ static int tegra_ehci_remove(struct platform_device *pdev)
 	clk_disable(tegra->clk);
 	clk_put(tegra->clk);
 
+#ifdef CONFIG_TEGRA_CLOCK_USBMIN
         clk_disable(tegra->sclk_clk);
         clk_put(tegra->sclk_clk);
-
+#endif
 	clk_disable(tegra->emc_clk);
 	clk_put(tegra->emc_clk);
 

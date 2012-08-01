@@ -2183,7 +2183,9 @@ struct clk tegra_list_periph_clks[] = {
 	PERIPH_CLK("disp2",	"tegradc.1",		NULL,	26,	0x13c,	0x31E,	600000000, mux_pllp_plld_pllc_clkm,	MUX | DIV_U71), /* scales with voltage and process_id */
 	PERIPH_CLK("usbd",	"fsl-tegra-udc",	NULL,	22,	0,	0x31E,	480000000, mux_clk_m,			0), /* requires min voltage */
 	PERIPH_CLK("usb2",	"tegra-ehci.1",		"usb2",	58,	0,	0x31E,	480000000, mux_clk_m,			0), /* requires min voltage */
-	PERIPH_CLK("usb2min",	"tegra-ehci.1",		"usb2min",	95,	0,	0x31E,	60000000,  mux_clk_m,			0), /* requires min voltage */
+#ifdef CONFIG_TEGRA_CLOCK_USBMIN
+	PERIPH_CLK("usb2min",	"tegra-ehci.1",	     "usb2min",	95,	0,	0x31E,	60000000,  mux_clk_m,			0), /* requires min voltage */
+#endif
 	PERIPH_CLK("usb3",	"tegra-ehci.2",		NULL,	59,	0,	0x31E,	480000000, mux_clk_m,			0), /* requires min voltage */
 	PERIPH_CLK("dsi",	"dsi",			NULL,	48,	0,	0x31E,	500000000, mux_plld_out0,		0), /* scales with voltage */
 	PERIPH_CLK("csi",	"tegra_camera",		"csi",	52,	0,	0x31E,	72000000,  mux_pllp_out3,		0),
@@ -2191,14 +2193,16 @@ struct clk tegra_list_periph_clks[] = {
 	PERIPH_CLK("csus",	"tegra_camera",		"csus",	92,	0,	0x31E,	150000000, mux_clk_m,			PERIPH_NO_RESET),
 	PERIPH_CLK("stat_mon",	"tegra-stat-mon",	NULL,	37,	0,	0x31E,	26000000,  mux_clk_m,			0),
 };
- 
-struct clk tegra_list_shared_clks[] = {
-       SHARED_CLK("avp.sclk",  "tegra-avp",            "sclk", &tegra_clk_virtual_sclk),
-       SHARED_CLK("usbd.sclk", "fsl-tegra-udc",        "sclk", &tegra_clk_virtual_sclk),
-       SHARED_CLK("usb1.sclk", "tegra-ehci.0",         "sclk", &tegra_clk_virtual_sclk),
-       SHARED_CLK("usb2.sclk", "tegra-ehci.1",         "sclk", &tegra_clk_virtual_sclk),
-       SHARED_CLK("usb3.sclk", "tegra-ehci.2",         "sclk", &tegra_clk_virtual_sclk),
 
+struct clk tegra_list_shared_clks[] = {
+	SHARED_CLK("avp.sclk",	"tegra-avp",		"sclk",	&tegra_clk_virtual_sclk),
+#ifdef CONFIG_TEGRA_CLOCK_USBMIN
+	/* is that really required ? */
+	SHARED_CLK("usbd.sclk", "fsl-tegra-udc",        "sclk", &tegra_clk_virtual_sclk),
+	SHARED_CLK("usb1.sclk", "tegra-ehci.0",         "sclk", &tegra_clk_virtual_sclk),
+	SHARED_CLK("usb2.sclk", "tegra-ehci.1",         "sclk", &tegra_clk_virtual_sclk),
+	SHARED_CLK("usb3.sclk", "tegra-ehci.2",         "sclk", &tegra_clk_virtual_sclk),
+#endif
 	SHARED_CLK("avp.emc",	"tegra-avp",		"emc",	&tegra_clk_emc),
 	SHARED_CLK("cpu.emc",	"cpu",			"emc",	&tegra_clk_emc),
 	SHARED_CLK("disp1.emc",	"tegradc.0",		"emc",	&tegra_clk_emc),

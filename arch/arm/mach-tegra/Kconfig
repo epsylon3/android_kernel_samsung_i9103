@@ -39,20 +39,20 @@ config MACH_WHISTLER
          Support for NVIDIA Whistler development platform
 
 config MACH_N1
-       bool "N1 board"
-	   help
-	     Support for Samsung N1 platform
+	bool "N1 board"
+	help
+	  Support for Samsung Galaxy R platform
 
 config MACH_N1_CHN
-       bool "N1 board"
-	   help
-	     Support for Samsung N1 platform
-	     
+	bool "N1 CHN board"
+	help
+	  Support for Samsung Galaxy Z (China)
+
 config MACH_BOSE_ATT
-       bool "BOSE board"
-	   default n
-	   help
-	     Support for Samsung BOSE platform
+	bool "BOSE board"
+	default n
+	help
+	  Support for Samsung BOSE platform
 
 choice
 	prompt "Default low-level debug console UART"
@@ -219,6 +219,14 @@ config DISABLE_3D_POWERGATING
 	  config, 3D power will never be gated.
 
 
+config TEGRA_CLOCK_USBMIN
+	bool "Use samsung way sclk for usb"
+	default y
+	help
+	  Prefer samsung original way to reduce usb clock
+	  if not set, use only standard emc clock for that.
+
 source "arch/arm/mach-tegra/nv/Kconfig"
 
 endif
+
