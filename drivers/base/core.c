@@ -1832,7 +1832,11 @@ static int __dev_printk(const char *level, const struct device *dev,
 	if (!dev)
 		return printk("%s(NULL device *): %pV", level, vaf);
 
-	return printk("%s%s %s: %pV",
+	if (!strcmp(dev_driver_string(dev), dev_name(dev)))
+
+		return printk("%s%s: %pV", level, dev_name(dev), vaf);
+	else
+		return printk("%s%s %s: %pV",
 		      level, dev_driver_string(dev), dev_name(dev), vaf);
 }
 

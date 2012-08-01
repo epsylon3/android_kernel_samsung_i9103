@@ -58,9 +58,6 @@
 #include "../smd-hsic/smd_hsic.h"
 #include "smd_ctl.h"
 
-#undef pr_debug
-#define pr_debug pr_err
-
 static struct completion *g_L2complete;
 static int g_pm_status;
 struct str_smdctl *gsmdctl;

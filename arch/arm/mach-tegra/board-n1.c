@@ -1931,7 +1931,7 @@ static void n1_touch_init_hw(void *data)
 	struct mxt_platform_data *pdata = (struct mxt_platform_data *) data;
 	int error;
 
-	pr_info("%s:%d\n", __func__, __LINE__);
+	pr_info("%s\n", __func__);
 
 	/* TSP INT GPIO initialize */
 	tegra_gpio_enable(pdata->irq_gpio);

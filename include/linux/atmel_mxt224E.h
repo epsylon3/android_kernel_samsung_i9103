@@ -622,10 +622,10 @@
 #define DEBUG_RAW       8
 #define DEBUG_TRACE     10
 
-#define klogi(fmt, arg...)  printk(KERN_INFO "%s: " fmt "\n" , __func__, ## arg)
-#define kloge(fmt, arg...)  printk(KERN_ERR "%s(%d): " fmt "\n" , __func__, __LINE__, ## arg)
-#define klogi_if(fmt, arg...) if (1) printk(KERN_INFO "%s: " fmt "\n" , __func__, ## arg)
-#define kloge_if(fmt, arg...) if (mxt_debug) printk(KERN_ERR "%s(%d): " fmt "\n" , __func__, __LINE__, ## arg)
+#define klogi(fmt, arg...)  pr_info(fmt "\n", ## arg)
+#define kloge(fmt, arg...)  pr_err("[%s:%d] " fmt "\n" , __func__, __LINE__, ## arg)
+#define klogi_if(fmt, arg...) if (debug > 1) pr_info(fmt "\n" , ## arg)
+#define kloge_if(fmt, arg...) if (debug > 1) pr_err("[%s:%d] " fmt "\n" , __func__, __LINE__, ## arg)
 
 #define MIGRATION_TO_NVODM
 

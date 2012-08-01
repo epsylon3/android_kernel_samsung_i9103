@@ -331,7 +331,7 @@ static int ram_console_driver_probe(struct platform_device *pdev)
 	}
 	buffer_size = res->end - res->start + 1;
 	start = res->start;
-	printk(KERN_INFO "ram_console: got buffer at %zx, size %zx\n",
+	pr_info("ram_console: got buffer at 0x%zx, size 0x%zx\n",
 	       start, buffer_size);
 	buffer = ioremap(res->start, buffer_size);
 	if (buffer == NULL) {

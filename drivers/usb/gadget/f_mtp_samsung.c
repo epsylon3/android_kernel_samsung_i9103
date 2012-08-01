@@ -593,7 +593,7 @@ static ssize_t mtpg_write(struct file *fp, const char __user *buf,
 /*Fixme for Interrupt Transfer*/
 static void interrupt_complete(struct usb_ep *ep, struct usb_request *req )
 {
-	printk("******** Finished Writing Interrupt Data \n");
+	printk("******** [MTP] Finished Writing Interrupt Data \n");
 }
 
 static ssize_t interrupt_write(struct file *fd, const char __user *buf, size_t count)
@@ -654,7 +654,7 @@ static long  mtpg_ioctl(struct file *fd, unsigned int code, unsigned long arg)
 			break;
 
 		case MTP_ONLY_ENABLE:
-			printk("[%s:%d] calling mtp_function_enable with %d \n",__func__,__LINE__,mtp_enable_desc);
+			DEBUG_MTPB("[%s:%d] calling mtp_function_enable with %d \n",__func__,__LINE__,mtp_enable_desc);
 			mtp_function_enable(mtp_enable_desc);
 			DEBUG_MTPB("[%s] \tline [%d] MTP_ONLY_ENABLE \n", __func__,__LINE__);
 #ifdef CONFIG_USB_ANDROID_ACCESSORY
@@ -663,11 +663,11 @@ static long  mtpg_ioctl(struct file *fd, unsigned int code, unsigned long arg)
 			if (dev->cdev && dev->cdev->gadget )
 #endif				
 			{
-				printk("[%s] B4 disconnecting gadget\tline = [%d] \n", __func__,__LINE__);
+				DEBUG_MTPB("[%s] B4 disconnecting gadget\tline = [%d] \n", __func__,__LINE__);
 				usb_composite_force_reset(dev->cdev);
 			}
 			status = 10;
-			printk("[%s]  [%d] MTP_ONLY_ENABLE ioctl and clearing the error = 0 \n", __func__,__LINE__);
+			DEBUG_MTPB("[%s]  [%d] MTP_ONLY_ENABLE ioctl and clearing the error = 0 \n", __func__,__LINE__);
 			the_mtpg->error = 0;
 			the_mtpg->read_ready = 0;			
 			break;
@@ -694,11 +694,11 @@ static long  mtpg_ioctl(struct file *fd, unsigned int code, unsigned long arg)
 			DEBUG_MTPB("[%s] \t %d MTP intrpt_Write \n",__func__,__LINE__);
 			ret_value = interrupt_write(fd, (const char *)arg, MTP_MAX_PACKET_LEN_FROM_APP );
 			if(ret_value < 0){
-				printk("[%s] \t %d interrupt-fd failed \n", __func__,__LINE__);
+				printk("[%s:%d] interrupt-fd failed \n", __func__,__LINE__);
 				status = -EIO;
 			}
 			else {
-				printk("[%s] \t %d interrupt fd success \n", __func__,__LINE__);
+				DEBUG_MTPB("[%s:%d] interrupt fd success \n", __func__,__LINE__);
 				status = MTP_MAX_PACKET_LEN_FROM_APP;
 			}
 			break;
@@ -743,19 +743,19 @@ static long  mtpg_ioctl(struct file *fd, unsigned int code, unsigned long arg)
 			//req->zero = 1;
 			req = req_get(dev, &dev->tx_idle);
 			req->length = 0;
-			printk("[%s] SEND_ZLP_DATA and usb_ep_queu 0 data size = %d\tline = [%d] \n", __func__,size,__LINE__);
+			DEBUG_MTPB("[%s] SEND_ZLP_DATA and usb_ep_queu 0 data size = %d\tline = [%d] \n", __func__,size,__LINE__);
 			status = usb_ep_queue(dev->bulk_in, req, GFP_ATOMIC);
 			if (status < 0) {
-				printk("[%s] Error at usb_ep_queue\tline = [%d] \n", __func__,__LINE__);
+				printk("[%s:%d] Error at usb_ep_queue \n", __func__,__LINE__);
 			} else {
-				printk("[%s] usb_ep_queue passed and status = %d\tline = [%d] \n", __func__,__LINE__,status);
-				status =20;
+				DEBUG_MTPB("[%s:%d] usb_ep_queue passed and status = %d \n", __func__,__LINE__,status);
+				status = 20;
 			}
 			break;
 		case GET_HIGH_FULL_SPEED:
-			printk("[%s] GET_HIGH_FULL_SPEED and \tline = [%d] \n", __func__,__LINE__);
+			printk("[%s:%d] GET_HIGH_FULL_SPEED \n", __func__,__LINE__);
 			max_pkt = dev->bulk_in->maxpacket;
-			printk("[%s]  line = %d max_pkt = [%d] \n", __func__,__LINE__, max_pkt);
+			printk("[%s:%d] max_pkt = %d \n", __func__,__LINE__, max_pkt);
 			if(max_pkt == 64)
 				status = 64;
 			else
@@ -916,7 +916,7 @@ static int __init mtpg_function_bind(struct usb_configuration *c, struct usb_fun
 	 */
 
 	DEBUG_MTPB("[%s] \tline = [%d] \n", __func__,__LINE__);
-	printk("[%s] \tline = [%d] \n", __func__,__LINE__);
+	pr_info("%s\n", __func__);
 
 	id = usb_interface_id(c, f);
 	if (id < 0) {
@@ -983,7 +983,7 @@ static int __init mtpg_function_bind(struct usb_configuration *c, struct usb_fun
 	if (gadget_is_dualspeed(cdev->gadget)) {
 
 		DEBUG_MTPB("[%s] \tdual speed line = [%d] \n", __func__,__LINE__);
-		printk("[%s] \tdual speed line = [%d] \n", __func__,__LINE__);
+		pr_info("%s: dual speed\n", __func__);
 
 		/* Assume endpoint addresses are the same for both speeds */
 		hs_mtpg_in_desc.bEndpointAddress =
@@ -1000,7 +1000,7 @@ static int __init mtpg_function_bind(struct usb_configuration *c, struct usb_fun
 	the_mtpg->cdev = cdev;
 
 	/*This is required for intializing Descriptors to NULL*/
-	printk("***** [%s:%d] calling mtp_function_enable with %d \n",__func__,__LINE__,mtp_disable_desc);
+	DEBUG_MTPB("***** calling mtp_function_enable with %d\n", mtp_disable_desc);
 
 	//--------------------------------------------
 #ifdef CSY_TEST
@@ -1046,7 +1046,7 @@ static int mtpg_function_set_alt(struct usb_function *f,
 	if (ret) {
 		usb_ep_disable(dev->bulk_in);
 		dev->bulk_in->driver_data = NULL;
-		 printk("[%s] Enable Bulk-Out EP error!!! %d\n", __FUNCTION__, __LINE__);
+		 printk("[%s] Enable Bulk-Out EP error!!!\n", __FUNCTION__);
 		 return ret;
 	}
 	dev->bulk_in->driver_data = dev;
@@ -1058,7 +1058,7 @@ static int mtpg_function_set_alt(struct usb_function *f,
 	if (ret) {
 		usb_ep_disable(dev->bulk_out);
 		dev->bulk_out->driver_data = NULL;
-		printk("[%s] Enable Bulk-In EP error!!! %d\n", __FUNCTION__, __LINE__);
+		printk("[%s] Enable Bulk-In EP error!!!\n", __FUNCTION__);
 		return ret;
 	}
 	dev->bulk_out->driver_data = dev;
@@ -1079,6 +1079,7 @@ static void mtpg_function_disable(struct usb_function *f)
 	struct mtpg_dev	*dev = func_to_dev(f);
 
 	DEBUG_MTPB("[%s] \tline = [%d] \n", __func__,__LINE__);
+	pr_info("%s\n", __func__);
 
 	dev->online = 0;
 	dev->error = 1;
@@ -1280,7 +1281,7 @@ int mtp_function_config_changed(struct usb_composite_dev *cdev,	struct usb_confi
 	struct mtpg_dev *mtpg = the_mtpg;
 	int 	status;
 
-	printk(KERN_INFO "mtp_function_config_changed\n");
+	pr_info("mtp_function_config_changed\n");
 
 	mtpg->function.bind = NULL;
 
@@ -1303,15 +1304,15 @@ void mtp_function_enable(int enable)
 	struct mtpg_dev *dev = the_mtpg;
 
 	if (dev) {
-		printk("[%s] mtp_function => (%s)\n", __func__,
+		pr_info("[%s] mtp_function => (%s)\n", __func__,
 			enable ? "enabled" : "disabled");
 
 		if (enable) {
-			printk("****** %s and line %d fs and hs desc \n",__FUNCTION__,__LINE__);
+			DEBUG_MTPB("****** %s: fs and hs desc \n", __FUNCTION__);
 			dev->function.descriptors = fs_mtpg_desc;
 			dev->function.hs_descriptors = hs_mtpg_desc;
 		} else {
-			printk("****** %s and line %d null_desc \n",__FUNCTION__,__LINE__);
+			DEBUG_MTPB("****** %s: null_desc \n", __FUNCTION__);
 			dev->function.descriptors = null_mtpg_descs;
 			dev->function.hs_descriptors = null_mtpg_descs;
 		}

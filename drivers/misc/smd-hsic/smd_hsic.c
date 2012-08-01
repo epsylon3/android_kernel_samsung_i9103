@@ -432,7 +432,7 @@ static void smdhsic_disconnect(struct usb_interface *intf)
 	struct str_intf_priv *intfpriv;
 	struct usb_device *device = NULL;
 
-	pr_info("%s: Called\n", __func__);
+	if (intf) pr_info("%s %d\n", __func__, intf->minor);
 
 	intfpriv = usb_get_intfdata(intf);
 	if (!intfpriv) {
@@ -450,7 +450,7 @@ static void smdhsic_disconnect(struct usb_interface *intf)
 	}
 
 	if (smd_intf != intf) {
-		pr_err("smd_intf is not same intf\n");
+		pr_warn("%s: smd_intf is not same intf\n", __func__);
 		goto err_mismatched_intf;
 	}
 
@@ -498,7 +498,7 @@ err_get_usb_intf:
 	if (!device)
 		usb_put_dev(device);
 err_get_intfdata:
-	pr_err("release(2) : %p\n", intf);
+	pr_err("%s: usb release %d\n", __func__, intf->minor);
 	usb_driver_release_interface(get_usb_driver(intf), intf);
 	return;
 }

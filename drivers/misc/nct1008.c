@@ -181,11 +181,12 @@ static int nct1008_update_local_temp(struct nct1008_temp_callbacks *ptr)
 			"temperature (%d), (%d)\n", __func__, raw_temp_value, external_temp);
 	}
 
-	/* REMOVE this */
+	/* REMOVE this
 	status_reg = i2c_smbus_read_byte_data(client, STATUS_RD);
 
 	pr_info("NCT1008 : temp(%d), raw(%d), ext(%d), config(0x%02x), status(0x%02x)\n", 
 		temp_value, raw_temp_value, external_temp, config_reg, status_reg);
+	*/
 
 	return temp_value;
 }
