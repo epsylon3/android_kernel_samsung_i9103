@@ -1744,25 +1744,29 @@ static irqreturn_t sdhci_irq(int irq, void *dev_id)
 {
 	irqreturn_t result;
 	struct sdhci_host* host = dev_id;
-	u32 intmask;
-	int cardint = 0;
-
+	u32 intmask, unexpected = 0;
+	int cardint = 0, max_loops = 16;
 	unsigned int cmd = 0;
+
 	spin_lock(&host->lock);
 
 	intmask = sdhci_readl(host, SDHCI_INT_STATUS);
-    /*check error situation*/
+
+	/* check error situation, except timeouts */
 	if (intmask & SDHCI_INT_ERROR_MASK) {
-	   cmd = sdhci_readl(host, SDHCI_COMMAND);
-	   cmd = ((cmd>>24)&0x3f);
-	   printk("[MMC] STATUS = %08x for cmd = %d \n", intmask, cmd);
+		if (!(intmask & SDHCI_INT_TIMEOUT)) {
+			cmd = sdhci_readl(host, SDHCI_COMMAND) >> 24;
+			pr_warning("[MMC] STATUS = 0x%x for cmd %d\n",
+				intmask & SDHCI_INT_ERROR_MASK, cmd & 0x3f);
 		}
+	}
 
 	if (!intmask || intmask == 0xffffffff) {
 		result = IRQ_NONE;
 		goto out;
 	}
 
+again:
 	DBG("*** %s got interrupt: 0x%08x\n",
 		mmc_hostname(host->mmc), intmask);
 
@@ -1804,18 +1808,25 @@ static irqreturn_t sdhci_irq(int irq, void *dev_id)
 	intmask &= ~SDHCI_INT_CARD_INT;
 
 	if (intmask) {
-		printk(KERN_ERR "%s: Unexpected interrupt 0x%08x.\n",
-			mmc_hostname(host->mmc), intmask);
-		sdhci_dumpregs(host);
-
+		unexpected |= intmask;
 		sdhci_writel(host, intmask, SDHCI_INT_STATUS);
 	}
 
 	result = IRQ_HANDLED;
 
-	mmiowb();
+	intmask = sdhci_readl(host, SDHCI_INT_STATUS);
+	if (intmask && --max_loops)
+		goto again;
+
+	//mmiowb();
 out:
 	spin_unlock(&host->lock);
+
+	if (unexpected) {
+		pr_err("%s: Unexpected interrupt 0x%08x.\n",
+			mmc_hostname(host->mmc), unexpected);
+		sdhci_dumpregs(host);
+	}
 
 	/*
 	 * We have to delay this as it calls back into the driver.
