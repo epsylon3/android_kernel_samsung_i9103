@@ -104,26 +104,30 @@
 #include <linux/usb/f_accessory.h>
 #endif
 
+#ifndef CONFIG_TEGRA_NVOS
 static NvBootArgs s_BootArgs = { {0}, {0}, {0}, {0}, {0}, {0}, {{0}} };
 
 static int __init parse_tag_nvidia(const struct tag *tag)
 {
 	const struct tag_tegra *nvtag = &tag->u.tegra;
+	NvBootArgsPreservedMemHandle *mem = NULL;
 
 	/* fill the preserved handles */
 	if (nvtag->bootarg_key >= NvBootArgKey_PreservedMemHandle_0 &&
 	    nvtag->bootarg_key < NvBootArgKey_PreservedMemHandle_Num)
 	{
 		int ndx = nvtag->bootarg_key - NvBootArgKey_PreservedMemHandle_0;
-
-		NvBootArgsPreservedMemHandle *dst = &s_BootArgs.MemHandleArgs[ndx];
 		const NvBootArgsPreservedMemHandle *src =
 			(const NvBootArgsPreservedMemHandle *)nvtag->bootarg;
+		
 		if (nvtag->bootarg_len != sizeof(NvBootArgsPreservedMemHandle))
 			printk("Unexpected preserved memory handle tag length!\n");
-		else
-			*dst = *src;
-
+		else {
+			mem = &s_BootArgs.MemHandleArgs[ndx];
+			*mem = *src;
+			pr_info("Preserved mem handle %d: addr 0x%x, size %u\n", ndx,
+				mem->Address, mem->Size);
+		}
 		return 0;
 	}
 
@@ -138,7 +142,8 @@ static int __init parse_tag_nvidia(const struct tag *tag)
 			printk("Unexpected shmoo tag length!\n");
 		else {
 			*dst = *src;
-			pr_info("Shmoo tag with handle 0x%x\n", src->MemHandleKey);
+			pr_info(" Shmoo tag, handle %d\n",
+				src->MemHandleKey - NvBootArgKey_PreservedMemHandle_0);
 		}
 		break;
 	}
@@ -151,7 +156,7 @@ static int __init parse_tag_nvidia(const struct tag *tag)
 			printk("Unexpected display tag length!\n");
 		else {
 			*dst = *src;
-			pr_info("Display tag Controller=%u Index=%u %s\n",
+			pr_info(" Display tag, controller %u:%u is %s\n",
 				dst->Controller, dst->DisplayDeviceIndex,
 				dst->bEnabled ? "enabled":"disabled");
 		}
@@ -166,10 +171,20 @@ static int __init parse_tag_nvidia(const struct tag *tag)
 			printk("Unexpected framebuffer tag length %d != %d!\n",
 				nvtag->bootarg_len, sizeof(NvBootArgsFramebuffer));
 		else {
+			int ndx = src->MemHandleKey - NvBootArgKey_PreservedMemHandle_0;
+			if (ndx > NvBootArgKey_PreservedMemHandle_Num)
+				break;
+
+			mem = &s_BootArgs.MemHandleArgs[ndx];
 			*dst = *src;
-			pr_info("Framebuffer tag with handle 0x%x\n", src->MemHandleKey);
-			pr_info("  %hux%hu %u, size=%u, flags=%u\n", dst->Width, dst->Height,
-				dst->ColorFormat, dst->Size, dst->Flags);
+
+			pr_info(" Framebuffer tag, handle %d\n",
+				src->MemHandleKey - NvBootArgKey_PreservedMemHandle_0);
+			pr_info(" %hux%hu with %hu scanline, size=%u., %u buffers\n", dst->Width,
+				dst->Height, dst->Pitch, dst->Size, (u32) dst->NumSurfaces);
+
+			tegra_bootloader_fb_start = mem->Address;
+			tegra_bootloader_fb_size  = mem->Size;
 		}
 		break;
 	}
@@ -182,7 +197,7 @@ static int __init parse_tag_nvidia(const struct tag *tag)
 			printk("Unexpected RM tag length!\n");
 		else {
 			*dst = *src;
-			pr_info("Found a RM tag\n");
+			pr_info(" Found a RM tag\n");
 		}
 		break;
 	}
@@ -195,7 +210,7 @@ static int __init parse_tag_nvidia(const struct tag *tag)
 			printk("Unexpected phys shmoo tag length!\n");
 		else {
 			*dst = *src;
-			pr_info("Phys shmoo tag with pointer 0x%X and length %u\n",
+			pr_info(" Phys shmoo tag, pointer 0x%X length %u.\n",
 				src->PhysShmooPtr, src->Size);
 		}
 		break;
@@ -208,8 +223,16 @@ static int __init parse_tag_nvidia(const struct tag *tag)
 		if (nvtag->bootarg_len != sizeof(NvBootArgsWarmboot))
 			printk("Unexpected warmboot tag length!\n");
 		else {
+			int ndx = src->MemHandleKey - NvBootArgKey_PreservedMemHandle_0;
+			if (ndx > NvBootArgKey_PreservedMemHandle_Num)
+				break;
+
+			mem = &s_BootArgs.MemHandleArgs[ndx];
 			*dst = *src;
-			pr_info("Found a warmboot tag, handle=0x%x\n", src->MemHandleKey);
+
+			pr_info(" Warmboot tag (LP0), handle %d\n", ndx);
+			tegra_lp0_vec_start = mem->Address;
+			tegra_lp0_vec_size  = mem->Size;
 		}
 		break;
 	}
@@ -221,6 +244,7 @@ static int __init parse_tag_nvidia(const struct tag *tag)
 	return 0;
 }
 __tagtable(ATAG_NVIDIA, parse_tag_nvidia);
+#endif /* !CONFIG_TEGRA_NVOS */
 
 #ifdef CONFIG_SAMSUNG_LPM_MODE
 int charging_mode_from_boot;

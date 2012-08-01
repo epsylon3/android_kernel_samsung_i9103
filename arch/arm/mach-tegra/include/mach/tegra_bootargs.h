@@ -1,6 +1,6 @@
 /*
  * Proper tegra include for linux world
- * 
+ *
  */
 
 #ifndef __TEGRA_BOOTARGS_H_
@@ -20,6 +20,8 @@
 #define ATAG_NVIDIA_FRAMEBUFFER         0x3
 #define ATAG_NVIDIA_CHIPSHMOO           0x4
 #define ATAG_NVIDIA_CHIPSHMOOPHYS       0x5
+#define ATAG_NVIDIA_CARVEOUT            0x6
+#define ATAG_NVIDIA_WARMBOOT            0x7
 
 #define ATAG_NVIDIA_PRESERVED_MEM_0     0x10000
 #define ATAG_NVIDIA_PRESERVED_MEM_N     2
@@ -93,7 +95,7 @@ typedef struct NvBootArgsFramebufferRec
 	u32 Flags;
 
 	// use a tearing effect signal in combination with a trigger
-	// from the display software to generate a frame of pixels 
+	// from the display software to generate a frame of pixels
 	// for the display device.
 	#define NVBOOTARG_FB_FLAG_TEARING_EFFECT (0x1)
 
