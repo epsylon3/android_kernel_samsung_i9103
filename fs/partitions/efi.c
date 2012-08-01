@@ -614,7 +614,7 @@ int efi_partition(struct parsed_partitions *state)
 {
 	gpt_header *gpt = NULL;
 	gpt_entry *ptes = NULL;
-	u32 i;
+	u32 i, j;
 	unsigned ssz = bdev_logical_block_size(state->bdev) / 512;
 
 	if (!find_valid_gpt(state, &gpt, &ptes) || !gpt || !ptes) {
@@ -623,26 +623,29 @@ int efi_partition(struct parsed_partitions *state)
 		return 0;
 	}
 
-	pr_debug("GUID Partition Table is valid!  Yea!\n");
+	pr_debug("GUID Partition Table is valid!\n");
 
 	for (i = 0; i < le32_to_cpu(gpt->num_partition_entries) && i < state->limit-1; i++) {
 		u64 start = le64_to_cpu(ptes[i].starting_lba);
 		u64 size = le64_to_cpu(ptes[i].ending_lba) -
 			   le64_to_cpu(ptes[i].starting_lba) + 1ULL;
 		u8 name[sizeof(ptes->partition_name) / sizeof(efi_char16_t)];
-		int len;
 
 		if (!is_pte_valid(&ptes[i], last_lba(state->bdev)))
 			continue;
 
-		len = utf16s_to_utf8s(ptes[i].partition_name,
-				      sizeof(ptes[i].partition_name) /
-				      sizeof(efi_char16_t),
-				      UTF16_LITTLE_ENDIAN, name,
-				      sizeof(name));
+		/* N1 doesnt use UTF8 in gpt header, only 3 letters */
+		memcpy(&name[0], ptes[i].partition_name, sizeof(name));
+		name[sizeof(name) - 1] = '\0';
 
-		put_named_partition(state, i+1, start * ssz, size * ssz,
-				    name, len);
+		/* Truncate to ASCII */
+		for (j = 0; j < sizeof(name); j++) {
+			name[j] = name[j] & 0x7f;
+			if (!name[j]) break;
+		}
+
+		put_named_partition(state, i + 1, start * ssz, size * ssz,
+				    name, strnlen(name, sizeof(name)));
 
 		/* If this is a RAID volume, tell md */
 		if (!efi_guidcmp(ptes[i].partition_type_guid,
