@@ -237,9 +237,10 @@ struct wm8994_priv {
 	enum  dap_connection_status dap_state;
 
 // SYS_AUDIO - csc_tuning : apply tuning values by checking CSC
-      enum customer_state customer;
+	enum customer_state customer;
 
-	  };
+	int headset_vol;
+};
 
 struct gain_info_t {
 	unsigned int mode;
