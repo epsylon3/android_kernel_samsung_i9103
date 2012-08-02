@@ -421,10 +421,6 @@ static int max8907c_regulator_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, rdev);
 
-#ifdef CONFIG_MACH_N1
-	dev_info(&pdev->dev, "%s : MAX8907C Regulator Driver Loading\n", __func__);
-#endif
-
 	return 0;
 
 error:

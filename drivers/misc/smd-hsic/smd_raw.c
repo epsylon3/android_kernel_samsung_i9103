@@ -75,11 +75,11 @@ static ssize_t smdraw_waketime_show(struct device *dev,
 
 static ssize_t smdraw_waketime_store(struct device *dev,
 				     struct device_attribute *attr,
-				     char *buf, size_t count )
+				     const char *buf, size_t count)
 {
 	unsigned long msec;
-	int r;
 	struct str_smdraw *smdraw = dev_get_drvdata(dev);
+	u32 r;
 
 	r = strict_strtoul(buf, 10, &msec);
 	if (r) {
@@ -763,7 +763,7 @@ static ssize_t smdraw_write(struct file *file, const char __user * buf,
 			    size_t count, loff_t *ppos)
 {
 	int r;
-	int send_byte, byte_total;
+	int send_byte;
 	int byte_sent = 0;
 	struct str_raw_dev *rawdev = file->private_data;
 	struct str_smdraw *smdraw = dev_get_drvdata(rawdev->dev);
@@ -816,7 +816,7 @@ find_hdlc_start:
 		goto find_hdlc_start;
 	}
 
-	ret = memcpy_from_ringbuf(readbuf, &hdr.len, 4);
+	ret = memcpy_from_ringbuf(readbuf, (char *) &hdr.len, 4);
 	if (!ret) {
 		pr_warn("%s:read raw hdr.len failed: %d\n", __func__, ret);
 			ret = -1;

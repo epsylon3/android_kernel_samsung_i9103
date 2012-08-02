@@ -511,7 +511,7 @@ struct fsl_udc {
 };
 
 /*-------------------------------------------------------------------------*/
-
+#undef DBG
 #ifdef DEBUG
 #define DBG(fmt, args...) 	printk(KERN_DEBUG "[%s]  " fmt "\n", \
 				__func__, ## args)
@@ -547,12 +547,16 @@ static void dump_msg(const char *label, const u8 * buf, unsigned int length)
 }
 #endif
 
+#undef VDBG
 #ifdef VERBOSE
 #define VDBG		DBG
 #else
 #define VDBG(stuff...)	do{}while(0)
 #endif
 
+#undef ERR
+#undef WARNING
+#undef INFO
 #define ERR(stuff...)		pr_err("udc: " stuff)
 #define WARNING(stuff...)		pr_warning("udc: " stuff)
 #define INFO(stuff...)		pr_info("udc: " stuff)
