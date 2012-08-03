@@ -35,7 +35,7 @@
 #include <linux/interrupt.h>
 #include <linux/wakelock.h>
 
-#define BT_SLEEP_ENABLE // for broadcom stack
+//#define BT_SLEEP_ENABLE // for broadcom stack
 
 struct bcm4330_rfkill_data {
 	int gpio_reset;
@@ -60,7 +60,7 @@ static int bcm4330_bt_rfkill_set_power(void *data, bool blocked)
 {
 	int ret = 0;
 	if (blocked) {
-		pr_info("[BT] Bluetooth Power off\n");
+		pr_info("[BT] Bluetooth Power off blocked=%d\n", blocked?1:0);
 
 		ret = disable_irq_wake(bcm4330_rfkill->irq);
 		if (ret < 0)
@@ -76,17 +76,33 @@ static int bcm4330_bt_rfkill_set_power(void *data, bool blocked)
 		if (bcm4330_rfkill->bt_32k_clk)
 			clk_disable(bcm4330_rfkill->bt_32k_clk);
 	} else {
-		pr_info("[BT] Bluetooth Power on\n");
-		if (bcm4330_rfkill->bt_32k_clk)
+		pr_info("[BT] Bluetooth Power on blocked=%d\n", blocked?1:0);
+		if (bcm4330_rfkill->bt_32k_clk) {
+			pr_info("[BT] 32k_clk is present\n");
 			clk_enable(bcm4330_rfkill->bt_32k_clk);
+		}
+
+		pr_info("[BT] gpio shutdown=%d, reset=%d, irq=%d\n",
+			bcm4330_rfkill->gpio_shutdown, bcm4330_rfkill->gpio_reset,
+			bcm4330_rfkill->irq);
+		//N1:
+		//pr_info("    plat gpios : shutdown 77, reset 177, wake 145");
+
 		gpio_direction_output(bcm4330_rfkill->gpio_shutdown, 1);
 		gpio_direction_output(bcm4330_rfkill->gpio_reset, 1);
+		msleep(10);
+
+		#ifdef BT_SLEEP_ENABLE
+		// to check if reversed or not...
+		gpio_direction_output(bcm4330_rfkill->gpio_btwake, 0);
+		#endif
 
 		ret = enable_irq_wake(bcm4330_rfkill->irq);
-		if (ret < 0)
+		if (ret < 0) {
 			pr_err("[BT] set wakeup src failed\n");
-
-		enable_irq(bcm4330_rfkill->irq);
+		} else {
+			enable_irq(bcm4330_rfkill->irq);
+		}
 	}
 
 	return 0;
