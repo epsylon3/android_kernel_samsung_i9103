@@ -701,15 +701,15 @@ static ssize_t show_UV_mV_table(struct cpufreq_policy *policy, char *buf)
 
 static ssize_t show_cpuinfo_max_mV(struct cpufreq_policy *policy, char *buf)
 {
-	sprintf(buf, "%u\n", CPUMVMAX);
+	return sprintf(buf, "%u\n", CPUMVMAX);
 }
 
 static ssize_t show_cpuinfo_min_mV(struct cpufreq_policy *policy, char *buf)
 {
-	sprintf(buf, "%u\n", CPUMVMIN);
+	return sprintf(buf, "%u\n", CPUMVMIN);
 }
 
-static ssize_t store_UV_mV_table(struct cpufreq_policy *policy, char *buf, size_t count)
+static ssize_t store_UV_mV_table(struct cpufreq_policy *policy, const char *buf, size_t count)
 {
 	int i, tmptable[FREQCOUNT];
 	unsigned int ret;
@@ -1044,7 +1044,8 @@ static int cpufreq_add_dev(struct sys_device *sys_dev)
 {
 	unsigned int cpu = sys_dev->id;
 	int ret = 0, found = 0;
-	struct cpufreq_policy *policy;
+	struct cpufreq_policy *policy = NULL;
+	struct cpufreq_policy *cp = NULL;
 	unsigned long flags;
 	unsigned int j;
 #ifdef CONFIG_HOTPLUG_CPU
@@ -1097,7 +1098,6 @@ static int cpufreq_add_dev(struct sys_device *sys_dev)
 
 	/* Set governor before ->init, so that driver could check it */
 #ifdef CONFIG_HOTPLUG_CPU
-	struct cpufreq_policy *cp;
 	for_each_online_cpu(sibling) {
 		cp = per_cpu(cpufreq_cpu_data, sibling);
 		if (cp && cp->governor &&
@@ -1113,8 +1113,7 @@ static int cpufreq_add_dev(struct sys_device *sys_dev)
 		}
 	}
 #endif
-	if (!found)
-	{
+	if (!found) {
 		dprintk("failed to find sibling CPU, falling back to defaults\n");
 		policy->governor = CPUFREQ_DEFAULT_GOVERNOR;
 	}
@@ -1130,8 +1129,7 @@ static int cpufreq_add_dev(struct sys_device *sys_dev)
 	policy->user_policy.min = policy->min;
 	policy->user_policy.max = policy->max;
 
-	if (found)
-	{
+	if (found && cp) {
 		/* Calling the driver can overwrite policy frequencies again */
 		dprintk("Overriding policy max and min with sibling settings\n");
 		policy->min = cp->min;
