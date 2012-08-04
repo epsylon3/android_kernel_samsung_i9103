@@ -762,10 +762,7 @@ struct mxt_data {
 	
 	u16                  msg_proc_addr;
 	u8                   message_size;
-	
-	
-	/* u8 debug_config[32]; */
-	
+
 	/* Pointers to diagnostic objects, not allocated, unless needed */
 	s16                  *delta;
 	u16                  *reference;
@@ -782,6 +779,10 @@ struct mxt_data {
 	u8 check_auto_cal;
 	u16			set_mode_for_ta;
 	u16			mxt_status;
+
+	u16			keyled;
+	bool			keyled_sleep;
+
 	struct mxt_callbacks callbacks;
 };
 
