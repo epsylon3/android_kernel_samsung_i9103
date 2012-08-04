@@ -461,10 +461,9 @@ static ssize_t ak8975c_check_cntl(struct device *dev,
 {
 	struct akm8975_data *ak_data  = dev_get_drvdata(dev);
 	u8 buf;
-	int err;
 
 	/* power down */
-	err = i2c_smbus_write_byte_data(ak_data->this_client,
+	i2c_smbus_write_byte_data(ak_data->this_client,
 					AK8975_REG_CNTL, REG_CNTL_MODE_POWER_DOWN);
 
 	buf = i2c_smbus_read_byte_data(ak_data->this_client,
