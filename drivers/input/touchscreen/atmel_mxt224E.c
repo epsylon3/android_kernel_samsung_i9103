@@ -1242,7 +1242,7 @@ void process_T9_message(u8 *message, struct mxt_data *mxt)
 		/* wakeup key leds on touch */
 		if (mxt->keyled_sleep && mxt->keyled != 0) {
 			pr_info("[TSP] touched !\n");
-			key_led_set(mxt, (u32) mxt->keyled | 0x100);
+			key_led_set(mxt, (u32) mxt->keyled ^ 0x100);
 		}
 #endif
 		touch_message_flag = 1;
@@ -1404,7 +1404,7 @@ void process_T15_message(u8 *message, struct mxt_data *mxt)
 		/* wakeup key leds on touch */
 		if (mxt->keyled_sleep && mxt->keyled != 0) {
 			pr_info("[TSP] touched !\n");
-			key_led_set(mxt, (u32) mxt->keyled | 0x100);
+			key_led_set(mxt, (u32) mxt->keyled ^ 0x100);
 		}
 	}
 #endif
