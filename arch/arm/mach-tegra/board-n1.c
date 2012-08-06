@@ -604,10 +604,10 @@ int __init n1_rfkill_init(void)
 
 static __initdata struct tegra_clk_init_table n1_clk_init_table[] = {
 	/* name		parent		rate		enabled */
+	{ "pll_u",	"clk_m",	480000000,	true},
 	{ "uartb",	"pll_p",	216000000,	true},
 	{ "uartc",	"pll_m",	600000000,	false},
 	{ "blink",	"clk_32k",	32768,		false},
-	{ "pll_p_out4",	"pll_p",	24000000,	true},
 	{ "pwm",	"clk_32k",	32768,		false},
 	{ "pll_a",	NULL,		56448000,	true},
 	{ "pll_a_out0",	"pll_a",	11289600,	true},
@@ -617,7 +617,7 @@ static __initdata struct tegra_clk_init_table n1_clk_init_table[] = {
 	{ "audio_2x",	"audio",	22579200,	true},
 	{ "spdif_out",	"pll_a_out0",	5644800,	false},
 	{ "kbc",	"clk_32k",	32768,		true},
-	{ "disp1",	"pll_p",	216000000,		true},
+	{ "disp1",	"pll_p",	216000000,	true},
 	{ NULL,		NULL,		0,		0},
 };
 //#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE

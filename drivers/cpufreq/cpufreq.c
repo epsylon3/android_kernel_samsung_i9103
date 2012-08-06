@@ -35,12 +35,12 @@
 						"cpufreq-core", msg)
 
 /* Initial implementation of userspace voltage control */
-#define FREQCOUNT 11
+#define FREQCOUNT 8
 #define CPUMVMAX 1250
 #define CPUMVMIN 750
-int cpufrequency[FREQCOUNT] = { 1300000, 1200000, 1100000, 1000000, 912000, 816000, 760000, 608000, 456000, 312000, 216000 };
-int cpuvoltage[FREQCOUNT] = { 1250, 1225, 1150, 1100, 1050, 1000, 975, 925, 825, 800, 750 };
-int cpuuvoffset[FREQCOUNT] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+int cpufrequency[FREQCOUNT] = { 1300000, 1196000, 1040000, 832000, 624000, 468000, 312000, 234000 };
+int cpuvoltage[FREQCOUNT] =   { 1250,    1225,    1125,    1000,   925,    825,    800,    750 };
+int cpuuvoffset[FREQCOUNT] =  { 0,       0,       0,       0,      0,      0,      0,      0 };
 
 /**
  * The "cpufreq driver" - the arch- or hardware-dependent low
@@ -714,12 +714,11 @@ static ssize_t store_UV_mV_table(struct cpufreq_policy *policy, const char *buf,
 	int i, tmptable[FREQCOUNT];
 	unsigned int ret;
 
-	ret  = sscanf(buf, "%d %d %d %d %d %d %d %d %d %d %d",
+	ret  = sscanf(buf, "%d %d %d %d %d %d %d %d",
 		&tmptable[0], &tmptable[1], &tmptable[2], &tmptable[3],
-		&tmptable[4], &tmptable[5], &tmptable[6], &tmptable[7],
-		&tmptable[8], &tmptable[9], &tmptable[10]);
+		&tmptable[4], &tmptable[5], &tmptable[6], &tmptable[7]);
 
-	if (ret != FREQCOUNT)
+	if (ret < FREQCOUNT)
 		return -EINVAL;
 
 	for (i = 0; i < FREQCOUNT; i++)

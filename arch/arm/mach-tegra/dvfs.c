@@ -37,9 +37,9 @@
 #include "clock.h"
 #include "dvfs.h"
 
-#define FREQCOUNT 13
-extern int cpufrequency[FREQCOUNT];
-extern int cpuuvoffset[FREQCOUNT];
+#define FREQCOUNT 15
+extern int cpufrequency[];
+extern int cpuuvoffset[];
 
 static LIST_HEAD(dvfs_rail_list);
 static DEFINE_MUTEX(dvfs_lock);

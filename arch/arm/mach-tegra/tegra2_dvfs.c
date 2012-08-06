@@ -37,10 +37,12 @@ static bool tegra_dvfs_cpu_disabled;
 static bool tegra_dvfs_cpu_disabled = true;
 #endif
 
-static const int core_millivolts[MAX_DVFS_FREQS] =
-	{950, 1000, 1100, 1200, 1225, 1275, 1300};
 static const int cpu_millivolts[MAX_DVFS_FREQS] =
 	{750, 775, 800, 825, 850, 875, 900, 925, 950, 975, 1000, 1025, 1050, 1100, 1125};
+
+/* filled automatically (+50mV of cpu), dont change */
+static const int core_millivolts[MAX_DVFS_FREQS] =
+	{1000, 1000, 1100, 1200, 1225, 1275, 1300};
 
 static const int cpu_speedo_nominal_millivolts[] =
 /* spedo_id  0,    1,    2 */
@@ -52,7 +54,7 @@ static const int core_speedo_nominal_millivolts[] =
 
 static struct dvfs_rail tegra2_dvfs_rail_vdd_cpu = {
 	.reg_id = "vdd_cpu",
-	.max_millivolts = 1125,
+	.max_millivolts = 1200,
 	.min_millivolts = 750,
 	.nominal_millivolts = 1125,
 };
@@ -150,21 +152,25 @@ static struct dvfs_rail *tegra2_dvfs_rails[] = {
 	}
 
 static struct dvfs dvfs_init[] = {
+
+	/* N1: Original clocks seems multiple of 12/24Mhz, but N1 use a base clock, clk_m of 26Mhz (XTAL?) */
+	/*     freq defined: 1300000, 1196000, 1040000, 832000, 624000, 468000, 312000, 234000 */
+
 	/* Cpu voltages (mV):	   750, 775, 800, 825, 850, 875,  900,  925,  950,  975,  1000, 1025, 1050, 1100, 1125 */
-	CPU_DVFS("cpu", 0, 0, MHZ, 314, 314, 314, 456, 456, 456,  608,  608,  608,  760,  817,  817,  912,  1000),
-	CPU_DVFS("cpu", 0, 1, MHZ, 314, 314, 314, 456, 456, 456,  618,  618,  618,  770,  827,  827,  922,  1000),
-	CPU_DVFS("cpu", 0, 2, MHZ, 494, 494, 494, 675, 675, 817,  817,  922,  922,  1000),
-	CPU_DVFS("cpu", 0, 3, MHZ, 730, 760, 845, 845, 940, 1000),
+	CPU_DVFS("cpu", 0, 0, MHZ, 234, 312, 312, 468, 468, 468,  624,  624,  624,  780,  832,  832,  936,  1040, 1092),
+	CPU_DVFS("cpu", 0, 1, MHZ, 234, 312, 312, 468, 468, 468,  624,  624,  624,  780,  832,  832,  936,  1040),
+	CPU_DVFS("cpu", 0, 2, MHZ, 468, 468, 468, 624, 624, 832,  832,  936,  936,  1040),
+	CPU_DVFS("cpu", 0, 3, MHZ, 728, 780, 832, 832, 960, 1040),
 
-	CPU_DVFS("cpu", 1, 0, MHZ, 380, 380, 503, 503, 655, 655,  798,  798,  902,  902,  960,  1000, 1100, 1200, 1300),
-	CPU_DVFS("cpu", 1, 1, MHZ, 389, 389, 503, 503, 655, 760,  798,  798,  950,  950,  1000, 1100, 1200, 1300),
-	CPU_DVFS("cpu", 1, 2, MHZ, 598, 598, 750, 750, 893, 893,  1000, 1100, 1200, 1300),
-	CPU_DVFS("cpu", 1, 3, MHZ, 730, 760, 845, 845, 940, 1000, 1100, 1200, 1300),
+	CPU_DVFS("cpu", 1, 0, MHZ, 312, 312, 468, 468, 624, 624,  780,  780,  832,  936,  936,  1040, 1092, 1196, 1300),
+	CPU_DVFS("cpu", 1, 1, MHZ, 312, 312, 503, 503, 624, 780,  832,  832,  936,  936,  1040, 1092, 1196, 1300),
+	CPU_DVFS("cpu", 1, 2, MHZ, 624, 624, 780, 780, 832, 832,  1040, 1092, 1196, 1300),
+	CPU_DVFS("cpu", 1, 3, MHZ, 624, 780, 832, 832, 936, 1040, 1092, 1196, 1300),
 
-	CPU_DVFS("cpu", 2, 0, MHZ,   0,   0,   0,   0, 655, 655,  798,  798,  902,  902,  960,  1000, 1100, 1100, 1200),
-	CPU_DVFS("cpu", 2, 1, MHZ,   0,   0,   0,   0, 655, 760,  798,  798,  950,  950,  1015, 1015, 1100, 1200),
-	CPU_DVFS("cpu", 2, 2, MHZ,   0,   0,   0,   0, 769, 769,  902,  902,  1026, 1026, 1140, 1140, 1200),
-	CPU_DVFS("cpu", 2, 3, MHZ,   0,   0,   0,   0, 940, 1000, 1000, 1000, 1130, 1130, 1200),
+	CPU_DVFS("cpu", 2, 0, MHZ,   0,   0,   0,   0, 624, 624,  780,  780,  832,  936,  936,  1040, 1092, 1196, 1300),
+	CPU_DVFS("cpu", 2, 1, MHZ,   0,   0,   0,   0, 624, 780,  832,  832,  936,  936,  1040, 1040, 1196, 1300),
+	CPU_DVFS("cpu", 2, 2, MHZ,   0,   0,   0,   0, 624, 624,  936,  936,  1040, 1040, 1092, 1092, 1196),
+	CPU_DVFS("cpu", 2, 3, MHZ,   0,   0,   0,   0, 936, 1040, 1040, 1040, 1092, 1092, 1196),
 
 	/* Core voltages (mV):           950,    1000,   1100,   1200,   1225,   1275,   1300 */
 	CORE_DVFS("emc",     -1, 1, KHZ, 57000,  333000, 380000, 666000, 666000, 666000, 760000),
@@ -191,8 +197,10 @@ static struct dvfs dvfs_init[] = {
 	/*
 	 * Set VDD core to 0.95v when HSIC port is idle
 	 */
-	CORE_DVFS("usb2min",-1, 1, KHZ,  0,  0,  60000,  60000,  60000,  60000,  60000),
-	CORE_DVFS("usb3",    -1, 1, KHZ, 0,      0,      480000,  480000, 480000, 480000, 480000),
+#ifdef CONFIG_TEGRA_CLOCK_USBMIN
+	CORE_DVFS("usb2min", -1, 1, KHZ, 0,      0,      60000,  60000,  60000,  60000,  60000),
+#endif
+	CORE_DVFS("usb3",    -1, 1, KHZ, 0,      0,      480000, 480000, 480000, 480000, 480000),
 	CORE_DVFS("pcie",    -1, 1, KHZ, 0,      0,      0,      250000, 250000, 250000, 250000),
 	CORE_DVFS("dsi",     -1, 1, KHZ, 100000, 100000, 100000, 500000, 500000, 500000, 500000),
 	CORE_DVFS("tvo",     -1, 1, KHZ, 0,      0,      0,      250000, 250000, 250000, 250000),
@@ -238,6 +246,7 @@ static struct dvfs dvfs_init[] = {
 	CORE_DVFS("vde",      1, 1, KHZ, 123500, 152000, 237500, 300000, 300000, 300000, 300000),
 	CORE_DVFS("vde",      2, 1, KHZ, 152000, 209000, 285000, 300000, 300000, 300000, 300000),
 	CORE_DVFS("vde",      3, 1, KHZ, 171000, 218500, 300000, 300000, 300000, 300000, 300000),
+
 	/* What is this? */
 	CORE_DVFS("NVRM_DEVID_CLK_SRC", -1, 1, MHZ, 480, 600, 800, 1067, 1067, 1067, 1067),
 };
