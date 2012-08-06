@@ -67,6 +67,8 @@ static const u32 core_process_speedos[][PROCESS_CORNERS_NUM] = {
 	{165, 195, 224, UINT_MAX}, /* speedo_id 2 */
 };
 
+static int cpu_process_id;
+static int core_process_id;
 static int soc_speedo_id;
 
 void tegra_init_speedo_data(void)
@@ -75,7 +77,6 @@ void tegra_init_speedo_data(void)
 	int i, bit, rev;
 	int sku = tegra_sku_id();
 	void __iomem *apb_misc = IO_ADDRESS(TEGRA_APB_MISC_BASE);
-	int cpu_process_id, core_process_id;
 
 	reg = readl(apb_misc + CHIP_ID);
 	rev = (reg & CHIP_MINOR_MASK) >> CHIP_MINOR_SHIFT;
@@ -95,7 +96,7 @@ void tegra_init_speedo_data(void)
 		val = (val << 1) | (reg & 0x1);
 	}
 	val = val * SPEEDO_MULT;
-	pr_info("CPU speedo level %u\n", val);
+	pr_info("%s CPU speedo level %u, sku=%d\n", __func__, val, sku);
 
 	for (i = 0; i < (PROCESS_CORNERS_NUM - 1); i++) {
 		if (val <= cpu_process_speedos[soc_speedo_id][i])
@@ -121,6 +122,16 @@ void tegra_init_speedo_data(void)
 	pr_info("Tegra SKU: %d Rev: A%.2d CPU Process: %d Core Process: %d"
 		" Speedo ID: %d\n", sku, rev, cpu_process_id, core_process_id,
 		soc_speedo_id);
+}
+
+int _tegra_cpu_process_id(void)
+{
+	return cpu_process_id;
+}
+
+int _tegra_core_process_id(void)
+{
+	return core_process_id;
 }
 
 int tegra_soc_speedo_id(void)

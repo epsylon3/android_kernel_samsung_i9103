@@ -54,6 +54,8 @@ extern int tegra_bct_strapping;
 
 unsigned long long tegra_chip_uid(void);
 unsigned int tegra_spare_fuse(int bit);
+int _tegra_cpu_process_id(void);
+int _tegra_core_process_id(void);
 void tegra_init_fuse(void);
 int tegra_soc_speedo_id(void);
 void tegra_init_speedo_data(void);
