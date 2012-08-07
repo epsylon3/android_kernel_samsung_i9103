@@ -537,8 +537,14 @@ int __init tegra_disable_boot_clocks(void)
 		clk_lock_save(c, flags);
 		if (c->refcnt == 0 && c->state == ON &&
 				c->ops && c->ops->disable) {
-			pr_warning("Disabling clock %s left on by bootloader\n",
-				c->name);
+			pr_warning("Disabling clock %s left on by bootloader (%lu)\n",
+				c->name, c->rate);
+#ifdef CONFIG_DEBUG_LL
+			if (!strcmp(c->name, "uartb")) {
+				pr_notice("  hmm no... let the debug uart in place\n");
+				continue;
+			}
+#endif
 			c->ops->disable(c);
 			c->state = OFF;
 		}

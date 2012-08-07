@@ -28,7 +28,9 @@
 #include <asm/hardware/cache-l2x0.h>
 #include <asm/system.h>
 
+#include <mach/tegra_fiq_debugger.h>
 #include <mach/iomap.h>
+#include <mach/irqs.h>
 #include <mach/dma.h>
 #include <mach/powergate.h>
 #include <mach/system.h>
@@ -167,6 +169,20 @@ void __init tegra_common_init(void)
 	tegra_init_fuse();
 	tegra_init_clock();
 	tegra_clk_init_from_table(common_clk_init_table);
+
+#ifdef CONFIG_MACH_N1
+	if (0) {
+		struct clk *clk_uartb = clk_get(NULL, "uartb");
+		if (IS_ERR(clk_uartb)) {
+			int err = PTR_ERR(clk_uartb);
+			pr_err("Can't get uartb clock, err %d %p\n", err, clk_uartb);
+		} else {
+			tegra_serial_debug_init((unsigned int)IO_ADDRESS(TEGRA_UARTB_BASE),
+				INT_UARTB, clk_uartb, 0, -1);
+		}
+	}
+#endif
+
 	tegra_init_power();
 	tegra_init_cache();
 	tegra_dma_init();
