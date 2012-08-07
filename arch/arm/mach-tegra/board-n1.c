@@ -1698,8 +1698,7 @@ static int sec_jack_get_adc_value(void)
 {
 	int mili_volt;
 	max8907c_adc_read_aux2(&mili_volt);
-	printk(KERN_DEBUG
-		"Board N1 : Enterring sec_jack_get_adc_value = %d\n", mili_volt);
+	pr_debug("Board N1: %s = %d\n", __func__, mili_volt);
 	return  mili_volt;
 }
 
@@ -1730,8 +1729,7 @@ static void sec_bat_get_init_cable_state(struct power_supply *psy)
 	union power_supply_propval value;
 	/* if there was a cable status change before the charger was
 	ready, send this now */
-	printk("%s : set_cable_status(%d)\n", __func__, set_cable_status);
-
+	pr_info("%s: set_cable_status(%d)\n", __func__, set_cable_status);
 	if (!psy) {
 		pr_err("%s: fail to get battery ps\n", __func__);
 		return;

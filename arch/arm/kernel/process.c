@@ -252,7 +252,7 @@ void machine_shutdown(void)
 #ifdef CONFIG_KERNEL_DEBUG_SEC
 	kernel_sec_upload_cause_type upload_cause;
 	upload_cause = kernel_sec_get_upload_cause();
-        /* Clear the magic number because it's normal reboot */
+	/* Clear the magic number because it's normal reboot */
 	if (upload_cause == UPLOAD_CAUSE_INIT)
 		kernel_sec_clear_upload_magic_number();
 #endif

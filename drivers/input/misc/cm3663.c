@@ -378,7 +378,7 @@ static ssize_t proximity_enable_store(struct device *dev,
 	struct regulator *reg;
 #endif
 
-	printk("proximity_enable_store\n");
+	pr_debug("proximity_enable_store\n");
 
 	if (sysfs_streq(buf, "1"))
 		new_value = true;
@@ -670,7 +670,7 @@ static int cm3663_setup_reg(struct cm3663_data *cm3663)
 		pr_err("%s: read ps_data failed\n", __func__);
 		err = -EIO;
 	}
-	pr_err("%s: initial proximity value = %d\n", __func__, tmp);
+	pr_info("%s: initial proximity value = %d\n", __func__, tmp);
 	mutex_lock(&cm3663->power_lock);
 	cm3663_i2c_write(cm3663, REGS_PS_CMD, 0x01);
 

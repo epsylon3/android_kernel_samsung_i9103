@@ -2150,7 +2150,8 @@ int sdhci_add_host(struct sdhci_host *host)
 				SDHCI_MAX_BLOCK_SHIFT;
 		if (mmc->max_blk_size >= 3) {
 			printk(KERN_WARNING "%s: Invalid maximum block size, "
-				"assuming 512 bytes\n", mmc_hostname(mmc));
+				"assuming 512 bytes, caps=0x%x\n",
+				 mmc_hostname(mmc), caps);
 			mmc->max_blk_size = 0;
 		}
 	}

@@ -31,7 +31,12 @@
 #define DEBUG_RAW       8
 #define DEBUG_TRACE     10
 
-#define TSP_BOOST
+//#define TSP_BOOST
+#ifdef CONFIG_TEGRA_CPU_FREQ_MAX
+# define BOOST_CPU_FREQ CONFIG_TEGRA_CPU_FREQ_MAX
+#else
+# define BOOST_CPU_FREQ 1000000
+#endif
 
 #define KEY_LED_CONTROL
 #define KEY_LED_TOUCH_OFF 0 /* this force lights off on menu key touch */
@@ -186,7 +191,7 @@ static u16 tsp_keystatus;
 #ifdef KEY_LED_CONTROL
 static void key_led_set(struct mxt_data *mxt, u32 val);
 
-static int key_led_timeout = 15000; /* 15 sec */
+static int key_led_timeout = 20000; /* 20 sec */
 static struct timer_list key_led_timer;
 static void key_led_timer_callback(unsigned long);
 #endif
@@ -1241,7 +1246,7 @@ void process_T9_message(u8 *message, struct mxt_data *mxt)
 #ifdef KEY_LED_CONTROL
 		/* wakeup key leds on touch */
 		if (mxt->keyled_sleep && mxt->keyled != 0) {
-			pr_info("[TSP] touched !\n");
+			klogi_if("[TSP] touched !");
 			key_led_set(mxt, (u32) mxt->keyled ^ 0x100);
 		}
 #endif
@@ -1309,10 +1314,10 @@ void process_T9_message(u8 *message, struct mxt_data *mxt)
 #ifdef TSP_BOOST
 	if ((status & MXT_MSGB_T9_PRESS) && (!clk_lock_state)) {
 		tegra_cpu_unlock_speed();
-		tegra_cpu_lock_speed(608000, 0);
+		tegra_cpu_lock_speed(BOOST_CPU_FREQ, 0);
 		clk_lock_state = true;
 	} else if (clk_lock_state && (chkpress == 0) && pressed_or_released) {
-		tegra_cpu_lock_speed(608000, 50);
+		tegra_cpu_lock_speed(BOOST_CPU_FREQ, 50);
 		clk_lock_state = false;
 	}
 #endif
@@ -3316,7 +3321,7 @@ void key_led_timer_callback(unsigned long data)
 			return;
 		}
 		if (mxt->keyled != 0) {
-			klogi("[LED] key led timeout");
+			klogi_if("[LED] key led timeout");
 		}
 		gpio_direction_output(mxt->pdata->key_led_en1, false);
 	}
@@ -3328,7 +3333,7 @@ static void key_led_set(struct mxt_data *mxt, u32 val)
 		return;
 
 	if (mxt->keyled != (u16) val) {
-		klogi("[LED] %s: %u",  __func__, val);
+		klogi_if("[LED] %s: 0x%x",  __func__, val);
 		mxt->keyled = (u16) val;
 		mxt->keyled_sleep = false;
 	}
@@ -3387,12 +3392,7 @@ static ssize_t key_led_store(struct device *dev, struct device_attribute *attr,
 
 	key_led_set(mxt, (u32) i);
 
-	if (!mxt->mxt_status) {
-		pr_info("[TSP] Button backlight set with screen off = %d\n", i);
-	}
-	else if (debug > DEBUG_INFO) {
-		pr_info("[TSP] Button backligh set by HAL = %d\n", i);
-	}
+	klogi_if("[TSP] Button backlight set by HAL = %d", i);
 
 	return size;
 }

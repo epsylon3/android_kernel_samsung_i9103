@@ -68,6 +68,10 @@ endif
 
 ###############################################################################
 
+# gcc 4.6.x-google in jelly bean, doesnt work yet
+# KERNEL_CROSS_COMPILE := $(ROOTDIR)prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.6/bin/arm-linux-androideabi-
+# MODULE_CROSS_COMPILE := $(ROOTDIR)prebuilt/$(HOST_PREBUILT_TAG)/toolchain/arm-eabi-4.4.3/bin/arm-eabi-
+
 KERNEL_CROSS_COMPILE := $(ROOTDIR)prebuilt/$(HOST_PREBUILT_TAG)/toolchain/arm-eabi-4.4.3/bin/arm-eabi-
 MODULE_CROSS_COMPILE := $(KERNEL_CROSS_COMPILE)
 

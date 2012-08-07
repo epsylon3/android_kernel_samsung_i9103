@@ -227,29 +227,27 @@ static irqreturn_t irq_cp_act(int irq, void *dev_id)
 	struct str_ctl_gpio *gpio = smdctl->gpio;
 
 	cp_act = gpio_get_value(gpio[SMD_GPIO_CP_ACT].num);
-	pr_info("%s: %d\n", __func__, cp_act);
+	pr_debug("%s: gpio=%d\n", __func__, cp_act);
 
 	if (cp_act) {
 		if (smdctl->cp_stat == CP_PWR_OFF) {
-			pr_err("%s: CP Power On success!!!\n",
-			       __func__);
+			pr_info("%s: CP Power On success!\n", __func__);
 			smdctl->cp_stat = CP_PWR_ON;
 			smdctl->sim_reference_level =
 				gpio_get_value(gpio[SMD_GPIO_SIM_DET].num);
 		} else
-			pr_err("%s : Invalid status :%d\n", __func__,
+			pr_warning("%s: Invalid status %d\n", __func__,
 			       smdctl->cp_stat);
 	} else {
 		if (smdctl->cp_stat == CP_PWR_ON) {
-			pr_err("%s: CP Power OFF success!!!\n",
-			       __func__);
+			pr_info("%s: CP Power OFF success!\n", __func__);
 			smdctl->cp_stat = CP_PWR_OFF;
 			/* active level debounce, check after 2 sec. */
 			schedule_delayed_work(&smdctl->cp_active_work, HZ*2);
 			/* guide time to modem boot */
 			wake_lock_timeout(&smdctl->ctl_wake_lock, HZ*20);
 		} else
-			pr_err("%s : Invalid status : %d\n", __func__,
+			pr_warning("%s: Invalid status %d\n", __func__,
 			       smdctl->cp_stat);
 	}
 

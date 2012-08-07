@@ -451,6 +451,7 @@ static int utmi_wait_register(void __iomem *reg, u32 mask, u32 result)
 		udelay(1);
 		timeout--;
 	} while (timeout);
+
 	return -1;
 }
 
@@ -458,7 +459,7 @@ static void utmi_phy_clk_disable(struct tegra_usb_phy *phy)
 {
 	unsigned long val;
 	void __iomem *base = phy->regs;
-	printk("%s() called. instance : %d\n",__func__,phy->instance);
+	pr_debug("%s() called. instance : %d\n", __func__, phy->instance);
 
 	if (phy->instance == 0) {
 		val = readl(base + USB_SUSP_CTRL);
@@ -486,7 +487,7 @@ static void utmi_phy_clk_enable(struct tegra_usb_phy *phy)
 {
 	unsigned long val;
 	void __iomem *base = phy->regs;
-	printk("%s() called. instance : %d\n",__func__,phy->instance);
+	pr_debug("%s() called. instance : %d\n", __func__, phy->instance);
 
 	if (phy->instance == 0) {
 		val = readl(base + USB_SUSP_CTRL);
@@ -548,7 +549,7 @@ static int utmi_phy_power_on(struct tegra_usb_phy *phy)
 	unsigned long val;
 	void __iomem *base = phy->regs;
 	struct tegra_utmip_config *config = phy->config;
-	printk("%s() called. instance : %d\n",__func__,phy->instance);
+	pr_info("%s() called. instance : %d\n", __func__, phy->instance);
 
 	val = readl(base + USB_SUSP_CTRL);
 	val |= UTMIP_RESET;
@@ -681,7 +682,7 @@ static void utmi_phy_power_off(struct tegra_usb_phy *phy)
 {
 	unsigned long val;
 	void __iomem *base = phy->regs;
-	printk("%s() called. instance : %d\n",__func__,phy->instance);
+	pr_info("%s() called. instance : %d\n", __func__, phy->instance);
 
 	utmi_phy_clk_disable(phy);
 
@@ -792,7 +793,7 @@ static int ulpi_phy_power_on(struct tegra_usb_phy *phy)
 	unsigned long val;
 	void __iomem *base = phy->regs;
 	struct tegra_ulpi_config *config = phy->config;
-	printk("%s() called. instance : %d\n",__func__,phy->instance);
+	pr_info("%s() called. instance : %d\n", __func__, phy->instance);
 
 	gpio_direction_output(config->reset_gpio, 0);
 	msleep(5);
@@ -861,7 +862,7 @@ static void ulpi_phy_power_off(struct tegra_usb_phy *phy)
 	unsigned long val;
 	void __iomem *base = phy->regs;
 	struct tegra_ulpi_config *config = phy->config;
-	printk("%s() called. instance : %d\n",__func__,phy->instance);
+	pr_info("%s() called. instance : %d\n", __func__, phy->instance);
 	/* Clear WKCN/WKDS/WKOC wake-on events that can cause the USB
 	 * Controller to immediately bring the ULPI PHY out of low power
 	 */
@@ -1081,7 +1082,7 @@ retry:
 							USB_PHY_CLK_VALID))
 		pr_err("%s: timeout waiting for phy to stabilize\n", __func__);
 
-	printk("%s:clocking success for hsic portsc1: %x \n",__func__, 
+	pr_info("%s: clocking success for hsic portsc1: %x \n", __func__,
 		readl(base + USB_PORTSC1));
 
 #ifdef CONFIG_MACH_N1
@@ -1489,7 +1490,7 @@ int tegra_usb_phy_bus_connect(struct tegra_usb_phy *phy)
 	void __iomem *base = phy->regs;
 	struct tegra_ulpi_config *config = phy->config;
 
-	printk("%s()called \n",__func__);
+	pr_info("%s()\n", __func__);
 	if (phy_is_ulpi(phy) && (config->inf_type == TEGRA_USB_UHSIC)) {
 #ifndef CONFIG_MACH_N1
 		if (!phy->regulator_on)

@@ -769,9 +769,13 @@ static ssize_t fuse_show(struct kobject *kobj, struct kobj_attribute *attr, char
 static int __init tegra_fuse_program_init(void)
 {
 	/* get vfuse regulator */
+#ifdef CONFIG_MACH_N1
+	vdd_fuse = regulator_get(NULL, "VFUSE_3V3");
+#else
 	vdd_fuse = regulator_get(NULL, "vdd_fuse");
+#endif
 	if (IS_ERR_OR_NULL(vdd_fuse))
-		pr_err("%s: could not get vdd_fuse. fuse programming disabled\n", __func__);
+		pr_warn("%s: could not get fuse regulator. fuse programming disabled\n", __func__);
 
 	fuse_kobj = kobject_create_and_add("fuse", firmware_kobj);
 	if (!fuse_kobj) {
@@ -784,6 +788,7 @@ static int __init tegra_fuse_program_init(void)
 	/* change fuse file permissions, if ODM production fuse is not blown */
 	if (!fuse_odm_prod_mode())
 	{
+		pr_notice("%s: production fuse is not blown, funny!\n", __func__);
 		devkey_attr.attr.mode = 0640;
 		jtagdis_attr.attr.mode = 0640;
 		odm_prod_mode_attr.attr.mode = 0640;
@@ -794,6 +799,8 @@ static int __init tegra_fuse_program_init(void)
 		ignore_dev_sel_straps_attr.attr.mode = 0640;
 		odm_rsvd_attr.attr.mode = 0640;
 		odm_prod_mode_attr.attr.mode = 0640;
+	} else {
+		pr_notice("%s: production fuse is blown!\n", __func__);
 	}
 
 	CHK_ERR(sysfs_create_file(fuse_kobj, &odm_prod_mode_attr.attr));

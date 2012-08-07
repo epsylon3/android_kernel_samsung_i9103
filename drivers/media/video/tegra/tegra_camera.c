@@ -49,6 +49,7 @@ static struct clk *vi_sensor_clk;
 static struct clk *csus_clk;
 #if defined CONFIG_HAS_EARLYSUSPEND && defined CONFIG_CPU_FREQ
 #define SET_CONSERVATIVE_GOVERNOR_DELAY 5*HZ
+#undef SET_CONSERVATIVE_GOVERNOR_UP_THRESHOLD
 #define SET_CONSERVATIVE_GOVERNOR_UP_THRESHOLD 90
 #define SET_CONSERVATIVE_GOVERNOR_DOWN_THRESHOLD 50
 static int work_q_set_conservative;
