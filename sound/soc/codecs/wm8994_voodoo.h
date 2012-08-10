@@ -33,6 +33,14 @@
 #define M110S
 #endif
 
+#ifndef GALAXY_TAB_TEGRA
+# define DEV_VOODOO_MINOR      MISC_DYNAMIC_MINOR
+# define DEV_VOODOO_CTRL_MINOR MISC_DYNAMIC_MINOR
+#else
+# define DEV_VOODOO_MINOR      101
+# define DEV_VOODOO_CTRL_MINOR 102
+#endif
+
 enum debug_log { LOG_OFF, LOG_INFOS, LOG_VERBOSE };
 bool debug_log(short unsigned int level);
 
