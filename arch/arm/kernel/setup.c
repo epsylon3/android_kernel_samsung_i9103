@@ -614,10 +614,18 @@ static int __init parse_tag_revision(const struct tag *tag)
 
 __tagtable(ATAG_REVISION, parse_tag_revision);
 
+#ifdef CONFIG_CMDLINE_APPEND
+static char __initdata cmdline_buffer[COMMAND_LINE_SIZE] = "\0";
+#endif
+
 #ifndef CONFIG_CMDLINE_FORCE
 static int __init parse_tag_cmdline(const struct tag *tag)
 {
+#ifdef CONFIG_CMDLINE_APPEND
+	strlcpy(cmdline_buffer, tag->u.cmdline.cmdline, COMMAND_LINE_SIZE);
+#else
 	strlcpy(default_command_line, tag->u.cmdline.cmdline, COMMAND_LINE_SIZE);
+#endif
 	return 0;
 }
 
@@ -654,9 +662,11 @@ static void __init parse_tags(const struct tag *t)
 			if (t->hdr.tag == ATAG_NVIDIA)
 				continue;
 
-			printk(KERN_WARNING
-				"Ignoring unrecognised tag 0x%08x\n",
+			printk_once(KERN_WARNING
+				"Ignoring unrecognised atag %08x\n",
 				t->hdr.tag);
+		} else {
+			pr_debug("Processed atag %08x\n", t->hdr.tag);
 		}
 }
 
@@ -773,7 +783,12 @@ void __init setup_arch(char **cmdline_p)
 	struct tag *tags = (struct tag *)&init_tags;
 	struct machine_desc *mdesc;
 	char *from = default_command_line;
-
+#ifdef CONFIG_CMDLINE_APPEND
+	const char * excl[] = {"vmalloc=", "secmem=", "mem="};
+	char *cmdline_tok;
+	bool skip_key;
+	int i;
+#endif
 	unwind_init();
 
 	setup_processor();
@@ -817,6 +832,26 @@ void __init setup_arch(char **cmdline_p)
 	/* parse_early_param needs a boot_command_line */
 	strlcpy(boot_command_line, from, COMMAND_LINE_SIZE);
 
+#ifdef CONFIG_CMDLINE_APPEND
+	from = boot_command_line;
+	while ((cmdline_tok = strsep(&from," ")) != NULL)
+	{
+		skip_key = false;
+		/* only copy if not mem related part of cmdline */
+		for (i=0; i < ARRAY_SIZE(excl); i++)
+			if (!strncmp(cmdline_tok, excl[i], strlen(excl[i])))
+			{
+				skip_key = true;
+				break;
+			}
+		if (skip_key)
+			continue;
+
+		strlcat(cmdline_buffer," ",COMMAND_LINE_SIZE);
+		strlcat(cmdline_buffer, cmdline_tok, COMMAND_LINE_SIZE);
+	}
+	strlcpy(boot_command_line, cmdline_buffer, COMMAND_LINE_SIZE);
+#endif
 	/* populate cmd_line too for later use, preserving boot_command_line */
 	strlcpy(cmd_line, boot_command_line, COMMAND_LINE_SIZE);
 	*cmdline_p = cmd_line;

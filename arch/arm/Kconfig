@@ -1617,6 +1617,14 @@ config CMDLINE
 	  time by entering them here. As a minimum, you should specify the
 	  memory size and the root device (e.g., mem=64M root=/dev/nfs).
 
+config CMDLINE_APPEND
+	bool "Append CMDLINE from config to the one from bootloader"
+	depends on !CMDLINE_FORCE
+	default y if !CMDLINE_FORCE
+	help
+	  Bootloader (or boot.img) one is used before and completed with the
+	  defined CMDLINE in kernel config. (except for mem keys)
+
 config CMDLINE_FORCE
 	bool "Always use the default kernel command string"
 	depends on CMDLINE != ""
