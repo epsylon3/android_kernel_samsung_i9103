@@ -1413,9 +1413,11 @@ static int sdhci_raw_write_mmc(char *buf, sector_t start_sect, sector_t nr_sects
 	if (ret < 0)
 		pr_warning("%s: failed to write\n", __func__);
 
-	fput(filp);
-	filp_close(filp, NULL);
 	set_fs(oldfs);
+	//filp_close(filp, NULL);
+
+	fput(filp);
+	sys_close(fd);
 
 	return ret;
 }
