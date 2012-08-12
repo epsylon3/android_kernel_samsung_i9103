@@ -246,9 +246,8 @@ static int __init parse_tag_nvidia(const struct tag *tag)
 __tagtable(ATAG_NVIDIA, parse_tag_nvidia);
 #endif /* !CONFIG_TEGRA_NVOS */
 
+int charging_mode_from_boot = 0;
 #ifdef CONFIG_SAMSUNG_LPM_MODE
-int charging_mode_from_boot;
-
 /* Get charging_mode status from kernel CMDLINE parameter. */
 __module_param_call("", lpm_boot,  &param_ops_int,
 		&charging_mode_from_boot, 0, 0644);
