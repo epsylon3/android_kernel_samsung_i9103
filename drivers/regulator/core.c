@@ -106,7 +106,13 @@ static struct regulator *get_device_regulator(struct device *dev)
 static int regulator_check_voltage(struct regulator_dev *rdev,
 				   int *min_uV, int *max_uV)
 {
-	BUG_ON(*min_uV > *max_uV);
+	if (*min_uV > *max_uV) {
+		printk(KERN_ERR "%s: min_uV %d > max_uV %d !!!\n", __func__,
+			*min_uV, *max_uV);
+		WARN_ON(1);
+		*min_uV = *max_uV;
+		BUG_ON(*min_uV == 0);
+	}
 
 	if (!rdev->constraints) {
 		printk(KERN_ERR "%s: no constraints for %s\n", __func__,
