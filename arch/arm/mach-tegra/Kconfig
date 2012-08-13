@@ -210,7 +210,13 @@ config TEGRA_CLOCK_USBMIN
 	  Prefer samsung original way to reduce usb clock speed
 
 	  if not set, only use the emc clock for that, like other tegra
-	  devices in Linux 3.5
+	  devices in Linux 3.5 (experimental)
+
+config USB_TEGRA_ULPI
+	bool "Use ventana usb ULPI instead of HSIC"
+	default n
+	help
+	  experimental
 
 source "arch/arm/mach-tegra/nv/Kconfig"
 

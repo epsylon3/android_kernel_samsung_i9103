@@ -464,13 +464,17 @@ static int n1_notifier_call(struct notifier_block *this,
 				mode = REBOOT_MODE_FOTA;
 			else if (!strcmp((char *)_cmd, "bootloader"))
 				mode = REBOOT_MODE_FASTBOOT;
+			else if (!strcmp((char *)_cmd, "fastboot"))
+				mode = REBOOT_MODE_FASTBOOT;
 			else if (!strcmp((char *)_cmd, "download"))
 				mode = REBOOT_MODE_DOWNLOAD;
+			else
+				pr_warning("Unhandled boot mode : %s\n", (char *)_cmd);
 		}
 	} else
 		mode = REBOOT_MODE_NONE;
 
-	printk(KERN_DEBUG "%s, Reboot Mode : %d \n", __func__, mode);
+	pr_info("%s: Reboot Mode : %d\n", __func__, mode);
 
 	write_bootloader_message(_cmd, mode);
 
@@ -529,11 +533,6 @@ static struct tegra_utmip_config utmi_phy_config[] = {
 			.xcvr_lsrslew = 2,
 	},
 };
-static struct tegra_ulpi_config hsic_phy_config = {
-	.reset_gpio = TEGRA_GPIO_PG2,
-	.clk = "clk_dev2",
-	.inf_type = TEGRA_USB_UHSIC,
-};
 
 static struct resource ram_console_resource[] = {
 	{
@@ -546,12 +545,6 @@ static struct platform_device ram_console_device = {
 	.id = -1,
 	.num_resources = ARRAY_SIZE(ram_console_resource),
 	.resource = ram_console_resource,
-};
-
-
-static struct tegra_ulpi_config ulpi_phy_config = {
-	.reset_gpio = TEGRA_GPIO_PG2,
-	.clk = "clk_dev2",
 };
 
 /* Bluetooth(BCM4330) rfkill */
@@ -1068,7 +1061,6 @@ struct platform_device s3c_device_usb_mass_storage= {
 	},
 };
 
-
 #ifdef CONFIG_USB_ANDROID_RNDIS
 static struct usb_ether_platform_data rndis_pdata = {
 /* ethaddr is filled by board_serialno_setup */
@@ -1097,10 +1089,24 @@ static void sec_jack_set_micbias_state(bool on)
 	/* to be developed */
 }
 
+#ifdef CONFIG_USB_TEGRA_ULPI
+static struct tegra_ulpi_config ulpi_phy_config = {
+	.reset_gpio = TEGRA_GPIO_PG2,
+	.clk = "clk_dev2",
+	.inf_type = TEGRA_USB_LINK_ULPI,
+};
+#else
+static struct tegra_ulpi_config hsic_phy_config = {
+	.reset_gpio = TEGRA_GPIO_PG2,
+	.clk = "clk_dev2",
+	.inf_type = TEGRA_USB_UHSIC,
+};
+#endif
 
 static struct tegra_ulpi_config n1_ehci2_ulpi_phy_config = {
 	.reset_gpio = TEGRA_GPIO_PV1,
 	.clk = "clk_dev2",
+	.inf_type = TEGRA_USB_LINK_ULPI,
 };
 
 static struct tegra_ehci_platform_data n1_ehci2_ulpi_platform_data = {
@@ -1538,10 +1544,12 @@ static int n1_wakeup_key_twice(void)
 	return ret;
 }
 
-static bool n1_ckech_lpm(void)
+#ifdef CONFIG_SAMSUNG_LPM_MODE
+static bool n1_check_lpm(void)
 {
 	return charging_mode_from_boot ? true : false;
 }
+#endif
 
 static struct gpio_keys_platform_data n1_keys_platform_data = {
 	.buttons	= n1_keys,
@@ -1549,7 +1557,7 @@ static struct gpio_keys_platform_data n1_keys_platform_data = {
 	.wakeup_key	= n1_wakeup_key,
 	.wakeup_key_twice	= n1_wakeup_key_twice,
 #ifdef CONFIG_SAMSUNG_LPM_MODE
-	.check_lpm = n1_ckech_lpm,
+	.check_lpm = n1_check_lpm,
 #endif
 };
 
@@ -2596,9 +2604,15 @@ static struct tegra_ehci_platform_data tegra_ehci_pdata[] = {
 			.sec_whlist_table_num = 1,
 	},
 	[1] = {
+#ifdef CONFIG_USB_TEGRA_ULPI
+			.phy_config = &ulpi_phy_config,
+			.operating_mode = TEGRA_USB_HOST,
+			.power_down_on_bus_suspend = 1,
+#else
 			.phy_config = &hsic_phy_config,
 			.operating_mode = TEGRA_USB_HOST,
 			.power_down_on_bus_suspend = 1,
+#endif
 	},
 	[2] = {
 			.phy_config = &utmi_phy_config[1],
