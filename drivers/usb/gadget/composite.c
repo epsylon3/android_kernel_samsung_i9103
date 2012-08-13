@@ -24,6 +24,7 @@
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/device.h>
+#include <linux/delay.h>
 
 #include <linux/usb/composite.h>
 
@@ -428,14 +429,17 @@ static int config_buf(struct usb_configuration *config,
 		product_functions = config->cdev->products->multi_conf_functions
 			[index_multi_conf];
 		CSY_DBG("set multi configuration=%d\n", index_multi_conf);
-    if(index_multi_conf==1)
-      config->cdev->bMultiConfiguration += 1;
+#ifdef CONFIG_MACH_N1
+		if(index_multi_conf == 1)
+			config->cdev->bMultiConfiguration += 1;
+#endif
 	} else {
 		CSY_DBG("set single configuration=%d\n",
 				config->cdev->multi_configuration);
-    if(config->cdev->products->functions)
-    	 product_functions= config->cdev->products->functions;
-	else 
+
+	if(config->cdev->products->functions)
+		product_functions= config->cdev->products->functions;
+	else
 		return -EINVAL;
 	}
 #endif
@@ -501,30 +505,30 @@ static int config_buf(struct usb_configuration *config,
 					if (intf->bDescriptorType == USB_DT_INTERFACE) {
 						/* don't increment bInterfaceNumber for alternate settings */
 
-            CSY_DBG("Before MTP mode intf->bInterfaceClass : 0x%x\n", intf->bInterfaceClass);                             
+#ifdef CONFIG_MACH_N1
+				CSY_DBG("Before MTP mode intf->bInterfaceClass : 0x%x\n", intf->bInterfaceClass);
 
-            if(!strcmp(f->name, "mtp"))
-            {
-              if(config->cdev->MacPC == 1 || config->cdev->bMultiConfiguration == 0)
-              {
-                if(intf->bInterfaceClass == USB_CLASS_STILL_IMAGE)
-                {
-                  intf->bInterfaceClass = USB_CLASS_VENDOR_SPEC;
-                  intf->bInterfaceSubClass = USB_SUBCLASS_VENDOR_SPEC;
-                  intf->bInterfaceProtocol = 0x00;
-                }
-              }
-              else
-              {
-                if(intf->bInterfaceClass == USB_CLASS_VENDOR_SPEC)
-                {                
-                  intf->bInterfaceClass = USB_CLASS_STILL_IMAGE;
-                  intf->bInterfaceSubClass = 0x01;
-                  intf->bInterfaceProtocol = 0x01;
-                } 
-              }
-            }
-            CSY_DBG("After MTP mode intf->bInterfaceClass : 0x%x\n", intf->bInterfaceClass);                             
+				if(!strcmp(f->name, "mtp"))
+				{
+					if(config->cdev->MacPC == 1 || config->cdev->bMultiConfiguration == 0)
+					{
+						if(intf->bInterfaceClass == USB_CLASS_STILL_IMAGE)
+						{
+							intf->bInterfaceClass = USB_CLASS_VENDOR_SPEC;
+							intf->bInterfaceSubClass = USB_SUBCLASS_VENDOR_SPEC;
+							intf->bInterfaceProtocol = 0x00;
+						}
+					}
+					else if(intf->bInterfaceClass == USB_CLASS_VENDOR_SPEC)
+					{
+							intf->bInterfaceClass = USB_CLASS_STILL_IMAGE;
+							intf->bInterfaceSubClass = 0x01;
+							intf->bInterfaceProtocol = 0x01;
+					}
+				}
+
+				CSY_DBG("After MTP mode intf->bInterfaceClass : 0x%x\n", intf->bInterfaceClass);
+#endif
 						if (intf->bAlternateSetting == 0)
 							intf->bInterfaceNumber = interfaceCount++;
 						else
@@ -795,11 +799,13 @@ static int set_config(struct usb_composite_dev *cdev,
 			descriptors = f->hs_descriptors;
 		else
 			descriptors = f->descriptors;
-    if(cdev->bMultiConfiguration > 0 && number == 1){
-      cdev->MacPC = 1;
-    }
 
-		for (; *descriptors; ++descriptors) 
+#ifdef CONFIG_MACH_N1
+		if(cdev->bMultiConfiguration > 0 && number == 1) {
+			cdev->MacPC = 1;
+		}
+#endif
+		for (; *descriptors; ++descriptors)
 		{
 			struct usb_endpoint_descriptor *ep;
 			int addr;
@@ -1206,10 +1212,10 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 	u8				endp;
 
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
-	int i;
-#ifdef CONFIG_USB_ANDROID_ACCESSORY
+#  ifdef CONFIG_USB_ANDROID_ACCESSORY
         struct usb_function		*pusbfunction=NULL;
-#endif
+#  endif
+
 #  ifdef CONFIG_USB_ANDROID_SAMSUNG_MTP
 /* woojin80.kim : Added handler to respond to host about MS OS Descriptors.
  * 		  Below compatible ID is for MTP.
@@ -1220,8 +1226,8 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 	 0x4D, 0x54, 0x50, 0x00, 0x00, 0x00, 0x00, 0x00,  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 #  endif
-#endif
-#ifndef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+
+#else /* !CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE */
 	unsigned long flags;
 	spin_lock_irqsave(&cdev->lock, flags);
 	if (!cdev->connected) {
@@ -1251,6 +1257,7 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 	 case 0x54: //samsung
 	 case 0x6F:	//samsung
 	 	if(cdev->products) {
+			int i;
 			for(i = 0; i < cdev->product_num; i++) {
 				if (!strcmp(cdev->products->functions[i], "mtp")) {
 					struct usb_string_descriptor *os_func_desc = req->buf;
@@ -1372,11 +1379,11 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 				VDBG(cdev, "HNP inactive\n");
 		}
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
-    if(cdev->mute_switch)
-    {
-      cdev->mute_switch = 0;
-      CSY_DBG2("cdev->mute_switch=%d\n", cdev->mute_switch);
-    }
+		if (cdev->mute_switch)
+		{
+			cdev->mute_switch = 0;
+			CSY_DBG2("cdev->mute_switch=%d\n", cdev->mute_switch);
+		}
 #endif
 		spin_lock(&cdev->lock);
 		value = set_config(cdev, ctrl, w_value);
@@ -1652,12 +1659,13 @@ composite_switch_work(struct work_struct *data)
 	struct usb_composite_dev	*cdev =
 		container_of(data, struct usb_composite_dev, switch_work);
 	struct usb_configuration *config = cdev->config;
-
+#ifndef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+	unsigned long flags;
+#endif
 	CSY_DBG("[composite_switch_work]config=0x%p, cdev->connected=%d, cdev->sw_connected.state=%d\n",
 		(void*)config, cdev->connected, cdev->sw_connected.state );
 
 #ifndef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
-	unsigned long flags;
 	spin_lock_irqsave(&cdev->lock, flags);
 	if (cdev->connected != cdev->sw_connected.state) {
 		int connected = cdev->connected;
@@ -1763,9 +1771,11 @@ static int composite_bind(struct usb_gadget *gadget)
 	status = device_create_file(&gadget->dev, &dev_attr_suspended);
 	if (status)
 		goto fail;
-        cdev->bMultiConfiguration = 0;
-        cdev->MacPC = 0;
 
+#ifdef CONFIG_MACH_N1
+	cdev->bMultiConfiguration = 0;
+	cdev->MacPC = 0;
+#endif
 	INFO(cdev, "%s ready\n", composite->name);
 	return 0;
 

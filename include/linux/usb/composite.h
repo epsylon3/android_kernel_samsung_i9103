@@ -378,9 +378,12 @@ struct usb_composite_dev {
 	unsigned int			product_num; 	/* product number (ex : 0, 1, 2, ..) */
 	struct android_usb_product 	*products;	/* products list */
 	/* number of multi configuration */
-	int				multi_configuration;  
-  int      bMultiConfiguration;
-  int     MacPC;
+	int				multi_configuration;
+#endif
+#ifdef CONFIG_MACH_N1
+/* gadget/fsl_udc_core.c */
+	int				bMultiConfiguration;
+	int				MacPC;
 #endif
 #ifdef CONFIG_USB_ANDROID_ACCESSORY
 	unsigned char	accessory_mode;		/* usb accessory mode */
