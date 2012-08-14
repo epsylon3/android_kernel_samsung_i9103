@@ -615,8 +615,22 @@ static void call_console_drivers(unsigned start, unsigned end)
 	_call_console_drivers(start_print, end, msg_level);
 }
 
+#ifdef CONFIG_APANIC_MMC
+extern int start_apanic_threads;
+extern void emergency_dump(void);
+#endif
+
 static void emit_log_char(char c)
 {
+#ifdef CONFIG_APANIC_MMC
+	static int is_begin;
+
+	if (unlikely(start_apanic_threads) && !is_begin) {
+		is_begin = 1;
+		log_end = 0;
+		logged_chars = 0;
+	}
+#endif
 	LOG_BUF(log_end) = c;
 	log_end++;
 	if (log_end - log_start > log_buf_len)
@@ -625,6 +639,13 @@ static void emit_log_char(char c)
 		con_start = log_end - log_buf_len;
 	if (logged_chars < log_buf_len)
 		logged_chars++;
+#ifdef CONFIG_APANIC_MMC
+	if (unlikely(start_apanic_threads &&
+	    ((log_end & (LOG_BUF_MASK + 1)) == __LOG_BUF_LEN))) {
+		emergency_dump();
+		is_begin = 0;
+	}
+#endif
 }
 
 /*
