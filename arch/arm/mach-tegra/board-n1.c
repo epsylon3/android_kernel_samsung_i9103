@@ -2170,10 +2170,12 @@ struct tegra_pingroup_config mclk = {
 	TEGRA_TRI_TRISTATE
 };
 
+#if 0
 static struct s5k4ecgx_reg_8 s5k4ecgx_active_discharge[] = {
 	{0x01, 0xFF},	// active discharge enable
 	{S5K4ECGX_TABLE_END_8, 0x0},
 };
+#endif
 
 static struct s5k4ecgx_reg_8 s5k4ecgx_VCM_ON[] = {
 	{0x08, 0x14},	// 2.8V for VCM - LDO4
@@ -2951,7 +2953,7 @@ static void n1_power_off(void)
 		pr_err("n1: failed to power off\n");
 
 	while (1)
-		;
+		msleep(2);
 }
 
 static void __init n1_power_off_init(void)
@@ -3083,24 +3085,27 @@ late_initcall(tegra_n1_protected_aperture_init);
 
 void __init tegra_n1_reserve(void)
 {
-	u64 ram_console_start;
+	unsigned long ram_console_start, fb2_size = 0;
 	int ret;
 
+	/* should be the IRAM, but is that used on N1 ? */
 	if (memblock_reserve(0x0, 4096) < 0)
-		pr_warn("Cannot reserve first 4K of memory for safety\n");
+		pr_warn("Cannot reserve the first 4K of memory\n");
 
+#ifdef CONFIG_MHL_SII9234
+	fb2_size = SZ_16M;
+#endif
 	if (system_rev < 2) /* 512 MB */
-		tegra_reserve(SZ_128M, SZ_8M, SZ_16M);
+		tegra_reserve(SZ_128M, (SZ_2M + SZ_1M), fb2_size);
 	else	/* 1GB */
-		tegra_reserve(SZ_256M, SZ_8M, SZ_16M);
+		tegra_reserve((SZ_128M + SZ_64M), (SZ_2M + SZ_1M), fb2_size);
 
 	/* Reserve memory for the ram console. */
 	ram_console_start = memblock_end_of_DRAM() - SZ_1M;
-
 	ret = memblock_remove(ram_console_start, SZ_1M);
 	if (ret < 0) {
 		pr_err("Failed to reserve 0x%x bytes for ram_console at "
-			"0x%llx, err = %d.\n",
+			"0x%lx, err = %d.\n",
 			SZ_1M, ram_console_start, ret);
 	} else {
 		ram_console_resource[0].start = ram_console_start;

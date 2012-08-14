@@ -366,17 +366,15 @@ void __init tegra_reserve(unsigned long carveout_size, unsigned long fb_size,
 			tegra_carveout_start, carveout_size);
 	else
 		tegra_carveout_size = carveout_size;
-#ifdef CONFIG_MHL_SII9234
+
 	tegra_fb2_start = memblock_end_of_DRAM() - fb2_size;
-	if (memblock_remove(tegra_fb2_start, fb2_size))
+	if (fb2_size && memblock_remove(tegra_fb2_start, fb2_size))
 		pr_err("Failed to remove second framebuffer %08lx@%08lx from "
 			"memory map\n",
 			tegra_fb2_start, fb2_size);
 	else
 		tegra_fb2_size = fb2_size;
-#else
-		tegra_fb2_size = 0;
-#endif
+
 	tegra_fb_start = memblock_end_of_DRAM() - fb_size;
 	if (memblock_remove(tegra_fb_start, fb_size))
 		pr_err("Failed to remove framebuffer %08lx@%08lx from memory "
@@ -387,10 +385,9 @@ void __init tegra_reserve(unsigned long carveout_size, unsigned long fb_size,
 
 	if (tegra_fb_size)
 		tegra_grhost_aperture = tegra_fb_start;
-#ifdef CONFIG_MHL_SII9234
+
 	if (tegra_fb2_size && tegra_fb2_start < tegra_grhost_aperture)
 		tegra_grhost_aperture = tegra_fb2_start;
-#endif
 
 	if (tegra_carveout_size && tegra_carveout_start < tegra_grhost_aperture)
 		tegra_grhost_aperture = tegra_carveout_start;
@@ -409,9 +406,7 @@ void __init tegra_reserve(unsigned long carveout_size, unsigned long fb_size,
 		"LP0:                    %08lx - %08lx\n"
 		"Bootloader framebuffer: %08lx - %08lx\n"
 		"Framebuffer:            %08lx - %08lx\n"
-#ifdef CONFIG_MHL_SII9234
 		"2nd Framebuffer:        %08lx - %08lx\n"
-#endif
 		"Carveout:               %08lx - %08lx\n",
 		tegra_lp0_vec_start,
 		tegra_lp0_vec_start + tegra_lp0_vec_size - 1,
@@ -419,10 +414,9 @@ void __init tegra_reserve(unsigned long carveout_size, unsigned long fb_size,
 		tegra_bootloader_fb_start + tegra_bootloader_fb_size - 1,
 		tegra_fb_start,
 		tegra_fb_start + tegra_fb_size - 1,
-#ifdef CONFIG_MHL_SII9234
 		tegra_fb2_start,
+		(!tegra_fb2_size) ? tegra_fb2_start :
 		tegra_fb2_start + tegra_fb2_size - 1,
-#endif
 		tegra_carveout_start,
 		tegra_carveout_start + tegra_carveout_size - 1);
 }
