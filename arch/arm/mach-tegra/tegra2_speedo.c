@@ -119,7 +119,7 @@ void tegra_init_speedo_data(void)
 	}
 	core_process_id = i;
 
-	pr_info("Tegra SKU: %d Rev: A%.2d CPU Process: %d Core Process: %d"
+	pr_debug("Tegra SKU: %d Rev: A%.2d, CPU Process: %d, Core Process: %d"
 		" Speedo ID: %d\n", sku, rev, cpu_process_id, core_process_id,
 		soc_speedo_id);
 }

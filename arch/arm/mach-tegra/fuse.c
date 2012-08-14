@@ -126,7 +126,7 @@ void tegra_init_fuse(void)
 		tegra_core_process_id = _tegra_core_process_id();
 	}
 
-	pr_info("Tegra Revision: %s SKU: %d CPU Process: %d Core Process: %d\n",
+	pr_info("Tegra Rev %s, SKU %d, CPU id: %d, Core id %d\n",
 		tegra_revision_name[tegra_revision],
 		tegra_sku_id, tegra_cpu_process_id,
 		tegra_core_process_id);
