@@ -149,7 +149,7 @@ static void tegra_das_debuginit(struct das_driver_context *ctx)
 }
 
 #else
-static void __init tegra_das_debuginit(void)
+static void __init tegra_das_debuginit(struct das_driver_context *ctx)
 {
 	return;
 }

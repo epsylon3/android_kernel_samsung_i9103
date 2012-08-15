@@ -1155,6 +1155,7 @@ static int mmc_blk_probe(struct mmc_card *card)
 
 	mutex_lock(&mmcpart_table_mutex);
 	index = md->disk->first_minor >> MMC_SHIFT;
+#ifdef CONFIG_APANIC_MMC
 	if (md->queue.card) {
 		mmc_panic_ops_table[index].type = md->queue.card->type;
 		mmc_panic_ops_table[index].panic_probe =
@@ -1164,6 +1165,7 @@ static int mmc_blk_probe(struct mmc_card *card)
 		mmc_panic_ops_table[index].panic_erase =
 			md->queue.card->host->ops->panic_erase;
 	}
+#endif
 	for (i = 0; i < md->disk->part_tbl->len; i++) {
 		if (!md->disk->part_tbl->part[i])
 			continue;

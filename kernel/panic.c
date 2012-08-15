@@ -25,6 +25,8 @@
 #include <linux/dmi.h>
 #ifdef CONFIG_KERNEL_DEBUG_SEC
 #include <linux/kernel_sec_common.h>
+#else
+#include <mach/system.h>
 #endif
 
 #define PANIC_TIMER_STEP 100
@@ -141,6 +143,8 @@ NORET_TYPE void panic(const char * fmt, ...)
 		//kernel_sec_set_cp_upload();
 		//kernel_sec_save_final_context();
 		kernel_sec_hw_reset(false);
+#else
+		arch_reset(0, NULL);
 #endif
 		/*
 		 * This will not be a clean reboot, with everything
@@ -182,6 +186,8 @@ NORET_TYPE void panic(const char * fmt, ...)
 	//kernel_sec_set_cp_upload(); 
 	//kernel_sec_save_final_context();
 	kernel_sec_hw_reset(false);
+#else
+	arch_reset(0, NULL);
 #endif
 }
 
