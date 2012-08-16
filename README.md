@@ -43,9 +43,25 @@ Available targets:
 
   make kernel_modules_install  # copy the kernel modules to output folder root/lib/modules
 
+  make kernel_install          # copy external kernel modules to root/lib/modules and kernel to device tree
 
-  then, you can use 'make bootimage' to create the flashable boot.img
+
+  then, you can use 'bib galaxyr && mka bootimage' to create the flashable boot.img
 
 ---
 
-'Tanguy Pruvot, July 2012'
+  Stock ROM compatibility:
+
+  This kernel is made for CM/AOSP, that mean some drivers are more open to userspace than the stock one
+  I try to keep the compatibility with the stock rom, but its not easy.
+
+  Actually the biggest issue is about the KXTF9 sensor, which require to be opened to CM7 libsensors direct control
+  instead of the normal MPU slave config.
+
+  So, if you want to test this kernel on stock rom, disable the CONFIG_SENSORS_KXTF9, else you will have regular tempory "locks"
+
+  There is also a ext_config (user_bld) to do that automatically, check Android.mk rules
+
+---
+
+'Tanguy Pruvot, August 2012'
