@@ -35,9 +35,7 @@
 #include <linux/usb.h>
 #include <linux/mutex.h>
 
-/*
-#define VERBOSE_DEBUG
-*/
+/* #define VERBOSE_DEBUG */
 
 #ifdef DEBUG
 #define UDSL_ASSERT(instance, x)	BUG_ON(!(x))

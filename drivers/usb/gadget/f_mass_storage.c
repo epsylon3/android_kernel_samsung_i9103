@@ -317,6 +317,14 @@ static const char fsg_string_interface[] = "Mass Storage";
 
 #include "storage_common.c"
 
+/* default is too noisy, wtf !! */
+#ifdef VDBG
+#undef VERBOSE_DEBUG
+#undef VDBG
+#define VDBG(d, fmt, args...) \
+    ;
+//  pr_debug("f_ums: " fmt , ## args)
+#endif
 
 /*-------------------------------------------------------------------------*/
 
@@ -1788,7 +1796,7 @@ static int send_status(struct fsg_common *common)
 		status = USB_STATUS_PHASE_ERROR;
 		sd = SS_INVALID_COMMAND;
 	} else if (sd != SS_NO_SENSE) {
-		DBG(common, "sending command-failure status\n");
+		printk_once(KERN_DEBUG "f_ums: sending command-failure status\n");
 		status = USB_STATUS_FAIL;
 		VDBG(common, "  sense data: SK x%02x, ASC x%02x, ASCQ x%02x;"
 				"  info x%x\n",
@@ -3062,6 +3070,7 @@ static int fsg_bind_config(struct usb_composite_dev *cdev,
 	fsg->function.setup       = fsg_setup;
 	fsg->function.set_alt     = fsg_set_alt;
 	fsg->function.disable     = fsg_disable;
+	fsg->function.disabled    = 1;
 
 	fsg->common               = common;
 	/* Our caller holds a reference to common structure so we
@@ -3218,7 +3227,7 @@ int mass_storage_bind_config(struct usb_configuration *c)
 	struct fsg_common *common = fsg_common_init(NULL, c->cdev, &fsg_cfg);
 	if (IS_ERR(common))
 		return -1;
-	return fsg_add(c->cdev, c, common);
+	return fsg_bind_config(c->cdev, c, common);
 }
 
 static struct android_usb_function mass_storage_function = {

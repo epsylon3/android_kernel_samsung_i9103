@@ -933,7 +933,11 @@ static ssize_t UsbMenuSel_switch_store(struct device *dev, struct device_attribu
 			CSY_DBG_ESS("Enable Accessory(%d)\n", value);
 			samsung_enable_function(USBSTATUS_ACCESSORY);
 			break;
-#endif			
+#endif
+		case 5:
+			CSY_DBG_ESS("Enable ADB(%d)\n", value);
+			samsung_enable_function(USBSTATUS_ADB);
+			break;
 		default:
 			CSY_DBG("Fail : value(%d) is not invaild.\n", value);
 	}
