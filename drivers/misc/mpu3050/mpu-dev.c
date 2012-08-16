@@ -724,9 +724,9 @@ static int slave_get_config(void *adapter,
 }
 
 #ifdef DEBUG_IOCTLS
-# define DBG(io) pr_info("%s: " io "\n", __func__)
+# define DBG(fmt, args...) printk_once(KERN_DEBUG "%s: " fmt "\n", __func__, ## args)
 #else
-# define DBG(io)
+# define DBG(fmt, args...)
 #endif
 
 /* ioctl - I/O control */
@@ -982,10 +982,9 @@ static long mpu_ioctl(struct file *file,
 	case MPU_READ_ACCEL:
 	{
 		unsigned char data[6];
-		DBG("MPU_READ_ACCEL");
 		retval = mpu3050_read_accel(mldl_cfg, client->adapter,
 					    data);
-
+		DBG("MPU_READ_ACCEL %02x %02x %02x", data[0], data[1], data[2]);
 		if ((ML_SUCCESS == retval) &&
 		    (copy_to_user((unsigned char __user *) arg,
 			    data, sizeof(data))))
@@ -998,9 +997,9 @@ static long mpu_ioctl(struct file *file,
 		struct i2c_adapter *compass_adapt =
 			i2c_get_adapter(mldl_cfg->pdata->compass.
 					adapt_num);
-		DBG("MPU_READ_COMPASS");
 		retval = mpu3050_read_compass(mldl_cfg, compass_adapt,
 						 data);
+		DBG("MPU_READ_COMPASS %02x %02x %02x", data[0], data[1], data[2]);
 		if ((ML_SUCCESS == retval) &&
 			(copy_to_user((unsigned char *) arg,
 				data, sizeof(data))))
@@ -1013,9 +1012,9 @@ static long mpu_ioctl(struct file *file,
 		struct i2c_adapter *pressure_adapt =
 			i2c_get_adapter(mldl_cfg->pdata->pressure.
 					adapt_num);
-		DBG("MPU_READ_PRESSURE");
 		retval = mpu3050_read_pressure(mldl_cfg, pressure_adapt,
 					data);
+		DBG("MPU_READ_PRESSURE %02x %02x %02x", data[0], data[1], data[2]);
 		if ((ML_SUCCESS == retval) &&
 		    (copy_to_user((unsigned char __user *) arg,
 			    data, sizeof(data))))
@@ -1035,7 +1034,7 @@ static long mpu_ioctl(struct file *file,
 		retval = -EINVAL;
 	}
 #ifdef DEBUG_IOCTLS
-	pr_info("%s:  ret=%d\n", __func__, retval);
+	pr_debug("%s:  ret=%d\n", __func__, retval);
 #endif
 	return retval;
 }
