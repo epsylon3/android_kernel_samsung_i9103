@@ -15,10 +15,12 @@
  * GNU General Public License for more details.
  *
  */
+#define DEBUG
 
 #include <linux/kernel.h>
 #include <linux/clk.h>
 #include <linux/debugfs.h>
+#include <linux/debug_locks.h>
 #include <linux/delay.h>
 #include <linux/init.h>
 #include <linux/list.h>
@@ -140,7 +142,15 @@ static unsigned long clk_predict_rate_from_parent(struct clk *c, struct clk *p)
 {
 	u64 rate;
 
-	rate = clk_get_rate(p);
+	if (p == c) {
+		pr_warning("%s: recursion in clk %s detected!\n", __func__,
+			c->name);
+		return c->rate;
+	}
+
+	printk_once(KERN_DEBUG "%s: %s -> %s\n", __func__, c->name, p->name);
+
+	rate = clk_get_rate_locked(p);
 
 	if (c->mul != 0 && c->div != 0) {
 		rate *= c->mul;
@@ -236,40 +246,65 @@ void clk_init(struct clk *c)
 	mutex_unlock(&clock_list_lock);
 }
 
-int clk_enable(struct clk *c)
+static void clk_disable_locked(struct clk *c)
+{
+	if (c->refcnt == 0) {
+		return;
+	}
+	if (c->refcnt == 1) {
+		if (c->ops && c->ops->disable)
+			c->ops->disable(c);
+
+		if (c->parent)
+			clk_disable_locked(c->parent);
+
+		c->state = OFF;
+	}
+	c->refcnt--;
+
+	if (clk_is_auto_dvfs(c) && c->refcnt == 0)
+		tegra_dvfs_set_rate(c, 0);
+}
+
+static int clk_enable_locked(struct clk *c)
 {
 	int ret = 0;
-	unsigned long flags;
-
-	clk_lock_save(c, flags);
+	printk_once(KERN_DEBUG "%s: %s\n", __func__, c->name);
 
 	if (clk_is_auto_dvfs(c)) {
 		ret = tegra_dvfs_set_rate(c, clk_get_rate_locked(c));
-		if (ret)
-			goto out;
+		if (ret) return ret;
 	}
 
 	if (c->refcnt == 0) {
 		if (c->parent) {
-			ret = clk_enable(c->parent);
-			if (ret)
-				goto out;
+			ret = clk_enable_locked(c->parent);
+			if (ret) return ret;
 		}
-
 		if (c->ops && c->ops->enable) {
 			ret = c->ops->enable(c);
 			if (ret) {
 				if (c->parent)
 					clk_disable(c->parent);
-				goto out;
+				return ret;
 			}
 			c->state = ON;
 			c->set = true;
 		}
 	}
 	c->refcnt++;
-out:
+	return ret;
+}
+
+int clk_enable(struct clk *c)
+{
+	int ret;
+	unsigned long flags;
+
+	clk_lock_save(c, flags);
+	ret = clk_enable_locked(c);
 	clk_unlock_restore(c, flags);
+
 	return ret;
 }
 EXPORT_SYMBOL(clk_enable);
@@ -285,19 +320,8 @@ void clk_disable(struct clk *c)
 		clk_unlock_restore(c, flags);
 		return;
 	}
-	if (c->refcnt == 1) {
-		if (c->ops && c->ops->disable)
-			c->ops->disable(c);
 
-		if (c->parent)
-			clk_disable(c->parent);
-
-		c->state = OFF;
-	}
-	c->refcnt--;
-
-	if (clk_is_auto_dvfs(c) && c->refcnt == 0)
-		tegra_dvfs_set_rate(c, 0);
+	clk_disable_locked(c);
 
 	clk_unlock_restore(c, flags);
 }
@@ -367,6 +391,7 @@ int clk_set_rate(struct clk *c, unsigned long rate)
 		rate = c->max_rate;
 
 	if (c->ops && c->ops->round_rate) {
+
 		new_rate = c->ops->round_rate(c, rate);
 
 		if (new_rate < 0) {

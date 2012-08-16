@@ -71,6 +71,8 @@ void clk_disable(struct clk *clk);
  */
 unsigned long clk_get_rate(struct clk *clk);
 
+unsigned long clk_get_rate_locked(struct clk *clk);
+
 /**
  * clk_put	- "free" the clock source
  * @clk: clock source

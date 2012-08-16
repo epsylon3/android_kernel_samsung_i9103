@@ -62,7 +62,7 @@ static int bcm4330_bt_rfkill_set_power(void *data, bool blocked)
 {
 	int ret = 0;
 	if (blocked) {
-		pr_info("[BT] Bluetooth Power off blocked=%d\n", blocked?1:0);
+		pr_info("[BT] Bluetooth Power off\n");
 
 		ret = disable_irq_wake(bcm4330_rfkill->irq);
 		if (ret < 0)
@@ -78,24 +78,21 @@ static int bcm4330_bt_rfkill_set_power(void *data, bool blocked)
 		if (bcm4330_rfkill->bt_32k_clk)
 			clk_disable(bcm4330_rfkill->bt_32k_clk);
 	} else {
-		pr_info("[BT] Bluetooth Power on blocked=%d\n", blocked?1:0);
+		pr_info("[BT] Bluetooth Power on\n");
 		if (bcm4330_rfkill->bt_32k_clk) {
 			pr_info("[BT] 32k_clk is present\n");
 			clk_enable(bcm4330_rfkill->bt_32k_clk);
 		}
 
-		pr_info("[BT] gpio shutdown=%d, reset=%d, irq=%d\n",
+		pr_info("[BT] gpio shutdown=%d, reset=%d, irq=%d (gpio %d)\n",
 			bcm4330_rfkill->gpio_shutdown, bcm4330_rfkill->gpio_reset,
-			bcm4330_rfkill->irq);
-		//N1:
-		//pr_info("    plat gpios : shutdown 77, reset 177, wake 145");
+			bcm4330_rfkill->irq, TEGRA_IRQ_TO_GPIO(bcm4330_rfkill->irq));
 
 		gpio_direction_output(bcm4330_rfkill->gpio_shutdown, 1);
 		gpio_direction_output(bcm4330_rfkill->gpio_reset, 1);
 		msleep(10);
 
 		#ifdef BT_SLEEP_ENABLE
-		// to check if reversed or not...
 		gpio_direction_output(bcm4330_rfkill->gpio_btwake, 0);
 		#endif
 
@@ -191,7 +188,7 @@ static int bcm4330_rfkill_probe(struct platform_device *pdev)
 	}
 
 	bcm4330_rfkill->irq = platform_get_irq(pdev, 0);
-	if (bcm4330_rfkill->irq < 0) {
+	if (bcm4330_rfkill->irq <= 0) {
 		pr_err("couldn't find hostwake irq\n");
 		goto free_bcm_res;
 	}
@@ -224,14 +221,17 @@ static int bcm4330_rfkill_probe(struct platform_device *pdev)
 	ret = rfkill_register(bt_rfkill);
 	if (ret != 0) {
 		rfkill_destroy(bt_rfkill);
+		pr_err("[BT] unable to register bt_rfkill, ret=%d\n", ret);
 		goto free_bcm_irq;
 	}
 
-	pr_info("[BT] gpio nshutdown %d, nreset %d, irq bt_host_wake %d\n",
+	pr_info("[BT] gpio nshutdown %d, nreset %d, irq bt_host_wake %d (gpio %d)\n",
 		bcm4330_rfkill->gpio_shutdown, bcm4330_rfkill->gpio_reset,
-		bcm4330_rfkill->irq);
+		bcm4330_rfkill->irq, TEGRA_IRQ_TO_GPIO(bcm4330_rfkill->irq));
 
 #ifdef BT_SLEEP_ENABLE
+	wake_lock_init(&bt_wake_lock, WAKE_LOCK_SUSPEND, "bt_wake");
+
 	res = platform_get_resource_byname(pdev, IORESOURCE_IO,
 						"bcm4330_btwake_gpio");
 	if (!res) {
@@ -266,8 +266,6 @@ static int bcm4330_rfkill_probe(struct platform_device *pdev)
 		gpio_free(bcm4330_rfkill->gpio_btwake);
 		goto free_bcm_irq;
 	}
-
-	wake_lock_init(&bt_wake_lock, WAKE_LOCK_SUSPEND, "bt_wake");
 
 	pr_notice("[BT] rfkill initialized with BT_SLEEP_ENABLE, gpio bt_wake %d\n",
 		bcm4330_rfkill->gpio_btwake);

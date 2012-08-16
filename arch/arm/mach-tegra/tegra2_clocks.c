@@ -553,7 +553,7 @@ static void tegra2_bus_clk_disable(struct clk *c)
 static int tegra2_bus_clk_set_rate(struct clk *c, unsigned long rate)
 {
 	u32 val = clk_readl(c->reg);
-	unsigned long parent_rate = clk_get_rate(c->parent);
+	unsigned long parent_rate = clk_get_rate_locked(c->parent);
 	int i;
 	for (i = 1; i <= 4; i++) {
 		if (rate == parent_rate / i) {
@@ -627,7 +627,7 @@ static void tegra2_blink_clk_disable(struct clk *c)
 
 static int tegra2_blink_clk_set_rate(struct clk *c, unsigned long rate)
 {
-	unsigned long parent_rate = clk_get_rate(c->parent);
+	unsigned long parent_rate = clk_get_rate_locked(c->parent);
 	if (rate >= parent_rate) {
 		c->div = 1;
 		pmc_writel(0, c->reg);
@@ -733,7 +733,7 @@ static int tegra2_pll_clk_set_rate(struct clk *c, unsigned long rate)
 
 	pr_debug("%s: %s %lu\n", __func__, c->name, rate);
 
-	input_rate = clk_get_rate(c->parent);
+	input_rate = clk_get_rate_locked(c->parent);
 	for (sel = c->u.pll.freq_table; sel->input_rate != 0; sel++) {
 		if (sel->input_rate == input_rate && sel->output_rate == rate) {
 			c->mul = sel->n;
@@ -870,7 +870,7 @@ static int tegra2_pll_div_clk_set_rate(struct clk *c, unsigned long rate)
 	u32 val;
 	u32 new_val;
 	int divider_u71;
-	unsigned long parent_rate = clk_get_rate(c->parent);
+	unsigned long parent_rate = clk_get_rate_locked(c->parent);
 
 	pr_debug("%s: %s %lu\n", __func__, c->name, rate);
 	if (c->flags & DIV_U71) {
@@ -901,7 +901,7 @@ static int tegra2_pll_div_clk_set_rate(struct clk *c, unsigned long rate)
 static long tegra2_pll_div_clk_round_rate(struct clk *c, unsigned long rate)
 {
 	int divider;
-	unsigned long parent_rate = clk_get_rate(c->parent);
+	unsigned long parent_rate = clk_get_rate_locked(c->parent);
 	pr_debug("%s: %s %lu\n", __func__, c->name, rate);
 
 	if (c->flags & DIV_U71) {
@@ -1043,7 +1043,7 @@ static int tegra2_periph_clk_set_rate(struct clk *c, unsigned long rate)
 {
 	u32 val;
 	int divider;
-	unsigned long parent_rate = clk_get_rate(c->parent);
+	unsigned long parent_rate = clk_get_rate_locked(c->parent);
 
 	if (c->flags & DIV_U71) {
 		divider = clk_div71_get_divider(parent_rate, rate);
@@ -1079,7 +1079,7 @@ static long tegra2_periph_clk_round_rate(struct clk *c,
 	unsigned long rate)
 {
 	int divider;
-	unsigned long parent_rate = clk_get_rate(c->parent);
+	unsigned long parent_rate = clk_get_rate_locked(c->parent);
 	pr_debug("%s: %s %lu\n", __func__, c->name, rate);
 
 	if (c->flags & DIV_U71) {
