@@ -259,7 +259,7 @@ int Si4709_dev_powerup(void)
 	int ret = 0;
 	u32 value = 100;
 	
-	debug("Si4709_dev_powerup called");
+	pr_notice("%s\n", __func__);
 
 	mutex_lock(&(Si4709_dev.lock));
 
@@ -366,6 +366,7 @@ int Si4709_dev_powerup(void)
 			if (ret < 0)
 				debug("Si4709_dev_powerup i2c_write 1 failed");
 			else {
+				pr_notice("FM device ready\n");
 				Si4709_dev.valid = eTRUE;
 #ifdef RDS_INTERRUPT_ON_ALWAYS
 				/*Initialising read and write indices */
