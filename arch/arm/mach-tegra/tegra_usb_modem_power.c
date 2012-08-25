@@ -76,10 +76,10 @@ static irqreturn_t tegra_usb_modem_wake_thread(int irq, void *data)
 
 		if (!modem->system_suspend) {
 			usb_lock_device(modem->udev);
-			if (usb_autopm_get_interface(modem->intf) == 0)
-				usb_autopm_put_interface_async(modem->intf);
-			usb_unlock_device(modem->udev);
-		}
+		if (usb_autopm_get_interface(modem->intf) == 0)
+			usb_autopm_put_interface_async(modem->intf);
+		usb_unlock_device(modem->udev);
+	}
 	}
 	mutex_unlock(&modem->lock);
 
@@ -203,8 +203,8 @@ static int mdm_pm_notifier(struct notifier_block *notifier,
 	case PM_POST_SUSPEND:
 		modem->system_suspend = 0;
 		mutex_unlock(&modem->lock);
-		return NOTIFY_OK;
-	}
+	return NOTIFY_OK;
+}
 
 	mutex_unlock(&modem->lock);
 	return NOTIFY_DONE;

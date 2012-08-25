@@ -24,7 +24,7 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/nvhost.h>
-#include <linux/nvmap.h>
+#include <mach/nvmap.h>
 #include <linux/atomic.h>
 
 /* host managed and invalid syncpt id */
@@ -56,8 +56,9 @@ void nvhost_syncpt_deinit(struct nvhost_syncpt *);
 
 #define client_managed(id) (BIT(id) & sp->client_managed)
 #define syncpt_to_dev(sp) container_of(sp, struct nvhost_master, syncpt)
-#define SYNCPT_CHECK_PERIOD (2 * HZ)
-#define MAX_STUCK_CHECK_COUNT 15
+#define syncpt_op(sp) (syncpt_to_dev(sp)->op.syncpt)
+#define SYNCPT_CHECK_PERIOD (2*HZ)
+
 
 /**
  * Updates the value sent to hardware.

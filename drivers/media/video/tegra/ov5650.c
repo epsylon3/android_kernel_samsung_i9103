@@ -1255,14 +1255,14 @@ static int set_power_helper(struct ov5650_platform_data *pdata,
 	if (pdata) {
 		if (powerLevel && pdata->power_on) {
 			if (*ref_cnt == 0)
-				pdata->power_on();
+			pdata->power_on();
 			*ref_cnt = *ref_cnt + 1;
 		}
 		else if (pdata->power_off) {
 			*ref_cnt = *ref_cnt - 1;
 			if (*ref_cnt <= 0)
-				pdata->power_off();
-		}
+			pdata->power_off();
+	}
 	}
 	return 0;
 }
@@ -1297,7 +1297,7 @@ static int ov5650_get_sensor_id(struct ov5650_info *info)
 
 	pr_info("%s\n", __func__);
 	if (info->sensor_data.fuse_id_size)
-		return 0;
+	return 0;
 
 	ov5650_set_power(info, 1);
 
@@ -1581,4 +1581,4 @@ static void __exit ov5650_exit(void)
 
 module_init(ov5650_init);
 module_exit(ov5650_exit);
-MODULE_LICENSE("GPL v2");
+

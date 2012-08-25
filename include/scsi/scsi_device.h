@@ -65,6 +65,8 @@ struct scsi_event {
 	 */
 };
 
+#define SCSI_PATCH_AGAINST_RACE_CONDITION 1
+
 struct scsi_device {
 	struct Scsi_Host *host;
 	struct request_queue *request_queue;
@@ -168,7 +170,11 @@ struct scsi_device {
 	struct device		sdev_gendev,
 				sdev_dev;
 
+#ifdef SCSI_PATCH_AGAINST_RACE_CONDITION
+	struct work_struct	release_work; /* for process context on put */
+#else
 	struct execute_work	ew; /* used to get process context on put */
+#endif
 	struct work_struct	requeue_work;
 
 	struct scsi_dh_data	*scsi_dh_data;
@@ -260,7 +266,13 @@ struct scsi_target {
 #define SCSI_DEFAULT_TARGET_BLOCKED	3
 
 	char			scsi_level;
+
+#ifdef SCSI_PATCH_AGAINST_RACE_CONDITION
+	struct work_struct	reap_work;
+#else
 	struct execute_work	ew;
+#endif
+
 	enum scsi_target_state	state;
 	void 			*hostdata; /* available to low-level driver */
 	unsigned long		starget_data[0]; /* for the transport */
@@ -277,6 +289,10 @@ static inline struct scsi_target *scsi_target(struct scsi_device *sdev)
 
 #define starget_printk(prefix, starget, fmt, a...)	\
 	dev_printk(prefix, &(starget)->dev, fmt, ##a)
+
+#ifdef SCSI_PATCH_AGAINST_RACE_CONDITION
+extern struct workqueue_struct *scsi_wq;
+#endif
 
 extern struct scsi_device *__scsi_add_device(struct Scsi_Host *,
 		uint, uint, uint, void *hostdata);

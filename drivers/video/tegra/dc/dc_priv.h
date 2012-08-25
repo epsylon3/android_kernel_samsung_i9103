@@ -42,7 +42,8 @@
 #define DDR_BW_TO_FREQ(bw) ((bw) / 8)
 
 #if defined(CONFIG_TEGRA_EMC_TO_DDR_CLOCK)
-#define EMC_BW_TO_FREQ(bw) (DDR_BW_TO_FREQ(bw) * CONFIG_TEGRA_EMC_TO_DDR_CLOCK)
+#define EMC_BW_TO_FREQ(bw) (DDR_BW_TO_FREQ(bw) *\
+	CONFIG_TEGRA_EMC_TO_DDR_CLOCK)
 #else
 #define EMC_BW_TO_FREQ(bw) (DDR_BW_TO_FREQ(bw) * 2)
 #endif
@@ -70,7 +71,7 @@ struct tegra_dc_out_ops {
 	/* resume output.  dc clocks are on at this point */
 	void (*resume)(struct tegra_dc *dc);
 	/* mode filter. to provide a list of supported modes*/
-	bool (*mode_filter)(const struct tegra_dc *dc,
+	bool (*mode_filter)(struct tegra_dc *dc,
 			struct fb_videomode *mode);
 };
 
@@ -110,6 +111,8 @@ struct tegra_dc {
 	struct resource			*fb_mem;
 	struct tegra_fb_info		*fb;
 
+	struct tegra_overlay_info	*overlay;
+
 	struct {
 		u32			id;
 		u32			min;
@@ -136,8 +139,6 @@ struct tegra_dc {
 	} stats;
 
 	struct tegra_dc_ext		*ext;
-
-	struct tegra_dc_feature		*feature;
 
 #ifdef CONFIG_DEBUG_FS
 	struct dentry			*debugdir;

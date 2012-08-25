@@ -855,7 +855,7 @@ int tf_fill_descriptor_table(
 						(void *) buffer_offset_vaddr))
 					page = vmalloc_to_page(addr);
 				else
-					page = virt_to_page(addr);
+				page = virt_to_page(addr);
 
 				if (page == NULL) {
 					dprintk(KERN_ERR

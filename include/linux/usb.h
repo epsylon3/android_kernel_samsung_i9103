@@ -412,6 +412,8 @@ struct usb_tt;
  * @quirks: quirks of the whole device
  * @urbnum: number of URBs submitted for the whole device
  * @active_duration: total time device is not suspended
+ * @last_busy: time of last use
+ * @autosuspend_delay: in jiffies
  * @connect_time: time device was first connected
  * @do_remote_wakeup:  remote wakeup should be enabled
  * @reset_resume: needs reset instead of resume
@@ -484,6 +486,8 @@ struct usb_device {
 	unsigned long active_duration;
 
 #ifdef CONFIG_PM
+	unsigned long last_busy;
+	int autosuspend_delay;
 	unsigned long connect_time;
 
 	unsigned do_remote_wakeup:1;
@@ -979,6 +983,7 @@ extern int usb_disabled(void);
 #define URB_SETUP_MAP_LOCAL	0x00200000	/* HCD-local setup packet */
 #define URB_DMA_SG_COMBINED	0x00400000	/* S-G entries were combined */
 #define URB_ALIGNED_TEMP_BUFFER	0x00800000	/* Temp buffer was alloc'd */
+#define URB_DRIVER_PRIVATE	0x80000000	/* For driver-private use */
 
 struct usb_iso_packet_descriptor {
 	unsigned int offset;

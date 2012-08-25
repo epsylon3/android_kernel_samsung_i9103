@@ -21,8 +21,7 @@
 #include "dev.h"
 #include "bus_client.h"
 
-static int __devinit gr2d_probe(struct nvhost_device *dev,
-	struct nvhost_device_id *id_table)
+static int __devinit gr2d_probe(struct nvhost_device *dev)
 {
 	return nvhost_client_device_init(dev);
 }

@@ -42,7 +42,7 @@
 #include <mach/clk.h>
 #include <mach/io.h>
 #include <mach/iomap.h>
-#include <linux/nvmap.h>
+#include <mach/nvmap.h>
 #include <mach/legacy_irq.h>
 #include <mach/hardware.h>
 
@@ -1022,8 +1022,6 @@ static int avp_init(struct tegra_avp_info *avp)
 		pr_err("%s: Cannot read firmware '%s'\n", __func__, fw_file);
 		goto err_req_fw;
 	}
-	pr_info("%s: Reading firmware from '%s' (%d bytes)\n", __func__,
-		fw_file, avp_fw->size);
 
 	pr_info("%s: Loading AVP kernel at vaddr=%p paddr=%lx\n",
 		__func__, avp->kernel_data, (unsigned long)avp->kernel_phys);

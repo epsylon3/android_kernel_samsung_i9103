@@ -1352,6 +1352,7 @@ static void sdhci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 
 	if (host->version >= SDHCI_SPEC_300) {
 		u16 clk, ctrl_2;
+		unsigned int clock;
 
 		/* In case of UHS-I modes, set High Speed Enable */
 		if (((ios->timing == MMC_TIMING_UHS_SDR50) ||
@@ -1850,18 +1851,13 @@ int sdhci_enable(struct mmc_host *mmc)
 {
 	struct sdhci_host *host = mmc_priv(mmc);
 
-	if (!mmc->card)
+	if (!mmc->card || mmc->card->type == MMC_TYPE_SDIO)
 		return 0;
 
 	if (mmc->ios.clock) {
-		if (mmc->card->type != MMC_TYPE_SDIO) {
-			if (host->ops->set_clock)
-				host->ops->set_clock(host, mmc->ios.clock);
-			sdhci_set_clock(host, mmc->ios.clock);
-		} else {
-			if (host->ops->set_card_clock)
-				host->ops->set_card_clock(host, mmc->ios.clock);
-		}
+		if (host->ops->set_clock)
+			host->ops->set_clock(host, mmc->ios.clock);
+		sdhci_set_clock(host, mmc->ios.clock);
 	}
 
 	return 0;
@@ -1871,18 +1867,12 @@ int sdhci_disable(struct mmc_host *mmc, int lazy)
 {
 	struct sdhci_host *host = mmc_priv(mmc);
 
-	if (!mmc->card)
+	if (!mmc->card || mmc->card->type == MMC_TYPE_SDIO)
 		return 0;
 
-	/* For SDIO cards, only disable the card clock. */
-	if (mmc->card->type != MMC_TYPE_SDIO) {
-		sdhci_set_clock(host, 0);
-		if (host->ops->set_clock)
-			host->ops->set_clock(host, 0);
-	} else {
-		if (host->ops->set_card_clock)
-			host->ops->set_card_clock(host, 0);
-	}
+	sdhci_set_clock(host, 0);
+	if (host->ops->set_clock)
+		host->ops->set_clock(host, 0);
 
 	return 0;
 }
@@ -1908,13 +1898,33 @@ static const struct mmc_host_ops sdhci_ops = {
 static void sdhci_tasklet_card(unsigned long param)
 {
 	struct sdhci_host *host;
+
+#if !defined CONFIG_MACH_BOSE_ATT
 	unsigned long flags;
+#else
+	int	present;
+#endif
 
 	host = (struct sdhci_host*)param;
 
+#if defined CONFIG_MACH_BOSE_ATT
+	spin_lock_irqsave(&host->lock, host->spinlock_flags);
+#else
 	spin_lock_irqsave(&host->lock, flags);
+#endif
 
+#if defined CONFIG_MACH_BOSE_ATT
+	if ((host->quirks & SDHCI_QUIRK_BROKEN_CARD_DETECTION)
+		&& host->ops->card_detect)
+		present = host->ops->card_detect(host);
+	else
+		present = (sdhci_readl(host, SDHCI_PRESENT_STATE)
+				& SDHCI_CARD_PRESENT);
+
+	if (!present) {
+#else
 	if (!(sdhci_readl(host, SDHCI_PRESENT_STATE) & SDHCI_CARD_PRESENT)) {
+#endif
 		if (host->mrq) {
 			printk(KERN_ERR "%s: Card removed during transfer!\n",
 				mmc_hostname(host->mmc));
@@ -1929,7 +1939,11 @@ static void sdhci_tasklet_card(unsigned long param)
 		}
 	}
 
+#if defined CONFIG_MACH_BOSE_ATT
+	spin_unlock_irqrestore(&host->lock, host->spinlock_flags);
+#else
 	spin_unlock_irqrestore(&host->lock, flags);
+#endif
 
 	mmc_detect_change(host->mmc, msecs_to_jiffies(200));
 }
@@ -2330,34 +2344,23 @@ out:
 int sdhci_suspend_host(struct sdhci_host *host, pm_message_t state)
 {
 	int ret = 0;
-	bool has_tuning_timer;
 	struct mmc_host *mmc = host->mmc;
 
 	sdhci_disable_card_detection(host);
 
 	/* Disable tuning since we are suspending */
-	has_tuning_timer = host->version >= SDHCI_SPEC_300 &&
-		host->tuning_count && host->tuning_mode == SDHCI_TUNING_MODE_1;
-	if (has_tuning_timer) {
+	if (host->version >= SDHCI_SPEC_300 && host->tuning_count &&
+	    host->tuning_mode == SDHCI_TUNING_MODE_1) {
 		host->flags &= ~SDHCI_NEEDS_RETUNING;
 		mod_timer(&host->tuning_timer, jiffies +
 			host->tuning_count * HZ);
 	}
 
-	if (mmc->card) {
+	if (host->mmc->card && host->mmc->card->type == MMC_TYPE_SDIO)
+		host->mmc->pm_flags |= MMC_PM_KEEP_POWER;
+
+	if (mmc->card)
 		ret = mmc_suspend_host(host->mmc);
-		if (ret) {
-			if (has_tuning_timer) {
-				host->flags |= SDHCI_NEEDS_RETUNING;
-				mod_timer(&host->tuning_timer, jiffies +
-						host->tuning_count * HZ);
-			}
-
-			sdhci_enable_card_detection(host);
-
-			return ret;
-		}
-	}
 
 	if (mmc->pm_flags & MMC_PM_KEEP_POWER)
 		host->card_int_set = sdhci_readl(host, SDHCI_INT_ENABLE) &
@@ -2400,12 +2403,18 @@ int sdhci_resume_host(struct sdhci_host *host)
 	mmiowb();
 
 	if (mmc->card) {
+		if (mmc->card->type != MMC_TYPE_SDIO) {
 		ret = mmc_resume_host(host->mmc);
-		/* Enable card interrupt as it is overwritten in sdhci_init */
-		if ((mmc->caps & MMC_CAP_SDIO_IRQ) &&
-			(mmc->pm_flags & MMC_PM_KEEP_POWER))
-				if (host->card_int_set)
-					mmc->ops->enable_sdio_irq(mmc, true);
+		} else {
+			ret = mmc_resume_host(host->mmc);
+			/* Enable card interrupt as
+				it is overwritten in sdhci_init */
+			if ((mmc->caps & MMC_CAP_SDIO_IRQ) &&
+				(mmc->pm_flags & MMC_PM_KEEP_POWER))
+					if (host->card_int_set)
+						mmc->ops->enable_sdio_irq(mmc,
+							true);
+		}
 	}
 
 	sdhci_enable_card_detection(host);

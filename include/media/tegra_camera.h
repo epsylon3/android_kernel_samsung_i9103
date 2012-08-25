@@ -23,14 +23,12 @@ enum {
 	TEGRA_CAMERA_MODULE_ISP = 0,
 	TEGRA_CAMERA_MODULE_VI,
 	TEGRA_CAMERA_MODULE_CSI,
-	TEGRA_CAMERA_MODULE_EMC,
-	TEGRA_CAMERA_MODULE_MAX
+	TEGRA_CAMERA_MODULE_MAX,
 };
 
 enum {
 	TEGRA_CAMERA_VI_CLK,
 	TEGRA_CAMERA_VI_SENSOR_CLK,
-	TEGRA_CAMERA_EMC_CLK
 };
 
 struct tegra_camera_clk_info {
@@ -54,5 +52,6 @@ enum StereoCameraMode {
 #define TEGRA_CAMERA_IOCTL_CLK_SET_RATE		\
 	_IOWR('i', 3, struct tegra_camera_clk_info)
 #define TEGRA_CAMERA_IOCTL_RESET		_IOWR('i', 4, uint)
+#define TEGRA_CAMERA_IOCTL_SENSOR_FW_FOR_SAMSUNG _IOWR('i', 5, uint)
 
 #endif

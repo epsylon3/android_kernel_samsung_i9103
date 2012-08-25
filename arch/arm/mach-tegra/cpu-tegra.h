@@ -28,6 +28,10 @@ unsigned int tegra_count_slow_cpus(unsigned long speed_limit);
 unsigned int tegra_get_slowest_cpu_n(void);
 unsigned long tegra_cpu_lowest_speed(void);
 unsigned long tegra_cpu_highest_speed(void);
+#ifdef CONFIG_TEGRA_CPU_FREQ_LOCK
+void tegra_cpu_lock_speed(int min_rate, int timeout_ms);
+void tegra_cpu_unlock_speed(void);
+#endif /* CONFIG_TEGRA_CPU_FREQ_LOCK */
 
 #ifdef CONFIG_TEGRA_THERMAL_THROTTLE
 int tegra_throttle_init(struct mutex *cpu_lock);

@@ -395,7 +395,7 @@ skip_status:
 
 	/* Callback should be called without any lock */
 	if(req->complete)
-		req->complete(req);
+	req->complete(req);
 	return 0;
 }
 EXPORT_SYMBOL(tegra_dma_dequeue_req);
@@ -798,7 +798,9 @@ static void tegra_dma_update_hw(struct tegra_dma_channel *ch,
 #if defined(CONFIG_ARCH_TEGRA_2x_SOC)
 	case TEGRA_DMA_REQ_SEL_I2S_2:
 	case TEGRA_DMA_REQ_SEL_I2S_1:
+#ifndef CONFIG_MACH_BOSE_ATT
 	case TEGRA_DMA_REQ_SEL_SPD_I:
+#endif
 	case TEGRA_DMA_REQ_SEL_UI_I:
 	case TEGRA_DMA_REQ_SEL_I2S2_2:
 	case TEGRA_DMA_REQ_SEL_I2S2_1:

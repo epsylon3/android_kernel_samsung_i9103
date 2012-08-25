@@ -119,6 +119,15 @@ static int max8952_disable(struct regulator_dev *rdev)
 	return 0;
 }
 
+static int max8952_set_fpwm(struct regulator_dev *rdev, int en)
+{
+    struct max8952 *max8952 = rdev_get_drvdata(rdev);
+    const struct max8952_info *reg = &max8952_regulators[rdev_get_id(rdev)];
+
+    return max8952_set_bits(max8952, reg->reg_base, MAX8952_MASK_FPWM_EN,
+                en ? MAX8952_MASK_FPWM_EN : 0);
+}
+
 static int max8952_get_voltage(struct regulator_dev *rdev)
 {
 	struct max8952_data *max8952 = rdev_get_drvdata(rdev);
@@ -311,6 +320,9 @@ static int __devinit max8952_pmic_probe(struct i2c_client *client,
 			((pdata->ramp_speed & 0x7) << 5));
 
 	i2c_set_clientdata(client, max8952);
+
+    /* force PWM mode */
+    max8952_set_fpwm(rdev, 1);
 
 	return 0;
 

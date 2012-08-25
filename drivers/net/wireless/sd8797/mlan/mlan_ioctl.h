@@ -82,7 +82,6 @@ enum _mlan_ioctl_req_id
     MLAN_OID_SNMP_MIB_DOT11D,
     MLAN_OID_SNMP_MIB_DOT11H,
 #endif
-    MLAN_OID_SNMP_MIB_DTIM_PERIOD,
 
     /* Status Information Group */
     MLAN_IOCTL_GET_INFO = 0x00050000,
@@ -205,15 +204,12 @@ enum _mlan_ioctl_req_id
     MLAN_OID_MISC_IP_ADDR,
     MLAN_OID_MISC_MAC_CONTROL,
     MLAN_OID_MISC_MEF_CFG,
-    MLAN_OID_MISC_CFP_CODE,
-    MLAN_OID_MISC_COUNTRY_CODE,
     MLAN_OID_MISC_THERMAL,
     MLAN_OID_MISC_RX_MGMT_IND,
     MLAN_OID_MISC_SUBSCRIBE_EVENT,
 #ifdef DEBUG_LEVEL1
     MLAN_OID_MISC_DRVDBG,
 #endif
-    MLAN_OID_MISC_OTP_USER_DATA,
 };
 
 /** Sub command size */
@@ -1045,8 +1041,6 @@ typedef struct _mlan_ds_snmp_mib
         /** OID value for MLAN_OID_SNMP_MIB_DOT11D/H */
         t_u32 oid_value;
 #endif
-        /** DTIM period for MLAN_OID_SNMP_MIB_DTIM_PERIOD */
-        t_u32 dtim_period;
     } param;
 } mlan_ds_snmp_mib, *pmlan_ds_snmp_mib;
 
@@ -1272,8 +1266,6 @@ typedef struct _mlan_bss_info
 #ifdef STA_SUPPORT
     /** Capability Info */
     t_u16 capability_info;
-    /** Beacon Interval */
-    t_u16 beacon_interval;
     /** Listen Interval */
     t_u16 listen_interval;
     /** Association Id  */
@@ -1450,7 +1442,7 @@ typedef struct _mlan_debug_info
 
 #ifdef UAP_SUPPORT
 /** Maximum number of clients supported by AP */
-#define MAX_NUM_CLIENTS         MAX_STA_COUNT
+#define MAX_NUM_CLIENTS         16
 
 /** station info */
 typedef struct _sta_info
@@ -1561,7 +1553,7 @@ enum _mlan_psk_type
 /** key flag for rx_seq */
 #define KEY_FLAG_RX_SEQ_VALID	0x00000002
 /** key flag for group key */
-#define KEY_FLAG_GROUP_KEY      0x00000004
+#define KEY_FLAG_GROUP_KEY	0x00000004
 /** key flag for tx and rx */
 #define KEY_FLAG_SET_TX_KEY	    0x00000008
 /** key flag for remove key */
@@ -1607,24 +1599,6 @@ typedef struct _mlan_pmk_t
     /** PMK */
     t_u8 pmk[MLAN_MAX_KEY_LENGTH];
 } mlan_pmk_t;
-
-/** Embedded supplicant RSN type: No RSN */
-#define RSN_TYPE_NO_RSN     MBIT(0)
-/** Embedded supplicant RSN type: WPA */
-#define RSN_TYPE_WPA        MBIT(3)
-/** Embedded supplicant RSN type: WPA-NONE */
-#define RSN_TYPE_WPANONE    MBIT(4)
-/** Embedded supplicant RSN type: WPA2 */
-#define RSN_TYPE_WPA2       MBIT(5)
-/** Embedded supplicant RSN type: RFU */
-#define RSN_TYPE_VALID_BITS (RSN_TYPE_NO_RSN | RSN_TYPE_WPA | RSN_TYPE_WPANONE | RSN_TYPE_WPA2)
-
-/** Embedded supplicant cipher type: TKIP */
-#define EMBED_CIPHER_TKIP       MBIT(2)
-/** Embedded supplicant cipher type: AES */
-#define EMBED_CIPHER_AES        MBIT(3)
-/** Embedded supplicant cipher type: RFU */
-#define EMBED_CIPHER_VALID_BITS (EMBED_CIPHER_TKIP | EMBED_CIPHER_AES)
 
 /** Type definition of mlan_ds_passphrase for MLAN_OID_SEC_CFG_PASSPHRASE */
 typedef struct _mlan_ds_passphrase
@@ -2571,7 +2545,7 @@ enum _mlan_reg_type
     MLAN_REG_MAC = 1,
     MLAN_REG_BBP,
     MLAN_REG_RF,
-    MLAN_REG_CAU = 5,
+    MLAN_REG_CAU,
 };
 
 /** Type definition of mlan_ds_reg_rw for MLAN_OID_REG_RW */
@@ -2808,22 +2782,6 @@ typedef struct _mlan_ds_misc_mef_cfg
     } param;
 } mlan_ds_misc_mef_cfg;
 
-/** Type definition of mlan_ds_misc_cfp_code for MLAN_OID_MISC_CFP_CODE */
-typedef struct _mlan_ds_misc_cfp_code
-{
-    /** CFP table code for 2.4GHz */
-    t_u32 cfp_code_bg;
-    /** CFP table code for 5GHz */
-    t_u32 cfp_code_a;
-} mlan_ds_misc_cfp_code;
-
-/** Type definition of mlan_ds_misc_country_code for MLAN_OID_MISC_COUNTRY_CODE */
-typedef struct _mlan_ds_misc_country_code
-{
-    /** Country Code */
-    t_u8 country_code[COUNTRY_CODE_LEN];
-} mlan_ds_misc_country_code;
-
 /** BITMAP for subscribe event rssi low */
 #define SUBSCRIBE_EVT_RSSI_LOW  		MBIT(0)
 /** BITMAP for subscribe event snr low */
@@ -2848,8 +2806,6 @@ typedef struct _mlan_ds_misc_country_code
 #define SUBSCRIBE_EVT_LINK_QUALITY		MBIT(10)
 /** BITMAP for subscribe event pre_beacon_lost */
 #define SUBSCRIBE_EVT_PRE_BEACON_LOST	MBIT(11)
-/** default PRE_BEACON_MISS_COUNT */
-#define DEFAULT_PRE_BEACON_MISS			30
 
 /** Type definition of mlan_ds_subscribe_evt for MLAN_OID_MISC_CFP_CODE */
 typedef struct _mlan_ds_subscribe_evt
@@ -2912,20 +2868,6 @@ typedef struct _mlan_ds_subscribe_evt
     t_u8 pre_beacon_miss;
 } mlan_ds_subscribe_evt;
 
-/** Max OTP user data length */
-#define MAX_OTP_USER_DATA_LEN	252
-
-/** Type definition of mlan_ds_misc_otp_user_data for MLAN_OID_MISC_OTP_USER_DATA */
-typedef struct _mlan_ds_misc_otp_user_data
-{
-    /** Reserved */
-    t_u16 reserved;
-    /** OTP user data length */
-    t_u16 user_data_length;
-    /** User data buffer */
-    t_u8 user_data[MAX_OTP_USER_DATA_LEN];
-} mlan_ds_misc_otp_user_data;
-
 /** Type definition of mlan_ds_misc_cfg for MLAN_IOCTL_MISC_CFG */
 typedef struct _mlan_ds_misc_cfg
 {
@@ -2960,10 +2902,6 @@ typedef struct _mlan_ds_misc_cfg
         t_u32 mac_ctrl;
         /** MEF configuration for MLAN_OID_MISC_MEF_CFG */
         mlan_ds_misc_mef_cfg mef_cfg;
-        /** CFP code for MLAN_OID_MISC_CFP_CODE */
-        mlan_ds_misc_cfp_code cfp_code;
-        /** Country code for MLAN_OID_MISC_COUNTRY_CODE */
-        mlan_ds_misc_country_code country_code;
         /** Thermal reading for MLAN_OID_MISC_THERMAL */
         t_u32 thermal;
         /** Mgmt subtype mask for MLAN_OID_MISC_RX_MGMT_IND */
@@ -2974,7 +2912,6 @@ typedef struct _mlan_ds_misc_cfg
         /** Driver debug bit masks */
         t_u32 drvdbg;
 #endif
-        mlan_ds_misc_otp_user_data otp_user_data;
     } param;
 } mlan_ds_misc_cfg, *pmlan_ds_misc_cfg;
 

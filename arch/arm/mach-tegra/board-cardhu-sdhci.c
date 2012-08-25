@@ -145,7 +145,6 @@ static struct tegra_sdhci_platform_data tegra_sdhci_platform_data2 = {
 		.embedded_sdio = &embedded_sdio_data2,
 #endif
 		.built_in = 0,
-		.ocr_mask = MMC_OCR_1V8_MASK,
 	},
 #ifndef CONFIG_MMC_EMBEDDED_SDIO
 	.pm_flags = MMC_PM_KEEP_POWER,
@@ -154,7 +153,6 @@ static struct tegra_sdhci_platform_data tegra_sdhci_platform_data2 = {
 	.wp_gpio = -1,
 	.power_gpio = -1,
 	.tap_delay = 0x0F,
-	.ddr_clk_limit = 41000000,
 /*	.is_voltage_switch_supported = false,
 	.vdd_rail_name = NULL,
 	.slot_rail_name = NULL,
@@ -169,7 +167,6 @@ static struct tegra_sdhci_platform_data tegra_sdhci_platform_data0 = {
 	.wp_gpio = CARDHU_SD_WP,
 	.power_gpio = -1,
 	.tap_delay = 0x0F,
-	.ddr_clk_limit = 41000000,
 /*	.is_voltage_switch_supported = true,
 	.vdd_rail_name = "vddio_sdmmc1",
 	.slot_rail_name = "vddio_sd_slot",
@@ -185,11 +182,11 @@ static struct tegra_sdhci_platform_data tegra_sdhci_platform_data3 = {
 	.power_gpio = -1,
 	.is_8bit = 1,
 	.tap_delay = 0x0F,
-	.ddr_clk_limit = 41000000,
 	.mmc_data = {
 		.built_in = 1,
 	}
-/*	.is_voltage_switch_supported = false,
+/*	.tap_delay = 6,
+	.is_voltage_switch_supported = false,
 	.vdd_rail_name = NULL,
 	.slot_rail_name = NULL,
 	.vdd_max_uv = -1,

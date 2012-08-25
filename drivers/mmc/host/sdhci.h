@@ -280,6 +280,9 @@ struct sdhci_ops {
 	int	(*switch_signal_voltage)(struct sdhci_host *host,
 				unsigned int signal_voltage);
 	int	(*execute_freq_tuning)(struct sdhci_host *sdhci);
+#if defined CONFIG_MACH_BOSE_ATT
+	int (*card_detect)(struct sdhci_host *host);
+#endif
 };
 
 #ifdef CONFIG_MMC_SDHCI_IO_ACCESSORS
@@ -374,6 +377,11 @@ static inline void *sdhci_priv(struct sdhci_host *host)
 {
 	return (void *)host->private;
 }
+#if defined CONFIG_MACH_BOSE_ATT
+extern struct class *sec_class;
+extern struct stmpe *g_stmpe;
+extern int stmpe_reg_read(struct stmpe *stmpe, u8 reg);
+#endif
 
 extern void sdhci_card_detect(struct sdhci_host *host);
 extern int sdhci_add_host(struct sdhci_host *host);

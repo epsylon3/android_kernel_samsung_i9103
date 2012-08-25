@@ -166,9 +166,7 @@ wlan_send_null_packet(pmlan_private priv, t_u8 flags)
     pmlan_buffer pmbuf = MNULL;
     t_u8 *ptr;
     mlan_status ret = MLAN_STATUS_SUCCESS;
-#ifdef DEBUG_LEVEL1
     t_u32 sec, usec;
-#endif
 
     ENTER();
 
@@ -230,7 +228,8 @@ wlan_send_null_packet(pmlan_private priv, t_u8 flags)
         break;
     }
 
-    PRINTM_GET_SYS_TIME(MDATA, &sec, &usec);
+    pmadapter->callbacks.moal_get_system_time(pmadapter->pmoal_handle, &sec,
+                                              &usec);
     PRINTM(MDATA, "%lu.%06lu : Null data => FW\n", sec, usec);
     DBG_HEXDUMP(MDAT_D, "Null data", ptr, sizeof(TxPD) + INTF_HEADER_LEN);
   done:

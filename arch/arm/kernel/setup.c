@@ -794,6 +794,32 @@ static void __init squash_mem_tags(struct tag *tag)
 			tag->hdr.tag = ATAG_NONE;
 }
 
+#if 1
+// N1_ICS : hacking console output
+char boot_command_line2[COMMAND_LINE_SIZE];
+char *str_replace(char *s, const char *olds, const char *news)
+{
+ char *result, *sr;
+ int i = 0;
+ size_t oldlen = strlen(olds); if (oldlen < 1) return s;
+ size_t newlen = strlen(news);
+
+ sr = result = boot_command_line2;
+ while (*s) {
+   if (memcmp(s, olds, oldlen) == 0) {
+     memcpy(sr, news, newlen);
+     sr += newlen;
+     s  += oldlen;
+   } else *sr++ = *s++;
+   if (++i == COMMAND_LINE_SIZE)
+       break;
+ }
+ *sr = '\0';
+
+ return result;
+}
+#endif
+
 static struct machine_desc * __init setup_machine_tags(unsigned int nr)
 {
 	struct tag *tags = (struct tag *)&init_tags;
@@ -872,6 +898,9 @@ static struct machine_desc * __init setup_machine_tags(unsigned int nr)
 
 	/* parse_early_param needs a boot_command_line */
 	strlcpy(boot_command_line, from, COMMAND_LINE_SIZE);
+	sprintf(from, " androidboot.serialno=%x%x",
+		system_serial_high, system_serial_low);
+	strlcat(boot_command_line, from, COMMAND_LINE_SIZE);
 
 	return mdesc;
 }
@@ -903,6 +932,15 @@ void __init setup_arch(char **cmdline_p)
 	init_mm.end_code   = (unsigned long) _etext;
 	init_mm.end_data   = (unsigned long) _edata;
 	init_mm.brk	   = (unsigned long) _end;
+
+#if 0
+// N1_ICS : hacking console output
+   boot_command_line[COMMAND_LINE_SIZE-1] = 0;
+   printk(KERN_ERR "old boot_command_line : %s\n", boot_command_line);
+   str_replace(boot_command_line, "console=ram", "console=ttyS0,115200n8");
+   strlcpy(boot_command_line, boot_command_line2, COMMAND_LINE_SIZE);
+   printk(KERN_ERR "new boot_command_line : %s\n", boot_command_line);
+#endif
 
 	/* populate cmd_line too for later use, preserving boot_command_line */
 	strlcpy(cmd_line, boot_command_line, COMMAND_LINE_SIZE);

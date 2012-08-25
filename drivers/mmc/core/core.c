@@ -109,6 +109,11 @@ void mmc_request_done(struct mmc_host *host, struct mmc_request *mrq)
 
 		cmd->retries--;
 		cmd->error = 0;
+		if (mrq->data) {
+			mrq->data->error = 0;
+			if (mrq->stop)
+				mrq->stop->error = 0;
+		}
 		host->ops->request(host, mrq);
 	} else {
 		led_trigger_event(host->led, LED_OFF);
@@ -2232,7 +2237,11 @@ int mmc_pm_notify(struct notifier_block *notify_block,
 			host->bus_ops->remove(host);
 
 		mmc_detach_bus(host);
-		mmc_power_off(host);
+		if (host->card && host->card->type == MMC_TYPE_SDIO)
+			printk(KERN_INFO
+				"%s(): WLAN SKIP MMC_POWER_OFF\n", __func__);
+		else
+			mmc_power_off(host);
 		mmc_release_host(host);
 		host->pm_flags = 0;
 		break;
@@ -2248,7 +2257,11 @@ int mmc_pm_notify(struct notifier_block *notify_block,
 		}
 		host->rescan_disable = 0;
 		spin_unlock_irqrestore(&host->lock, flags);
-		mmc_detect_change(host, 0);
+		if (host->card && host->card->type == MMC_TYPE_SDIO)
+			printk(KERN_INFO
+				"%s(): WLAN SKIP DETECT CHANGE\n", __func__);
+		else
+			mmc_detect_change(host, 0);
 
 	}
 

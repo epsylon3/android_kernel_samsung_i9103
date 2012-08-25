@@ -143,7 +143,7 @@ static void submit_ctxrestore(struct nvhost_job *job)
 	/* Send restore buffer to channel */
 	nvhost_cdma_push_gather(&ch->cdma,
 		host->nvmap,
-		ctx->restore,
+		nvmap_ref_to_handle(ctx->restore),
 		0,
 		nvhost_opcode_gather(ctx->restore_size),
 		ctx->restore_phys);
@@ -188,7 +188,7 @@ void submit_gathers(struct nvhost_job *job)
 		u32 op2 = job->gathers[i].mem;
 		nvhost_cdma_push_gather(&job->ch->cdma,
 				job->nvmap,
-				job->gathers[i].ref,
+				nvmap_id_to_handle(job->gathers[i].mem_id),
 				job->gathers[i].offset,
 				op1, op2);
 	}
@@ -203,7 +203,6 @@ int host1x_channel_submit(struct nvhost_job *job)
 	u32 syncval;
 	int err;
 	void *completed_waiter = NULL, *ctxsave_waiter = NULL;
-	struct nvhost_driver *drv = to_nvhost_driver(ch->dev->dev.driver);
 
 	/* Bail out on timed out contexts */
 	if (job->hwctx && job->hwctx->has_timedout)
@@ -211,8 +210,8 @@ int host1x_channel_submit(struct nvhost_job *job)
 
 	/* Turn on the client module and host1x */
 	nvhost_module_busy(ch->dev);
-	if (drv->busy)
-		drv->busy(ch->dev);
+	if (ch->dev->busy)
+		ch->dev->busy(ch->dev);
 
 	/* before error checks, return current max */
 	prev_max = job->syncpt_end =
@@ -550,7 +549,6 @@ int host1x_save_context(struct nvhost_device *dev, u32 syncpt_id)
 	void *ref;
 	void *ctx_waiter = NULL, *wakeup_waiter = NULL;
 	struct nvhost_job *job;
-	struct nvhost_driver *drv = to_nvhost_driver(dev->dev.driver);
 
 	ctx_waiter = nvhost_intr_alloc_waiter();
 	wakeup_waiter = nvhost_intr_alloc_waiter();
@@ -559,8 +557,8 @@ int host1x_save_context(struct nvhost_device *dev, u32 syncpt_id)
 		goto done;
 	}
 
-	if (drv->busy)
-		drv->busy(dev);
+	if (dev->busy)
+		dev->busy(dev);
 
 	mutex_lock(&ch->submitlock);
 	hwctx_to_save = ch->cur_ctx;

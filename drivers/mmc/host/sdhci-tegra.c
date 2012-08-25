@@ -33,6 +33,10 @@
 
 #include "sdhci-pltfm.h"
 
+#ifdef CONFIG_MACH_BOSE_ATT
+#include <linux/mfd/stmpe.h>
+#endif
+
 #define SDHCI_VENDOR_CLOCK_CNTRL	0x100
 #define SDHCI_VENDOR_CLOCK_CNTRL_SDMMC_CLK	0x1
 #define SDHCI_VENDOR_CLOCK_CNTRL_PADPIPE_CLKEN_OVERRIDE	0x8
@@ -98,6 +102,11 @@ static struct tegra_sdhci_hw_ops tegra_3x_sdhci_ops = {
 };
 #endif
 
+#ifdef CONFIG_MACH_BOSE_ATT
+struct sdhci_host *card_sdhost;
+#endif
+
+
 struct tegra_sdhci_host {
 	bool	clk_enabled;
 	struct regulator *vdd_io_reg;
@@ -112,13 +121,9 @@ struct tegra_sdhci_host {
 	unsigned int vddio_max_uv;
 	/* max clk supported by the platform */
 	unsigned int max_clk_limit;
-	/* max ddr clk supported by the platform */
-	unsigned int ddr_clk_limit;
 	struct tegra_io_dpd *dpd;
 	bool card_present;
 	bool is_rail_enabled;
-	struct clk *emc_clk;
-	unsigned int emc_max_clk;
 };
 
 static u32 tegra_sdhci_readl(struct sdhci_host *host, int reg)
@@ -307,6 +312,74 @@ static void sdhci_status_notify_cb(int card_present, void *dev_id)
 	}
 }
 
+#ifdef CONFIG_MACH_BOSE_ATT
+static struct device *tflash_detection_cmd_dev;
+
+static ssize_t tflash_detection_cmd_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct tegra_sdhci_host *host = dev_get_drvdata(dev);
+	unsigned int detect;
+
+	if (card_sdhost) {
+		if (stmpe_reg_read(g_stmpe, 0x17) & 0x80) {
+			printk(KERN_ERR "sdhci-tegra: card removed.\n");
+			detect = 0;
+		} else {
+			printk(KERN_ERR "sdhci-tegra: card inserted.\n");
+			detect  = 1;
+		}
+	}
+
+	pr_info("%s : detect = %d.\n", __func__,  detect);
+	if (detect) {
+		printk(KERN_DEBUG "sdhci: card inserted.\n");
+		return sprintf(buf, "Insert\n");
+	} else {
+		printk(KERN_DEBUG "sdhci: card removed.\n");
+		return sprintf(buf, "Remove\n");
+	}
+}
+
+static DEVICE_ATTR(status, 0444, tflash_detection_cmd_show, NULL);
+
+#endif
+
+#if defined CONFIG_MACH_BOSE_ATT
+static void tegra_sdhci_update_card_detection(struct sdhci_host *sdhci)
+{
+	struct tegra_sdhci_host *host = sdhci_priv(sdhci);
+
+	if (card_sdhost) {
+		if (stmpe_reg_read(g_stmpe, 0x17) & 0x80)
+			host->card_present = 0;
+		else
+			host->card_present = 1;
+			tasklet_schedule(&card_sdhost->card_tasklet);
+	}
+}
+
+irqreturn_t external_carddetect_irq()
+{
+	struct tegra_sdhci_host *tegra_host = sdhci_priv(card_sdhost);
+
+	if (card_sdhost) {
+		if (stmpe_reg_read(g_stmpe, 0x17) & 0x80) {
+			printk(KERN_ERR "sdhci-tegra: card removed.\n");
+			tegra_host->card_present = 0;
+		} else {
+			printk(KERN_ERR "sdhci-tegra: card inserted.\n");
+			tegra_host->card_present = 1;
+		}
+		printk(KERN_DEBUG "sdhci-tegra: card present state=0x%x.\n",
+				tegra_host->card_present);
+
+		tasklet_schedule(&card_sdhost->card_tasklet);
+	}
+	return IRQ_HANDLED;
+}
+#endif
+
 static irqreturn_t carddetect_irq(int irq, void *data)
 {
 	struct sdhci_host *sdhost = (struct sdhci_host *)data;
@@ -370,30 +443,14 @@ static void tegra_sdhci_set_clk_rate(struct sdhci_host *sdhci,
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(sdhci);
 	struct tegra_sdhci_host *tegra_host = pltfm_host->priv;
 	unsigned int clk_rate;
-	unsigned int emc_clk;
 
-	/*
-	 * In SDR50 mode, run the sdmmc controller at freq greater than
-	 * 104MHz to ensure the core voltage is at 1.2V. If the core voltage
-	 * is below 1.2V, CRC errors would occur during data transfers.
-	 */
 	if (sdhci->mmc->card &&
-		(mmc_card_ddr_mode(sdhci->mmc->card) ||
-		(sdhci->mmc->ios.timing == MMC_TIMING_UHS_SDR50))) {
+		mmc_card_ddr_mode(sdhci->mmc->card)) {
 		/*
 		 * In ddr mode, tegra sdmmc controller clock frequency
 		 * should be double the card clock frequency.
 		 */
-		if (tegra_host->ddr_clk_limit) {
-			clk_rate = tegra_host->ddr_clk_limit * 2;
-			if (tegra_host->emc_clk) {
-				emc_clk = clk_get_rate(tegra_host->emc_clk);
-				if (emc_clk == tegra_host->emc_max_clk)
-					clk_rate = clock * 2;
-			}
-		} else {
-			clk_rate = clock * 2;
-		}
+		 clk_rate = clock * 2;
 	} else {
 		if (clock <= tegra_sdhost_min_freq)
 			clk_rate = tegra_sdhost_min_freq;
@@ -401,6 +458,15 @@ static void tegra_sdhci_set_clk_rate(struct sdhci_host *sdhci,
 			clk_rate = tegra_sdhost_std_freq;
 		else
 			clk_rate = clock;
+
+		/*
+		 * In SDR50 mode, run the sdmmc controller at 208MHz to ensure
+		 * the core voltage is at 1.2V. If the core voltage is below 1.2V, CRC
+		 * errors would occur during data transfers.
+		 */
+		if ((sdhci->mmc->ios.timing == MMC_TIMING_UHS_SDR50) &&
+			(clk_rate == tegra_sdhost_std_freq))
+			clk_rate <<= 1;
 	}
 
 	if (tegra_host->max_clk_limit &&
@@ -422,13 +488,6 @@ static void tegra_3x_sdhci_set_card_clock(struct sdhci_host *sdhci, unsigned int
 	if (clock && clock == sdhci->clock)
 		return;
 
-	/*
-	 * Disable the card clock before disabling the internal
-	 * clock to avoid abnormal clock waveforms.
-	 */
-	clk = sdhci_readw(sdhci, SDHCI_CLOCK_CONTROL);
-	clk &= ~SDHCI_CLOCK_CARD_EN;
-	sdhci_writew(sdhci, clk, SDHCI_CLOCK_CONTROL);
 	sdhci_writew(sdhci, 0, SDHCI_CLOCK_CONTROL);
 
 	if (clock == 0)
@@ -545,6 +604,11 @@ static int tegra_sdhci_signal_voltage_switch(struct sdhci_host *sdhci,
 	u16 clk, ctrl;
 	unsigned int val;
 
+	/* Switch OFF the card clock to prevent glitches on the clock line */
+	clk = sdhci_readw(sdhci, SDHCI_CLOCK_CONTROL);
+	clk &= ~SDHCI_CLOCK_CARD_EN;
+	sdhci_writew(sdhci, clk, SDHCI_CLOCK_CONTROL);
+
 	ctrl = sdhci_readw(sdhci, SDHCI_HOST_CONTROL2);
 	if (signal_voltage == MMC_SIGNAL_VOLTAGE_180) {
 		ctrl |= SDHCI_CTRL_VDD_180;
@@ -554,17 +618,6 @@ static int tegra_sdhci_signal_voltage_switch(struct sdhci_host *sdhci,
 		if (ctrl & SDHCI_CTRL_VDD_180)
 			ctrl &= ~SDHCI_CTRL_VDD_180;
 	}
-
-	/* Check if the slot can support the required voltage */
-	if (min_uV > tegra_host->vddio_max_uv)
-		return 0;
-
-	/* Switch OFF the card clock to prevent glitches on the clock line */
-	clk = sdhci_readw(sdhci, SDHCI_CLOCK_CONTROL);
-	clk &= ~SDHCI_CLOCK_CARD_EN;
-	sdhci_writew(sdhci, clk, SDHCI_CLOCK_CONTROL);
-
-	/* Set/clear the 1.8V signalling */
 	sdhci_writew(sdhci, ctrl, SDHCI_HOST_CONTROL2);
 
 	/* Switch the I/O rail voltage */
@@ -622,6 +675,7 @@ out:
 
 	return rc;
 }
+
 
 static void tegra_sdhci_reset(struct sdhci_host *sdhci, u8 mask)
 {
@@ -847,6 +901,15 @@ out:
 	return err;
 }
 
+#if defined CONFIG_MACH_BOSE_ATT
+static int tegra_sdhci_card_detect(struct sdhci_host *sdhost)
+{
+	struct tegra_sdhci_host *host = sdhci_priv(sdhost);
+
+	return host->card_present;
+}
+#endif
+
 static int tegra_sdhci_suspend(struct sdhci_host *sdhci, pm_message_t state)
 {
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(sdhci);
@@ -895,6 +958,9 @@ static int tegra_sdhci_resume(struct sdhci_host *sdhci)
 		sdhci->pwr = 0;
 	}
 
+#if defined CONFIG_MACH_BOSE_ATT
+	tegra_sdhci_update_card_detection(sdhci);
+#endif
 	return 0;
 }
 
@@ -915,6 +981,9 @@ static struct sdhci_ops tegra_sdhci_ops = {
 	.set_uhs_signaling = tegra_sdhci_set_uhs_signaling,
 	.switch_signal_voltage = tegra_sdhci_signal_voltage_switch,
 	.execute_freq_tuning = sdhci_tegra_execute_tuning,
+#if defined CONFIG_MACH_BOSE_ATT
+	.card_detect = tegra_sdhci_card_detect,
+#endif
 };
 
 static struct sdhci_pltfm_data sdhci_tegra_pdata = {
@@ -985,7 +1054,14 @@ static int __devinit sdhci_tegra_probe(struct platform_device *pdev)
 		gpio_direction_output(plat->power_gpio, 1);
 	}
 
+#if defined CONFIG_MACH_BOSE_ATT
+	if (plat->cd_gpio == 0xffff) {
+		card_sdhost = host;
+	} else if (gpio_is_valid(plat->cd_gpio)) {
+#else
 	if (gpio_is_valid(plat->cd_gpio)) {
+#endif
+
 		rc = gpio_request(plat->cd_gpio, "sdhci_cd");
 		if (rc) {
 			dev_err(mmc_dev(host->mmc),
@@ -1011,7 +1087,6 @@ static int __devinit sdhci_tegra_probe(struct platform_device *pdev)
 			dev_err(mmc_dev(host->mmc),
 				"SD card wake-up event registration"
 					"failed with eroor: %d\n", rc);
-
 	} else if (plat->mmc_data.register_status_notify) {
 		plat->mmc_data.register_status_notify(sdhci_status_notify_cb, host);
 	}
@@ -1038,6 +1113,7 @@ static int __devinit sdhci_tegra_probe(struct platform_device *pdev)
 	if (!gpio_is_valid(plat->cd_gpio))
 		tegra_host->card_present = 1;
 
+#ifndef CONFIG_MACH_BOSE_ATT
 	if (!plat->mmc_data.built_in) {
 		if (plat->mmc_data.ocr_mask & SDHOST_1V8_OCR_MASK) {
 			tegra_host->vddio_min_uv = SDHOST_LOW_VOLT_MIN;
@@ -1054,7 +1130,7 @@ static int __devinit sdhci_tegra_probe(struct platform_device *pdev)
 		if (IS_ERR_OR_NULL(tegra_host->vdd_io_reg)) {
 			dev_info(mmc_dev(host->mmc), "%s regulator not found: %ld."
 				"Assuming vddio_sdmmc is not required.\n",
-					"vddio_sdmmc", PTR_ERR(tegra_host->vdd_io_reg));
+				"vddio_sdmmc", PTR_ERR(tegra_host->vdd_io_reg));
 			tegra_host->vdd_io_reg = NULL;
 		} else {
 			rc = regulator_set_voltage(tegra_host->vdd_io_reg,
@@ -1070,7 +1146,7 @@ static int __devinit sdhci_tegra_probe(struct platform_device *pdev)
 		if (IS_ERR_OR_NULL(tegra_host->vdd_slot_reg)) {
 			dev_info(mmc_dev(host->mmc), "%s regulator not found: %ld."
 				" Assuming vddio_sd_slot is not required.\n",
-					"vddio_sd_slot", PTR_ERR(tegra_host->vdd_slot_reg));
+				"vddio_sd_slot", PTR_ERR(tegra_host->vdd_slot_reg));
 			tegra_host->vdd_slot_reg = NULL;
 		}
 
@@ -1082,6 +1158,7 @@ static int __devinit sdhci_tegra_probe(struct platform_device *pdev)
 			tegra_host->is_rail_enabled = 1;
 		}
 	}
+#endif
 
 	clk = clk_get(mmc_dev(host->mmc), NULL);
 	if (IS_ERR(clk)) {
@@ -1092,23 +1169,10 @@ static int __devinit sdhci_tegra_probe(struct platform_device *pdev)
 	rc = clk_enable(clk);
 	if (rc != 0)
 		goto err_clk_put;
-
-	if (!strcmp(dev_name(mmc_dev(host->mmc)), "sdhci-tegra.3")) {
-		tegra_host->emc_clk = clk_get(mmc_dev(host->mmc), "emc");
-		if (IS_ERR(tegra_host->emc_clk)) {
-			dev_err(mmc_dev(host->mmc), "clk err\n");
-			rc = PTR_ERR(tegra_host->emc_clk);
-			goto err_clk_put;
-		}
-		tegra_host->emc_max_clk =
-			clk_round_rate(tegra_host->emc_clk, ULONG_MAX);
-	}
-
 	pltfm_host->clk = clk;
 	pltfm_host->priv = tegra_host;
 	tegra_host->clk_enabled = true;
 	tegra_host->max_clk_limit = plat->max_clk_limit;
-	tegra_host->ddr_clk_limit = plat->ddr_clk_limit;
 	tegra_host->instance = pdev->id;
 	tegra_host->dpd = tegra_io_dpd_get(mmc_dev(host->mmc));
 
@@ -1125,19 +1189,13 @@ static int __devinit sdhci_tegra_probe(struct platform_device *pdev)
 
 	host->mmc->pm_caps |= MMC_PM_KEEP_POWER | MMC_PM_IGNORE_PM_NOTIFY;
 	if (plat->mmc_data.built_in) {
-		host->mmc->caps |= MMC_CAP_NONREMOVABLE;
+		if (pdev->id != 0)
+			host->mmc->caps |= MMC_CAP_NONREMOVABLE;
+		host->mmc->pm_flags |= MMC_PM_IGNORE_PM_NOTIFY;
 	}
-	host->mmc->pm_flags |= MMC_PM_IGNORE_PM_NOTIFY;
-
-#ifdef CONFIG_MMC_BKOPS
-	host->mmc->caps |= MMC_CAP_BKOPS;
-#endif
-
-#ifdef CONFIG_MMC_EMBEDDED_SDIO
 	/* Do not turn OFF embedded sdio cards as it support Wake on Wireless */
 	if (plat->mmc_data.embedded_sdio)
 		host->mmc->pm_flags |= MMC_PM_KEEP_POWER;
-#endif
 
 	tegra_sdhost_min_freq = TEGRA_SDHOST_MIN_FREQ;
 #ifdef CONFIG_ARCH_TEGRA_2x_SOC
@@ -1148,6 +1206,23 @@ static int __devinit sdhci_tegra_probe(struct platform_device *pdev)
 	tegra_sdhost_std_freq = TEGRA3_SDHOST_STD_FREQ;
 #endif
 
+#ifdef CONFIG_MACH_BOSE_ATT
+	if (tflash_detection_cmd_dev == NULL && tegra_host->card_present) {
+		tflash_detection_cmd_dev = device_create(sec_class,
+			NULL, 0, NULL, "sdcard");
+
+		if (IS_ERR(tflash_detection_cmd_dev))
+			pr_err("%s : Failed to create device(ts)!\n",
+					__func__);
+
+		if (device_create_file(tflash_detection_cmd_dev,
+				&dev_attr_status) < 0)
+			pr_err("%s : Failed to create device file(%s)!\n",
+				__func__, dev_attr_status.attr.name);
+
+		dev_set_drvdata(tflash_detection_cmd_dev, host);
+	}
+#endif
 	rc = sdhci_add_host(host);
 	if (rc)
 		goto err_add_host;
@@ -1155,7 +1230,6 @@ static int __devinit sdhci_tegra_probe(struct platform_device *pdev)
 	return 0;
 
 err_add_host:
-	clk_put(tegra_host->emc_clk);
 	clk_disable(pltfm_host->clk);
 err_clk_put:
 	clk_put(pltfm_host->clk);

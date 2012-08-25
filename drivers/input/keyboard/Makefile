@@ -43,7 +43,11 @@ obj-$(CONFIG_KEYBOARD_QT2160)		+= qt2160.o
 obj-$(CONFIG_KEYBOARD_SAMSUNG)		+= samsung-keypad.o
 obj-$(CONFIG_KEYBOARD_SH_KEYSC)		+= sh_keysc.o
 obj-$(CONFIG_KEYBOARD_SPEAR)		+= spear-keyboard.o
+ifeq ($(CONFIG_MACH_BOSE_ATT),y)
+obj-$(CONFIG_KEYBOARD_STMPE)		+= stmpe-bose-keypad.o
+else
 obj-$(CONFIG_KEYBOARD_STMPE)		+= stmpe-keypad.o
+endif
 obj-$(CONFIG_KEYBOARD_STOWAWAY)		+= stowaway.o
 obj-$(CONFIG_KEYBOARD_SUNKBD)		+= sunkbd.o
 obj-$(CONFIG_KEYBOARD_TC3589X)		+= tc3589x-keypad.o
@@ -52,3 +56,6 @@ obj-$(CONFIG_KEYBOARD_TNETV107X)	+= tnetv107x-keypad.o
 obj-$(CONFIG_KEYBOARD_TWL4030)		+= twl4030_keypad.o
 obj-$(CONFIG_KEYBOARD_XTKBD)		+= xtkbd.o
 obj-$(CONFIG_KEYBOARD_W90P910)		+= w90p910_keypad.o
+ifeq ($(CONFIG_MACH_BOSE_ATT),y)
+obj-$(CONFIG_KEYBOARD_CYPRESS_TOUCH)    += cypress/
+endif

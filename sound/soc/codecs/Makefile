@@ -35,7 +35,8 @@ snd-soc-stac9766-objs := stac9766.o
 snd-soc-tlv320aic23-objs := tlv320aic23.o
 snd-soc-tlv320aic26-objs := tlv320aic26.o
 snd-soc-tlv320aic3x-objs := tlv320aic3x.o
-snd-soc-tlv320aic326x-objs := tlv320aic326x.o
+snd-soc-tlv320aic326x-objs := tlv320aic326x.o tlv320aic326x_minidsp_config.o
+snd-soc-tlv320aic326x-objs += tlv320aic326x_mini-dsp.o aic326x_tiload.o
 snd-soc-tlv320aic32x4-objs := tlv320aic32x4.o
 snd-soc-tlv320dac33-objs := tlv320dac33.o
 snd-soc-twl4030-objs := twl4030.o
@@ -79,7 +80,15 @@ snd-soc-wm8988-objs := wm8988.o
 snd-soc-wm8990-objs := wm8990.o
 snd-soc-wm8991-objs := wm8991.o
 snd-soc-wm8993-objs := wm8993.o
+ifeq ($(CONFIG_MACH_BOSE_ATT),y)
+snd-soc-wm8994-objs := wm8994_samsung.o wm8994_bose.o
+else
+ifeq ($(CONFIG_MACH_N1),y)
+snd-soc-wm8994-objs := wm8994_samsung.o wm8994_n1.o
+else
 snd-soc-wm8994-objs := wm8994.o wm8994-tables.o wm8958-dsp2.o
+endif
+endif
 snd-soc-wm8995-objs := wm8995.o
 snd-soc-wm9081-objs := wm9081.o
 snd-soc-wm9705-objs := wm9705.o

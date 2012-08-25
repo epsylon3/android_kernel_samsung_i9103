@@ -42,7 +42,11 @@ static const u32 tegra_dc_rgb_enable_pintable[] = {
 	DC_COM_PIN_OUTPUT_ENABLE2,	0x00000000,
 	DC_COM_PIN_OUTPUT_ENABLE3,	0x00000000,
 	DC_COM_PIN_OUTPUT_POLARITY0,	0x00000000,
+#ifdef CONFIG_MACH_N1
+	DC_COM_PIN_OUTPUT_POLARITY1,	0x51000000,
+#else
 	DC_COM_PIN_OUTPUT_POLARITY1,	0x01000000,
+#endif
 	DC_COM_PIN_OUTPUT_POLARITY2,	0x00000000,
 	DC_COM_PIN_OUTPUT_POLARITY3,	0x00000000,
 	DC_COM_PIN_OUTPUT_DATA0,	0x00000000,
@@ -74,7 +78,11 @@ static const u32 tegra_dc_rgb_disable_pintable[] = {
 	DC_COM_PIN_OUTPUT_ENABLE2,	0x55555555,
 	DC_COM_PIN_OUTPUT_ENABLE3,	0x55555555,
 	DC_COM_PIN_OUTPUT_POLARITY0,	0x00000000,
+#ifdef CONFIG_MACH_N1
+	DC_COM_PIN_OUTPUT_POLARITY1,	0x51000000,
+#else
 	DC_COM_PIN_OUTPUT_POLARITY1,	0x00000000,
+#endif
 	DC_COM_PIN_OUTPUT_POLARITY2,	0x00000000,
 	DC_COM_PIN_OUTPUT_POLARITY3,	0x00000000,
 	DC_COM_PIN_OUTPUT_DATA0,	0xaaaaaaaa,
@@ -90,7 +98,7 @@ static const u32 tegra_dc_rgb_disable_pintable[] = {
 	DC_COM_PIN_OUTPUT_SELECT6,	0x00000000,
 };
 
-static void tegra_dc_rgb_enable(struct tegra_dc *dc)
+void tegra_dc_rgb_enable(struct tegra_dc *dc)
 {
 	int i;
 	u32 out_sel_pintable[ARRAY_SIZE(tegra_dc_rgb_enable_out_sel_pintable)];
@@ -146,11 +154,13 @@ static void tegra_dc_rgb_enable(struct tegra_dc *dc)
 	tegra_dc_write_table(dc, out_sel_pintable);
 
 	/* Inform DC register updated */
+	/*
 	tegra_dc_writel(dc, GENERAL_UPDATE, DC_CMD_STATE_CONTROL);
 	tegra_dc_writel(dc, GENERAL_ACT_REQ, DC_CMD_STATE_CONTROL);
+	*/
 }
 
-static void tegra_dc_rgb_disable(struct tegra_dc *dc)
+void tegra_dc_rgb_disable(struct tegra_dc *dc)
 {
 	tegra_dc_writel(dc, 0x00000000, DC_CMD_DISPLAY_POWER_CONTROL);
 

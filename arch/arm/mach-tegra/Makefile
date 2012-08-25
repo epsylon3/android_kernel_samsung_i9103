@@ -8,6 +8,7 @@ obj-$(CONFIG_ARCH_TEGRA_2x_SOC)         += common-t2.o
 obj-$(CONFIG_ARCH_TEGRA_3x_SOC)         += common-t3.o
 obj-y                                   += io.o
 obj-y                                   += irq.o
+obj-$(CONFIG_TEGRA_GRHOST)              += syncpt.o
 obj-y                                   += clock.o
 obj-y                                   += clock-common.o
 obj-y                                   += timer.o
@@ -35,11 +36,12 @@ obj-y                                   += kfuse.o
 obj-y                                   += csi.o
 obj-$(CONFIG_TEGRA_SILICON_PLATFORM)    += tegra_odm_fuses.o
 obj-y                                   += i2c_error_recovery.o
+ifeq ($(CONFIG_MACH_BOSE_ATT),y)
+obj-y                                   += tegra_spdif_audio.o
+endif
 obj-y                                   += mc.o
 obj-$(CONFIG_TEGRA_STAT_MON)            += tegra2_statmon.o
 obj-$(CONFIG_USB_SUPPORT)               += usb_phy.o
-obj-$(CONFIG_USB_SUPPORT)               += tegra3_usb_phy.o
-obj-$(CONFIG_USB_SUPPORT)               += tegra2_usb_phy.o
 obj-$(CONFIG_FIQ)                       += fiq.o
 obj-$(CONFIG_TEGRA_FIQ_DEBUGGER)        += tegra_fiq_debugger.o
 obj-$(CONFIG_TEGRA_PWM)                 += pwm.o
@@ -148,6 +150,31 @@ obj-${CONFIG_MACH_WHISTLER}             += board-whistler-kbc.o
 obj-${CONFIG_MACH_WHISTLER}             += board-whistler-baseband.o
 obj-${CONFIG_MACH_WHISTLER}             += board-whistler-memory.o
 
+ifeq ($(CONFIG_MACH_BOSE_ATT),y)
+obj-${CONFIG_MACH_N1}             += board-bose.o
+obj-${CONFIG_MACH_N1}             += board-bose-pinmux.o
+obj-${CONFIG_MACH_N1}             += board-bose-sdhci.o
+obj-${CONFIG_MACH_N1}             += board-bose-power.o
+obj-${CONFIG_MACH_N1}             += board-bose-panel.o
+obj-${CONFIG_MACH_N1}             += board-bose-sensors.o
+obj-${CONFIG_MACH_N1}             += board-bose-memory.o
+obj-${CONFIG_MACH_N1}             += board-bose-gpioi2c.o
+obj-${CONFIG_MACH_N1}             += panel-bose.o
+obj-${CONFIG_MACH_N1}             += board-bose-vibrator.o
+else
+obj-${CONFIG_MACH_N1}             += board-n1.o
+obj-${CONFIG_MACH_N1}             += board-n1-pinmux.o
+obj-${CONFIG_MACH_N1}             += board-n1-sdhci.o
+obj-${CONFIG_MACH_N1}             += board-n1-power.o
+obj-${CONFIG_MACH_N1}             += board-n1-panel.o
+obj-${CONFIG_MACH_N1}             += board-n1-sensors.o
+obj-${CONFIG_MACH_N1}             += board-n1-memory.o
+#obj-${CONFIG_MACH_N1}             += board-n1-kbc.o
+obj-${CONFIG_MACH_N1}             += board-n1-gpioi2c.o
+obj-${CONFIG_MACH_N1}             += panel-n1.o
+obj-${CONFIG_MACH_N1}             += board-n1-vibrator.o
+endif
+
 obj-${CONFIG_MACH_CARDHU}               += board-cardhu.o
 obj-${CONFIG_MACH_CARDHU}               += board-cardhu-kbc.o
 obj-${CONFIG_MACH_CARDHU}               += board-cardhu-panel.o
@@ -191,3 +218,6 @@ obj-y                                   += eeprom-wifi-mac.o
 obj-${CONFIG_TEGRA_BB_XMM_POWER}        += baseband-xmm-power.o
 obj-${CONFIG_TEGRA_BB_XMM_POWER2}       += baseband-xmm-power2.o
 
+obj-${CONFIG_BT_BCM4330}                += board-bluetooth-bcm4330.o
+obj-$(CONFIG_SEC_MODEM_N1)              += board-n1-modems.o
+obj-$(CONFIG_SEC_MODEM_BOSE)            += board-n1-modems.o

@@ -117,8 +117,10 @@ obj-$(CONFIG_BCMA)		+= bcma/
 obj-$(CONFIG_VHOST_NET)		+= vhost/
 obj-$(CONFIG_VLYNQ)		+= vlynq/
 obj-$(CONFIG_STAGING)		+= staging/
+obj-$(CONFIG_ACCESSORY)		+= accessory/
 obj-y				+= platform/
 obj-y				+= ieee802154/
+obj-$(CONFIG_SENSORS)		+= sensors/
 #common clk code
 obj-y				+= clk/
 
@@ -128,3 +130,5 @@ obj-$(CONFIG_IOMMU_SUPPORT)	+= iommu/
 
 # Virtualization drivers
 obj-$(CONFIG_VIRT_DRIVERS)	+= virt/
+
+obj-$(CONFIG_KERNEL_DEBUG_SEC)  += level/

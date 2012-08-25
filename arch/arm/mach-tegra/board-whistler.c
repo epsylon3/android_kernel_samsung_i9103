@@ -65,6 +65,52 @@
 #define SZ_152M (SZ_128M + SZ_16M + SZ_8M)
 #define USB1_VBUS_GPIO TCA6416_GPIO_BASE
 
+static struct plat_serial8250_port debug_uartb_platform_data[] = {
+	{
+		.membase	= IO_ADDRESS(TEGRA_UARTB_BASE),
+		.mapbase	= TEGRA_UARTB_BASE,
+		.irq		= INT_UARTB,
+		.flags		= UPF_BOOT_AUTOCONF | UPF_FIXED_TYPE,
+		.type           = PORT_TEGRA,
+		.iotype		= UPIO_MEM,
+		.regshift	= 2,
+		.uartclk	= 216000000,
+	}, {
+		.flags		= 0,
+	}
+};
+
+static struct platform_device debug_uartb = {
+	.name = "serial8250",
+	.id = PLAT8250_DEV_PLATFORM,
+	.dev = {
+		.platform_data = debug_uartb_platform_data,
+	},
+};
+
+static struct plat_serial8250_port debug_uarta_platform_data[] = {
+	{
+		.membase	= IO_ADDRESS(TEGRA_UARTA_BASE),
+		.mapbase	= TEGRA_UARTA_BASE,
+		.irq		= INT_UARTA,
+		.flags		= UPF_BOOT_AUTOCONF | UPF_FIXED_TYPE,
+		.type           = PORT_TEGRA,
+		.iotype		= UPIO_MEM,
+		.regshift	= 2,
+		.uartclk	= 216000000,
+	}, {
+		.flags		= 0,
+	}
+};
+
+static struct platform_device debug_uarta = {
+	.name = "serial8250",
+	.id = PLAT8250_DEV_PLATFORM,
+	.dev = {
+		.platform_data = debug_uarta_platform_data,
+	},
+};
+
 static struct platform_device *whistler_uart_devices[] __initdata = {
 	&tegra_uarta_device,
 	&tegra_uartb_device,
@@ -89,15 +135,13 @@ static void __init uart_debug_init(void)
 	if (modem_id == 0x1) {
 		/* UARTB is the debug port. */
 		pr_info("Selecting UARTB as the debug console\n");
-		whistler_uart_devices[1] = &debug_uartb_device;
-		debug_uart_port_base = ((struct plat_serial8250_port *)(
-			debug_uartb_device.dev.platform_data))->mapbase;
+		whistler_uart_devices[1] = &debug_uartb;
+		debug_uart_port_base = debug_uartb_platform_data[0].mapbase;
 		debug_uart_clk = clk_get_sys("serial8250.0", "uartb");
 
 		/* Clock enable for the debug channel */
 		if (!IS_ERR_OR_NULL(debug_uart_clk)) {
-			rate = ((struct plat_serial8250_port *)(
-			debug_uartb_device.dev.platform_data))->uartclk;
+			rate = debug_uartb_platform_data[0].uartclk;
 			pr_info("The debug console clock name is %s\n",
 						debug_uart_clk->name);
 			c = tegra_get_clock_by_name("pll_p");
@@ -115,15 +159,13 @@ static void __init uart_debug_init(void)
 	} else {
 		/* UARTA is the debug port. */
 		pr_info("Selecting UARTA as the debug console\n");
-		whistler_uart_devices[0] = &debug_uarta_device;
-		debug_uart_port_base = ((struct plat_serial8250_port *)(
-			debug_uarta_device.dev.platform_data))->mapbase;
+		whistler_uart_devices[0] = &debug_uarta;
+		debug_uart_port_base = debug_uarta_platform_data[0].mapbase;
 		debug_uart_clk = clk_get_sys("serial8250.0", "uarta");
 
 		/* Clock enable for the debug channel */
 		if (!IS_ERR_OR_NULL(debug_uart_clk)) {
-			rate = ((struct plat_serial8250_port *)(
-			debug_uarta_device.dev.platform_data))->uartclk;
+			rate = debug_uarta_platform_data[0].uartclk;
 			pr_info("The debug console clock name is %s\n",
 						debug_uart_clk->name);
 			c = tegra_get_clock_by_name("pll_p");
@@ -221,6 +263,32 @@ static void __init whistler_setup_bluesleep(void)
 	tegra_gpio_enable(TEGRA_GPIO_PU1);
 	return;
 }
+
+static struct tegra_utmip_config utmi_phy_config[] = {
+	[0] = {
+			.hssync_start_delay = 9,
+			.idle_wait_delay = 17,
+			.elastic_limit = 16,
+			.term_range_adj = 6,
+			.xcvr_setup = 15,
+			.xcvr_lsfslew = 2,
+			.xcvr_lsrslew = 2,
+		},
+	[1] = {
+			.hssync_start_delay = 9,
+			.idle_wait_delay = 17,
+			.elastic_limit = 16,
+			.term_range_adj = 6,
+			.xcvr_setup = 8,
+			.xcvr_lsfslew = 2,
+			.xcvr_lsrslew = 2,
+		},
+};
+
+static struct tegra_ulpi_config ulpi_phy_config = {
+	.reset_gpio = TEGRA_GPIO_PG2,
+	.clk = "cdev2",
+};
 
 static __initdata struct tegra_clk_init_table whistler_clk_init_table[] = {
 	/* name		parent		rate		enabled */
@@ -429,95 +497,61 @@ static int __init whistler_scroll_init(void)
 	return 0;
 }
 
+static struct usb_phy_plat_data tegra_usb_phy_pdata[] = {
+	[0] = {
+			.instance = 0,
+			.vbus_irq = MAX8907C_INT_BASE + MAX8907C_IRQ_VCHG_DC_R,
+			.vbus_gpio = USB1_VBUS_GPIO,
+	},
+	[1] = {
+			.instance = 1,
+			.vbus_gpio = -1,
+	},
+	[2] = {
+			.instance = 2,
+			.vbus_gpio = -1,
+	},
+};
+
+static struct tegra_ehci_platform_data tegra_ehci_pdata[] = {
+	[0] = {
+			.phy_config = &utmi_phy_config[0],
+			.operating_mode = TEGRA_USB_HOST,
+			.power_down_on_bus_suspend = 1,
+			.default_enable = false,
+		},
+	[1] = {
+			.phy_config = &ulpi_phy_config,
+			.operating_mode = TEGRA_USB_HOST,
+			.power_down_on_bus_suspend = 1,
+			.default_enable = false,
+		},
+	[2] = {
+			.phy_config = &utmi_phy_config[1],
+			.operating_mode = TEGRA_USB_HOST,
+			.power_down_on_bus_suspend = 1,
+			.default_enable = false,
+	},
+};
+
+static struct tegra_otg_platform_data tegra_otg_pdata = {
+	.ehci_device = &tegra_ehci1_device,
+	.ehci_pdata = &tegra_ehci_pdata[0],
+};
+
 static int __init whistler_gps_init(void)
 {
 	tegra_gpio_enable(TEGRA_GPIO_PU4);
 	return 0;
 }
 
-static struct tegra_usb_platform_data tegra_udc_pdata = {
-	.port_otg = true,
-	.has_hostpc = false,
-	.phy_intf = TEGRA_USB_PHY_INTF_UTMI,
-	.op_mode = TEGRA_USB_OPMODE_DEVICE,
-	.u_data.dev = {
-		.vbus_pmu_irq = MAX8907C_INT_BASE + MAX8907C_IRQ_VCHG_DC_R,
-		.vbus_gpio = -1,
-		.charging_supported = false,
-		.remote_wakeup_supported = false,
-	},
-	.u_cfg.utmi = {
-		.hssync_start_delay = 0,
-		.elastic_limit = 16,
-		.idle_wait_delay = 17,
-		.term_range_adj = 6,
-		.xcvr_setup = 8,
-		.xcvr_lsfslew = 2,
-		.xcvr_lsrslew = 2,
-		.xcvr_setup_offset = 0,
-		.xcvr_use_fuses = 1,
-	},
-};
-
-static struct tegra_usb_platform_data tegra_ehci1_utmi_pdata = {
-	.port_otg = true,
-	.has_hostpc = false,
-	.phy_intf = TEGRA_USB_PHY_INTF_UTMI,
-	.op_mode	= TEGRA_USB_OPMODE_HOST,
-	.u_data.host = {
-		.vbus_gpio = TEGRA_GPIO_PN6,
-		.vbus_reg = NULL,
-		.hot_plug = true,
-		.remote_wakeup_supported = false,
-		.power_off_on_suspend = true,
-	},
-	.u_cfg.utmi = {
-		.hssync_start_delay = 9,
-		.elastic_limit = 16,
-		.idle_wait_delay = 17,
-		.term_range_adj = 6,
-		.xcvr_setup = 8,
-		.xcvr_lsfslew = 2,
-		.xcvr_lsrslew = 2,
-	},
-};
-
-static struct tegra_usb_platform_data tegra_ehci3_utmi_pdata = {
-	.port_otg = false,
-	.has_hostpc = false,
-	.phy_intf = TEGRA_USB_PHY_INTF_UTMI,
-	.op_mode	= TEGRA_USB_OPMODE_HOST,
-	.u_data.host = {
-		.vbus_gpio = TEGRA_GPIO_PD3,
-		.vbus_reg = NULL,
-		.hot_plug = true,
-		.remote_wakeup_supported = false,
-		.power_off_on_suspend = true,
-	},
-	.u_cfg.utmi = {
-		.hssync_start_delay = 9,
-		.elastic_limit = 16,
-		.idle_wait_delay = 17,
-		.term_range_adj = 6,
-		.xcvr_setup = 8,
-		.xcvr_lsfslew = 2,
-		.xcvr_lsrslew = 2,
-	},
-};
-
-static struct tegra_usb_otg_data tegra_otg_pdata = {
-	.ehci_device = &tegra_ehci1_device,
-	.ehci_pdata = &tegra_ehci1_utmi_pdata,
-};
-
-#define SERIAL_NUMBER_LENGTH 20
-static char usb_serial_num[SERIAL_NUMBER_LENGTH];
 static void whistler_usb_init(void)
 {
+	tegra_usb_phy_init(tegra_usb_phy_pdata, ARRAY_SIZE(tegra_usb_phy_pdata));
+
 	tegra_otg_device.dev.platform_data = &tegra_otg_pdata;
 	platform_device_register(&tegra_otg_device);
 
-	tegra_udc_device.dev.platform_data = &tegra_udc_pdata;
 }
 
 static void __init tegra_whistler_init(void)

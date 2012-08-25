@@ -26,12 +26,13 @@
 #include "host1x/host1x_syncpt.h"
 #include "host1x/host1x_hwctx.h"
 #include "t20/t20.h"
+#include "nvhost_acm.h"
 
 #include <linux/slab.h>
 #include <linux/resource.h>
 
-#include <mach/iomap.h>
 #include <mach/hardware.h>
+#include <mach/iomap.h>
 
 #include "bus_client.h"
 
@@ -461,10 +462,12 @@ static struct nvhost_hwctx *ctxmpe_alloc(struct nvhost_hwctx_handler *h,
 	ctx->hwctx.valid = false;
 	ctx->save_incrs = 3;
 	ctx->save_thresh = 2;
-	ctx->save_slots = p->save_slots;
 	ctx->restore_phys = nvmap_pin(nvmap, ctx->restore);
 	ctx->restore_size = restore_size;
 	ctx->restore_incrs = 1;
+
+	if (tegra_get_chipid() == TEGRA_CHIPID_TEGRA2)
+		nvhost_module_reset(ch->dev);
 
 	setup_restore(p, ctx->restore_virt);
 
@@ -502,7 +505,7 @@ static void ctxmpe_save_push(struct nvhost_hwctx *nctx,
 	struct host1x_hwctx_handler *h = host1x_hwctx_handler(ctx);
 	nvhost_cdma_push_gather(cdma,
 			nvhost_get_host(nctx->channel->dev)->nvmap,
-			h->save_buf,
+			h->save_buf->handle,
 			0,
 			nvhost_opcode_gather(h->save_size),
 			h->save_phys);
@@ -534,8 +537,9 @@ static void ctxmpe_save_service(struct nvhost_hwctx *nctx)
 			h->syncpt);
 }
 
-struct nvhost_hwctx_handler *nvhost_mpe_ctxhandler_init(u32 syncpt,
-	u32 waitbase, struct nvhost_channel *ch)
+struct nvhost_hwctx_handler *nvhost_mpe_ctxhandler_init(
+		u32 syncpt, u32 waitbase,
+		struct nvhost_channel *ch)
 {
 	struct nvmap_client *nvmap;
 	u32 *save_ptr;
@@ -567,7 +571,6 @@ struct nvhost_hwctx_handler *nvhost_mpe_ctxhandler_init(u32 syncpt,
 	}
 
 	p->save_phys = nvmap_pin(nvmap, p->save_buf);
-	p->save_slots = 1;
 
 	setup_save(p, save_ptr);
 
@@ -585,51 +588,9 @@ int nvhost_mpe_prepare_power_off(struct nvhost_device *dev)
 	return host1x_save_context(dev, NVSYNCPT_MPE);
 }
 
-enum mpe_ip_ver {
-	mpe_01,
-	mpe_02,
-};
-
-struct mpe_desc {
-	int (*prepare_poweroff)(struct nvhost_device *dev);
-	struct nvhost_hwctx_handler *(*alloc_hwctx_handler)(u32 syncpt,
-			u32 waitbase, struct nvhost_channel *ch);
-};
-
-static const struct mpe_desc mpe[] = {
-	[mpe_01] = {
-		.prepare_poweroff = nvhost_mpe_prepare_power_off,
-		.alloc_hwctx_handler = nvhost_mpe_ctxhandler_init,
-	},
-	[mpe_02] = {
-		.prepare_poweroff = nvhost_mpe_prepare_power_off,
-		.alloc_hwctx_handler = nvhost_mpe_ctxhandler_init,
-	},
-};
-
-static struct nvhost_device_id mpe_id[] = {
-	{ "mpe01", mpe_01 },
-	{ "mpe02", mpe_02 },
-	{ },
-};
-
-MODULE_DEVICE_TABLE(nvhost, mpe_id);
-
-static int __devinit mpe_probe(struct nvhost_device *dev,
-	struct nvhost_device_id *id_table)
+static int __devinit mpe_probe(struct nvhost_device *dev)
 {
 	int err = 0;
-	int index = 0;
-	struct nvhost_driver *drv = to_nvhost_driver(dev->dev.driver);
-
-	index = id_table->driver_data;
-
-	drv->prepare_poweroff		= mpe[index].prepare_poweroff;
-	drv->alloc_hwctx_handler	= mpe[index].alloc_hwctx_handler;
-
-	/* reset device name so that consistent device name can be
-	 * found in clock tree */
-	dev->name = "mpe";
 
 	err = nvhost_client_device_get_resources(dev);
 	if (err)
@@ -674,8 +635,7 @@ static struct nvhost_driver mpe_driver = {
 	.driver = {
 		.owner = THIS_MODULE,
 		.name = "mpe",
-	},
-	.id_table = mpe_id,
+	}
 };
 
 static int __init mpe_init(void)

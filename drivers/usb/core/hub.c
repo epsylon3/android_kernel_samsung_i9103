@@ -638,7 +638,11 @@ static int hub_port_disable(struct usb_hub *hub, int port1, int set_state)
  */
 static void hub_port_logical_disconnect(struct usb_hub *hub, int port1)
 {
+#ifdef CONFIG_USB_HOST_NOTIFY
+	dev_err(hub->intfdev, "logical disconnect on port %d\n", port1);
+#else
 	dev_dbg(hub->intfdev, "logical disconnect on port %d\n", port1);
+#endif
 	hub_port_disable(hub, port1, 1);
 
 	/* FIXME let caller ask to power down the port:
@@ -864,6 +868,12 @@ static void hub_activate(struct usb_hub *hub, enum hub_activation_type type)
 	 * will see them later and handle them normally.
 	 */
 	if (need_debounce_delay) {
+#if defined(CONFIG_LINK_DEVICE_HSIC)
+		if (hdev->children[0] &&
+			!strncmp(hdev->children[0]->product, "HSIC", 4) &&
+			(type == HUB_RESUME || type == HUB_RESET_RESUME))
+			goto init3;
+#endif
 		delay = HUB_DEBOUNCE_STABLE;
 
 		/* Don't do a long sleep inside a workqueue routine */
@@ -2050,8 +2060,20 @@ static int hub_port_wait_reset(struct usb_hub *hub, int port1,
 			delay_time < HUB_RESET_TIMEOUT;
 			delay_time += delay) {
 		/* wait to give the device a chance to reset */
+#if defined(CONFIG_LINK_DEVICE_HSIC)
+		/*
+		 * Hsic port do not need to wait device reset,
+		 * device reset has completed by port_feature_reset hub_control
+		 */
+		if (udev->product && !strncmp(udev->product, "HSIC", 4))
+			dev_dbg(hub->intfdev,
+				"this port do not need delay : %s\n",
+				udev->product);
+		else
+			msleep(delay);
+#else
 		msleep(delay);
-
+#endif
 		/* read and decode port status */
 		ret = hub_port_status(hub, port1, &portstatus, &portchange);
 		if (ret < 0)
@@ -2125,7 +2147,16 @@ static int hub_port_reset(struct usb_hub *hub, int port1,
 		switch (status) {
 		case 0:
 			/* TRSTRCY = 10 ms; plus some extra */
+#if defined(CONFIG_LINK_DEVICE_HSIC)
+			/* Hsic device-reset already done. Do not need sleep */
+			if (udev->product && !strncmp(udev->product, "HSIC", 4))
+				dev_dbg(&udev->dev, "skip delay\n");
+			else
+				msleep(10 + 40);
+#else
 			msleep(10 + 40);
+#endif
+
 			update_devnum(udev, 0);
 			if (hcd->driver->reset_device) {
 				status = hcd->driver->reset_device(hcd, udev);
@@ -2530,7 +2561,14 @@ int usb_port_resume(struct usb_device *udev, pm_message_t msg)
 		/* drive resume for at least 20 msec */
 		dev_dbg(&udev->dev, "usb %sresume\n",
 				(msg.event & PM_EVENT_AUTO ? "auto-" : ""));
+#if defined(CONFIG_LINK_DEVICE_HSIC)
+		/* Add the 5msec delay for XMM6260 resume fail case*/
+		if (udev->product && !strncmp(udev->product, "HSIC", 4))
+			msleep(30);
+		else
+#else
 		msleep(25);
+#endif
 
 		/* Virtual root hubs can trigger on GET_PORT_STATUS to
 		 * stop resume signaling.  Then finish the resume
@@ -2540,9 +2578,19 @@ int usb_port_resume(struct usb_device *udev, pm_message_t msg)
 
 		/* TRSMRCY = 10 msec */
 		msleep(10);
+#if defined(CONFIG_LINK_DEVICE_HSIC)
+		/* If portstatus's still resuming, retry GET_PORT_STATUS */
+		if (udev->product && !strncmp(udev->product, "HSIC", 4) &&
+					portstatus & USB_PORT_STAT_SUSPEND)
+			status = hub_port_status(hub, port1, &portstatus,
+				&portchange);
+#endif
 	}
 
  SuspendCleared:
+#if defined(CONFIG_LINK_DEVICE_HSIC) || defined(CONFIG_LINK_DEVICE_USB)
+	pr_debug("mif: %s: %d, %d\n", __func__, portstatus, portchange);
+#endif
 	if (status == 0) {
 		if (hub_is_superspeed(hub->hdev)) {
 			if (portchange & USB_PORT_STAT_C_LINK_STATE)
@@ -2954,10 +3002,16 @@ hub_port_init (struct usb_hub *hub, struct usb_device *udev, int port1,
 			udev->descriptor.bMaxPacketSize0 =
 					buf->bMaxPacketSize0;
 			kfree(buf);
-
+#if defined(CONFIG_LINK_DEVICE_HSIC)
+			if (udev->product && !strncmp(udev->product, "HSIC", 4))
+				goto check_speed;
+#endif
 			retval = hub_port_reset(hub, port1, udev, delay);
 			if (retval < 0)		/* error or disconnect */
 				goto fail;
+#if defined(CONFIG_LINK_DEVICE_HSIC)
+check_speed:
+#endif
 			if (oldspeed != udev->speed) {
 				dev_dbg(&udev->dev,
 					"device reset changed speed!\n");
@@ -3951,7 +4005,10 @@ int usb_reset_device(struct usb_device *udev)
 	int ret;
 	int i;
 	struct usb_host_config *config = udev->actconfig;
-
+#ifdef CONFIG_USB_HOST_NOTIFY
+	dev_info(&udev->dev, "%s udev->state %d\n",
+				__func__, udev->state);
+#endif
 	if (udev->state == USB_STATE_NOTATTACHED ||
 			udev->state == USB_STATE_SUSPENDED) {
 		dev_dbg(&udev->dev, "device reset not allowed in state %d\n",

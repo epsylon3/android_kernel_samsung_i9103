@@ -300,7 +300,11 @@ static void scsi_device_dev_release_usercontext(struct work_struct *work)
 	struct list_head *this, *tmp;
 	unsigned long flags;
 
+#ifdef SCSI_PATCH_AGAINST_RACE_CONDITION
+	sdev = container_of(work, struct scsi_device, release_work);
+#else
 	sdev = container_of(work, struct scsi_device, ew.work);
+#endif
 
 	parent = sdev->sdev_gendev.parent;
 	starget = to_scsi_target(parent);
@@ -338,8 +342,12 @@ static void scsi_device_dev_release_usercontext(struct work_struct *work)
 static void scsi_device_dev_release(struct device *dev)
 {
 	struct scsi_device *sdp = to_scsi_device(dev);
+#ifndef SCSI_PATCH_AGAINST_RACE_CONDITION
 	execute_in_process_context(scsi_device_dev_release_usercontext,
 				   &sdp->ew);
+#else
+	queue_work(scsi_wq, &sdp->release_work);
+#endif
 }
 
 static struct class sdev_class = {
@@ -1070,6 +1078,9 @@ void scsi_sysfs_device_initialize(struct scsi_device *sdev)
 	dev_set_name(&sdev->sdev_dev, "%d:%d:%d:%d",
 		     sdev->host->host_no, sdev->channel, sdev->id, sdev->lun);
 	sdev->scsi_level = starget->scsi_level;
+#ifdef SCSI_PATCH_AGAINST_RACE_CONDITION
+	INIT_WORK(&sdev->release_work, scsi_device_dev_release_usercontext);
+#endif
 	transport_setup_device(&sdev->sdev_gendev);
 	spin_lock_irqsave(shost->host_lock, flags);
 	list_add_tail(&sdev->same_target_siblings, &starget->devices);

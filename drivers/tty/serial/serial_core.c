@@ -175,7 +175,7 @@ static int uart_startup(struct tty_struct *tty, struct uart_state *state, int in
 	if (retval == 0) {
 		if (uart_console(uport) && uport->cons->cflag) {
 			tty->termios->c_cflag = uport->cons->cflag;
-			uport->cons->cflag = 0;
+			/* uport->cons->cflag = 0; */
 		}
 		/*
 		 * Initialise the hardware port settings.
@@ -2013,8 +2013,8 @@ int uart_resume_port(struct uart_driver *drv, struct uart_port *uport)
 
 		if (console_suspend_enabled)
 			uart_change_pm(state, 0);
-		if (uport->type != PORT_TEGRA)
-			uport->ops->set_termios(uport, &termios, NULL);
+/*		if (uport->type != PORT_TEGRA) */
+		uport->ops->set_termios(uport, &termios, NULL);
 		if (console_suspend_enabled)
 			console_start(uport->cons);
 	}

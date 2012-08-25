@@ -250,6 +250,6 @@ enum mpu_ext_sync {
 };
 
 #define DLPF_FS_SYNC_VALUE(ext_sync, full_scale, lpf) \
-    ((ext_sync << 5) | (full_scale << 3) | lpf)
+			((ext_sync << 5) | (full_scale << 3) | lpf)
 
 #endif				/* __MPU3050_H_ */

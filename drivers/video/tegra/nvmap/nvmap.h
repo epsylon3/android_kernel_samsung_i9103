@@ -30,7 +30,7 @@
 #include <linux/sched.h>
 #include <linux/wait.h>
 #include <linux/atomic.h>
-#include <linux/nvmap.h>
+#include <mach/nvmap.h>
 #include "nvmap_heap.h"
 
 struct nvmap_device;
@@ -203,6 +203,9 @@ struct nvmap_handle *nvmap_get_handle_id(struct nvmap_client *client,
 
 struct nvmap_handle_ref *nvmap_create_handle(struct nvmap_client *client,
 					     size_t size);
+
+struct nvmap_handle_ref *nvmap_duplicate_handle_id(struct nvmap_client *client,
+						   unsigned long id);
 
 int nvmap_alloc_handle_id(struct nvmap_client *client,
 			  unsigned long id, unsigned int heap_mask,

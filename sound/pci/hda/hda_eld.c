@@ -707,8 +707,8 @@ void snd_hdmi_eld_update_pcm_info(struct hdmi_eld *eld,
 
 		rates |= a->rates;
 		if (a->format == AUDIO_CODING_TYPE_LPCM) {
-			if (a->channels > channels_max)
-				channels_max = a->channels;
+		if (a->channels > channels_max)
+			channels_max = a->channels;
 			if (a->sample_bits & AC_SUPPCM_BITS_20) {
 				formats |= SNDRV_PCM_FMTBIT_S32_LE;
 				if (maxbps < 20)

@@ -775,7 +775,7 @@ static int read_tsensor_fuse_regs(struct tegra_tsensor_data *data)
 
 	/*
 	 * Low temp is:
-	 * FUSE_TJ_ADT_LOWT = bits [20:14] orâ€™ed with bits [27:21]
+	 * FUSE_TJ_ADT_LOWT = bits [20:14] or?™ed with bits [27:21]
 	 */
 	T1 = ((spare_bits >> 14) & 0x7F) |
 		((spare_bits >> 21) & 0x7F);
@@ -783,7 +783,7 @@ static int read_tsensor_fuse_regs(struct tegra_tsensor_data *data)
 
 	/*
 	 * High temp is:
-	 * FUSE_TJ_ADJ = bits [6:0] orâ€™ed with bits [13:7]
+	 * FUSE_TJ_ADJ = bits [6:0] or?™ed with bits [13:7]
 	 */
 	dev_vdbg(data->hwmon_dev, "Tsensor low temp (T2) fuse :\n");
 	T2 = (spare_bits & 0x7F) | ((spare_bits >> 7) & 0x7F);
@@ -877,7 +877,7 @@ static void calc_final_temp(struct tegra_tsensor_data *data,
  * Function to compute constants A and B needed for temperature
  * calculation
  * A = (T2-T1) / (F2-F1)
- * B = T1 â€“ A * F1
+ * B = T1 ??A * F1
  */
 static int tsensor_get_const_AB(struct tegra_tsensor_data *data)
 {

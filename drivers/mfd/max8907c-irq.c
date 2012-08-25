@@ -37,6 +37,7 @@ static struct max8907c_irq_data max8907c_irqs[] = {
 		.reg		= MAX8907C_REG_CHG_IRQ1,
 		.mask_reg	= MAX8907C_REG_CHG_IRQ1_MASK,
 		.offs		= 1 << 1,
+		.enable	= 1,		/* using max8907c-charger */
 	},
 	[MAX8907C_IRQ_VCHG_DC_R] = {
 		.reg		= MAX8907C_REG_CHG_IRQ1,
@@ -77,6 +78,7 @@ static struct max8907c_irq_data max8907c_irqs[] = {
 		.reg		= MAX8907C_REG_CHG_IRQ2,
 		.mask_reg	= MAX8907C_REG_CHG_IRQ2_MASK,
 		.offs		= 1 << 6,
+		.enable	= 1,		/* using max8907c-charger */
 	},
 	[MAX8907C_IRQ_VCHG_TMR_FAULT] = {
 		.reg		= MAX8907C_REG_CHG_IRQ2,
@@ -345,10 +347,27 @@ int max8907c_irq_init(struct max8907c *chip, int irq, int irq_base)
 	}
 
 	device_init_wakeup(chip->dev, 1);
-
+#ifdef CONFIG_MACH_N1
+	enable_irq_wake(chip->core_irq);
+#endif
 	return ret;
 }
 
+#ifdef CONFIG_MACH_N1
+int max8907c_irq_suspend(struct i2c_client *i2c, pm_message_t state)
+{
+    struct max8907c *chip = i2c_get_clientdata(i2c);
+    disable_irq(chip->core_irq);
+    return 0;
+}
+
+int max8907c_irq_resume(struct i2c_client *i2c)
+{
+    struct max8907c *chip = i2c_get_clientdata(i2c);
+    enable_irq(chip->core_irq);
+    return 0;
+}
+#else
 int max8907c_suspend(struct i2c_client *i2c, pm_message_t state)
 {
 	struct max8907c *chip = i2c_get_clientdata(i2c);
@@ -416,6 +435,7 @@ int max8907c_resume(struct i2c_client *i2c)
 
 	return 0;
 }
+#endif
 
 void max8907c_irq_free(struct max8907c *chip)
 {

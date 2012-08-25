@@ -169,27 +169,32 @@ static void show_channel_gather(struct output *o, u32 addr,
 	struct push_buffer *pb = &cdma->push_buffer;
 	u32 cur = addr - pb->phys;
 	struct nvmap_client_handle *nvmap = &pb->nvmap[cur/8];
+	struct nvmap_handle_ref ref;
 	u32 *map_addr, offset;
 	phys_addr_t pin_addr;
 	int state, count, i;
 
 	if (!nvmap->handle || !nvmap->client
-			|| atomic_read(&nvmap->handle->handle->ref) < 1) {
+			|| atomic_read(&nvmap->handle->ref) < 1) {
 		nvhost_debug_output(o, "[already deallocated]\n");
 		return;
 	}
 
-	map_addr = nvmap_mmap(nvmap->handle);
+	/* Create a fake nvmap_handle_ref - nvmap requires it
+	 * but accesses only the first field - nvmap_handle */
+	ref.handle = nvmap->handle;
+
+	map_addr = nvmap_mmap(&ref);
 	if (!map_addr) {
 		nvhost_debug_output(o, "[could not mmap]\n");
 		return;
 	}
 
 	/* Get base address from nvmap */
-	pin_addr = nvmap_pin(nvmap->client, nvmap->handle);
+	pin_addr = nvmap_pin(nvmap->client, &ref);
 	if (IS_ERR_VALUE(pin_addr)) {
 		nvhost_debug_output(o, "[couldn't pin]\n");
-		nvmap_munmap(nvmap->handle, map_addr);
+		nvmap_munmap(&ref, map_addr);
 		return;
 	}
 
@@ -210,8 +215,8 @@ static void show_channel_gather(struct output *o, u32 addr,
 					*(map_addr + offset/4 + i),
 					cdma);
 	}
-	nvmap_unpin(nvmap->client, nvmap->handle);
-	nvmap_munmap(nvmap->handle, map_addr);
+	nvmap_unpin(nvmap->client, &ref);
+	nvmap_munmap(&ref, map_addr);
 #endif
 }
 
@@ -384,11 +389,11 @@ static void t20_debug_show_mlocks(struct nvhost_master *m, struct output *o)
 	nvhost_debug_output(o, "\n");
 }
 
-int nvhost_init_t20_debug_support(struct nvhost_chip_support *op)
+int nvhost_init_t20_debug_support(struct nvhost_master *host)
 {
-	op->debug.show_channel_cdma = t20_debug_show_channel_cdma;
-	op->debug.show_channel_fifo = t20_debug_show_channel_fifo;
-	op->debug.show_mlocks = t20_debug_show_mlocks;
+	host->op.debug.show_channel_cdma = t20_debug_show_channel_cdma;
+	host->op.debug.show_channel_fifo = t20_debug_show_channel_fifo;
+	host->op.debug.show_mlocks = t20_debug_show_mlocks;
 
 	return 0;
 }

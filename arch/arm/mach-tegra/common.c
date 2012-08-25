@@ -28,7 +28,6 @@
 #include <linux/memblock.h>
 #include <linux/bitops.h>
 #include <linux/sched.h>
-#include <linux/cpufreq.h>
 
 #include <asm/hardware/cache-l2x0.h>
 #include <asm/system.h>
@@ -177,7 +176,7 @@ static __initdata struct tegra_clk_init_table common_clk_init_table[] = {
 	{ "vi_sensor",	"pll_c",	0,		false },
 	{ "vi",		"pll_c",	0,		false },
 	{ "2d",		"pll_c",	0,		false },
-	{ "3d",		"pll_c",	0,		false },
+	{ "3d",		"pll_c",	300000000,	false },
 #else
 	{ "pll_p",	NULL,		0,		true },
 	{ "pll_p_out1",	"pll_p",	0,		false },
@@ -438,9 +437,13 @@ void __init tegra_init_early(void)
 	   handler initializer is not called, so do it here for non-SMP. */
 	tegra_cpu_reset_handler_init();
 #endif
+	/*tegra_fbmem = 800@18012000*/
+	tegra_bootloader_fb_size = 819200;
+	tegra_bootloader_fb_start = 0x18012000;
+
 	tegra_init_fuse();
-	tegra_gpio_resume_init();
 	tegra_init_clock();
+	tegra_gpio_resume_init();
 	tegra_init_pinmux();
 	tegra_clk_init_from_table(common_clk_init_table);
 	tegra_init_power();
@@ -761,12 +764,15 @@ void tegra_move_framebuffer(unsigned long to, unsigned long from,
 	void __iomem *to_io;
 	void *from_virt;
 	unsigned long i;
+	unsigned char r, g, b;
+	unsigned char b0, b1;
 
 	BUG_ON(PAGE_ALIGN((unsigned long)to) != (unsigned long)to);
 	BUG_ON(PAGE_ALIGN(from) != from);
 	BUG_ON(PAGE_ALIGN(size) != size);
 
-	to_io = ioremap(to, size);
+	/*to_io = ioremap(to, size);*/
+	to_io = ioremap(to, size*2);
 	if (!to_io) {
 		pr_err("%s: Failed to map target framebuffer\n", __func__);
 		return;
@@ -774,9 +780,24 @@ void tegra_move_framebuffer(unsigned long to, unsigned long from,
 
 	if (pfn_valid(page_to_pfn(phys_to_page(from)))) {
 		for (i = 0 ; i < size; i += PAGE_SIZE) {
+			int j;
 			page = phys_to_page(from + i);
 			from_virt = kmap(page);
-			memcpy(to_io + i, from_virt, PAGE_SIZE);
+			/*memcpy(to_io + i, from_virt, PAGE_SIZE);*/
+			for (j = 0; j < PAGE_SIZE; j += 2) {
+				b0 = *((unsigned char *)(from_virt + j));
+				b1 = *((unsigned char *)(from_virt + j + 1));
+
+				r = b0 & 0x1f;
+				g = ((b1 & 0x07) << 3) | ((b0 & 0xe0) >> 5);
+				b = (b1 & 0xf8) >> 3;
+
+				/*Red, Green, Blue, Alpha */
+				*((unsigned char *)(to_io + (i+j)*2)) = r*8;
+				*((unsigned char *)(to_io + (i+j)*2+1)) = g*4;
+				*((unsigned char *)(to_io + (i+j)*2+2)) = b*8;
+				*((unsigned char *)(to_io + (i+j)*2+3)) = 0x00;
+			}
 			kunmap(page);
 		}
 	} else {
@@ -954,53 +975,118 @@ void __init tegra_release_bootloader_fb(void)
 }
 
 #ifdef CONFIG_TEGRA_CONVSERVATIVE_GOV_ON_EARLYSUPSEND
-char cpufreq_default_gov[CONFIG_NR_CPUS][MAX_GOV_NAME_LEN];
-char *cpufreq_conservative_gov = "conservative";
+static char cpufreq_gov_default[32];
+static char *cpufreq_gov_conservative = "conservative";
+static char *cpufreq_sysfs_place_holder="/sys/devices/system/cpu/cpu%i/cpufreq/scaling_governor";
+static char *cpufreq_gov_conservative_param="/sys/devices/system/cpu/cpufreq/conservative/%s";
 
-void cpufreq_store_default_gov(void)
+static void cpufreq_set_governor(char *governor)
 {
-	unsigned int cpu;
-	struct cpufreq_policy *policy;
+	struct file *scaling_gov = NULL;
+	mm_segment_t old_fs;
+	char    buf[128];
+	int i = 0;
+	loff_t offset = 0;
 
-	for (cpu = 0; cpu < CONFIG_NR_CPUS; cpu++) {
-		policy = cpufreq_cpu_get(cpu);
-		if (policy) {
-			sprintf(cpufreq_default_gov[cpu], "%s",
-					policy->governor->name);
-			cpufreq_cpu_put(policy);
-		}
-	}
-}
+	if (governor == NULL)
+		return;
 
-int cpufreq_change_gov(char *target_gov)
-{
-	unsigned int cpu = 0;
-
+	/* change to KERNEL_DS address limit */
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
 #ifndef CONFIG_TEGRA_AUTO_HOTPLUG
-	for_each_online_cpu(cpu)
+	for_each_online_cpu(i)
 #endif
-	return cpufreq_set_gov(target_gov, cpu);
+	{
+		sprintf(buf, cpufreq_sysfs_place_holder, i);
+		scaling_gov = filp_open(buf, O_RDWR, 0);
+		if (scaling_gov != NULL) {
+			if (scaling_gov->f_op != NULL &&
+				scaling_gov->f_op->write != NULL)
+				scaling_gov->f_op->write(scaling_gov,
+						governor,
+						strlen(governor),
+						&offset);
+			else
+				pr_err("f_op might be null\n");
+
+			filp_close(scaling_gov, NULL);
+		} else {
+			pr_err("%s. Can't open %s\n", __func__, buf);
+		}
+	}
+	set_fs(old_fs);
 }
 
-int cpufreq_restore_default_gov(void)
+void cpufreq_save_default_governor(void)
 {
-	int ret = 0;
-	unsigned int cpu;
+	struct file *scaling_gov = NULL;
+	mm_segment_t old_fs;
+	char    buf[128];
+	loff_t offset = 0;
 
-	for (cpu = 0; cpu < CONFIG_NR_CPUS; cpu++) {
-		if (strlen((const char *)&cpufreq_default_gov[cpu])) {
-			ret = cpufreq_set_gov(cpufreq_default_gov[cpu], cpu);
-			if (ret < 0)
-				/* Unable to restore gov for the cpu as
-				 * It was online on suspend and becomes
-				 * offline on resume.
-				 */
-				pr_info("Unable to restore gov:%s for cpu:%d,"
-						, cpufreq_default_gov[cpu]
-							, cpu);
-		}
-		cpufreq_default_gov[cpu][0] = '\0';
+	/* change to KERNEL_DS address limit */
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+
+	buf[127] = 0;
+	sprintf(buf, cpufreq_sysfs_place_holder,0);
+	scaling_gov = filp_open(buf, O_RDONLY, 0);
+	if (scaling_gov != NULL) {
+		if (scaling_gov->f_op != NULL &&
+			scaling_gov->f_op->read != NULL)
+			scaling_gov->f_op->read(scaling_gov,
+					cpufreq_gov_default,
+					32,
+					&offset);
+		else
+			pr_err("f_op might be null\n");
+
+		filp_close(scaling_gov, NULL);
+	} else {
+		pr_err("%s. Can't open %s\n", __func__, buf);
 	}
-	return ret;
+	set_fs(old_fs);
+}
+
+void cpufreq_restore_default_governor(void)
+{
+	cpufreq_set_governor(cpufreq_gov_default);
+}
+
+void cpufreq_set_conservative_governor_param(char *name, int value)
+{
+	struct file *gov_param = NULL;
+	mm_segment_t old_fs;
+	static char buf[128], param_value[8];
+	loff_t offset = 0;
+
+	/* change to KERNEL_DS address limit */
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+
+	sprintf(param_value, "%d", value);
+	sprintf(buf, cpufreq_gov_conservative_param, name);
+	gov_param = filp_open(buf, O_RDWR, 0);
+	if (gov_param != NULL) {
+		if (gov_param->f_op != NULL &&
+			gov_param->f_op->write != NULL)
+			gov_param->f_op->write(gov_param,
+					param_value,
+					strlen(param_value),
+					&offset);
+		else
+			pr_err("f_op might be null\n");
+
+		filp_close(gov_param, NULL);
+	} else {
+		pr_err("%s. Can't open %s\n", __func__, buf);
+	}
+	set_fs(old_fs);
+}
+
+void cpufreq_set_conservative_governor(void)
+{
+	cpufreq_set_governor(cpufreq_gov_conservative);
 }
 #endif /* CONFIG_TEGRA_CONVSERVATIVE_GOV_ON_EARLYSUPSEND */

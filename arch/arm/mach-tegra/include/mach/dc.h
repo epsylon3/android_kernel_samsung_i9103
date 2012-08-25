@@ -112,7 +112,7 @@ struct dsi_phy_timing_ns {
 	u16		t_hsdexit_ns;
 	u16		t_hstrail_ns;
 	u16		t_datzero_ns;
-	u16		t_hsprepare_ns;
+	u16		t_hsprepare_ns;	
 
 	u16		t_clktrail_ns;
 	u16		t_clkpost_ns;
@@ -125,14 +125,14 @@ struct dsi_phy_timing_ns {
 
 	u16		t_taget_ns;
 	u16		t_tasure_ns;
-	u16		t_tago_ns;
+	u16		t_tago_ns;	
 };
 
 struct tegra_dsi_out {
 	u8		n_data_lanes;			/* required */
 	u8		pixel_format;			/* required */
 	u8		refresh_rate;			/* required */
-	u8		rated_refresh_rate;
+	u8		rated_refresh_rate;	
 	u8		panel_reset;			/* required */
 	u8		virtual_channel;		/* required */
 	u8		dsi_instance;
@@ -426,7 +426,6 @@ struct tegra_dc_win {
 	unsigned		out_w;
 	unsigned		out_h;
 	unsigned		z;
-	u8			global_alpha;
 
 	struct tegra_dc_csc	csc;
 
@@ -503,7 +502,6 @@ struct tegra_dc_platform_data {
 
 #define TEGRA_DC_FLAG_ENABLED		(1 << 0)
 
-int tegra_dc_get_stride(struct tegra_dc *dc, unsigned win);
 struct tegra_dc *tegra_dc_get_dc(unsigned idx);
 struct tegra_dc_win *tegra_dc_get_window(struct tegra_dc *dc, unsigned win);
 bool tegra_dc_get_connected(struct tegra_dc *);
@@ -533,6 +531,7 @@ int tegra_dc_set_fb_mode(struct tegra_dc *dc, const struct fb_videomode *fbmode,
 unsigned tegra_dc_get_out_height(const struct tegra_dc *dc);
 unsigned tegra_dc_get_out_width(const struct tegra_dc *dc);
 unsigned tegra_dc_get_out_max_pixclock(const struct tegra_dc *dc);
+void tegra_dc_data_out(struct tegra_dc *dc);
 
 /* PM0 and PM1 signal control */
 #define TEGRA_PWM_PM0 0

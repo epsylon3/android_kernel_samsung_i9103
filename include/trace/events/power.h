@@ -41,11 +41,6 @@ DEFINE_EVENT(cpu, cpu_idle,
 #define PWR_EVENT_EXIT -1
 
 enum {
-	CPU_SUSPEND_START,
-	CPU_SUSPEND_DONE
-};
-
-enum {
 	POWER_CPU_UP_START,
 	POWER_CPU_UP_DONE,
 	POWER_CPU_DOWN_START,
@@ -63,23 +58,6 @@ enum {
 };
 
 #endif
-
-TRACE_EVENT(cpu_suspend,
-
-	TP_PROTO(unsigned int state),
-
-	TP_ARGS(state),
-
-	TP_STRUCT__entry(
-		__field(u32, state)
-	),
-
-	TP_fast_assign(
-		__entry->state = state;
-	),
-
-	TP_printk("state=%lu", (unsigned long)__entry->state)
-);
 
 TRACE_EVENT(cpu_hotplug,
 

@@ -30,7 +30,7 @@
 #include <linux/pwm_backlight.h>
 #include <asm/atomic.h>
 #include <linux/nvhost.h>
-#include <linux/nvmap.h>
+#include <mach/nvmap.h>
 #include <mach/irqs.h>
 #include <mach/iomap.h>
 #include <mach/dc.h>
@@ -58,7 +58,7 @@
 #define pm313_MODE0			TEGRA_GPIO_PZ4
 #define pm313_MODE1			TEGRA_GPIO_PW1
 #define pm313_BPP			TEGRA_GPIO_PN6 /* 0:24bpp, 1:18bpp */
-#define pm313_lvds_shutdown		TEGRA_GPIO_PL2
+#define pm313_lvds_shutdown		TEGRA_GPIO_PH1
 
 /* E1247 reworked for pm269 pins */
 #define e1247_pm269_lvds_shutdown	TEGRA_GPIO_PN6
@@ -707,8 +707,8 @@ static struct tegra_fb_data cardhu_fb_data = {
 
 static struct tegra_fb_data cardhu_hdmi_fb_data = {
 	.win		= 0,
-	.xres		= 640,
-	.yres		= 480,
+	.xres		= 1366,
+	.yres		= 768,
 	.bits_per_pixel	= 32,
 	.flags		= TEGRA_FB_FLIP_ON_PROBE,
 };
@@ -1301,11 +1301,6 @@ int __init cardhu_panel_init(void)
 					 IORESOURCE_MEM, "fbmem");
 	res->start = tegra_fb2_start;
 	res->end = tegra_fb2_start + tegra_fb2_size - 1;
-
-	/* Copy the bootloader fb to the fb2. */
-	tegra_move_framebuffer(tegra_fb2_start, tegra_bootloader_fb_start,
-				min(tegra_fb2_size, tegra_bootloader_fb_size));
-
 	if (!err)
 		err = nvhost_device_register(&cardhu_disp2_device);
 #endif

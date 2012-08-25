@@ -50,7 +50,7 @@
 #define BYTES_TO_ALIGN(x) ((unsigned long)(ALIGN((x), sizeof(u32))) - \
 	(unsigned long)(x))
 
-#define UART_RX_DMA_BUFFER_SIZE    (2048*8)
+#define UART_RX_DMA_BUFFER_SIZE    (2048*16)
 
 #define UART_LSR_FIFOE		0x80
 #define UART_LSR_TXFIFO_FULL	0x100
@@ -333,9 +333,14 @@ static void tegra_rx_dma_complete_callback(struct tegra_dma_req *req)
 	if (req->status == -TEGRA_DMA_REQ_ERROR_ABORTED)
 		return;
 
-	spin_unlock(&u->lock);
+	if (req->status != -TEGRA_DMA_REQ_ERROR_STOPPED)
+		spin_unlock(&u->lock);
+
 	tty_flip_buffer_push(u->state->port.tty);
-	spin_lock(&u->lock);
+
+	if (req->status != -TEGRA_DMA_REQ_ERROR_STOPPED)
+		spin_lock(&u->lock);
+
 }
 
 /* Lock already taken */
@@ -1638,7 +1643,7 @@ int tegra_uart_is_tx_empty(struct uart_port *uport)
 	return tegra_tx_empty(uport);
 }
 
-static struct platform_driver tegra_uart_platform_driver __refdata= {
+static struct platform_driver tegra_uart_platform_driver = {
 	.probe		= tegra_uart_probe,
 	.remove		= __devexit_p(tegra_uart_remove),
 	.suspend	= tegra_uart_suspend,

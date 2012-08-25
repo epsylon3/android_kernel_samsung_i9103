@@ -138,7 +138,10 @@ static int max8907c_rtc_read_time(struct device *dev, struct rtc_time *tm)
 	if (ret < 0)
 		return ret;
 	ret = tm_calc(tm, buf, TIME_NUM);
-
+	pr_info("%s: %02d:%02d:%02d %02d/%02d/%04d\n",
+		__func__,
+		tm->tm_hour, tm->tm_min, tm->tm_sec,
+		tm->tm_mon + 1, tm->tm_mday, tm->tm_year + 1900);
 	return ret;
 }
 

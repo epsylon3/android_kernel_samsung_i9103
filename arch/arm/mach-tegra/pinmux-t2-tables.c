@@ -31,6 +31,7 @@
 #include <mach/iomap.h>
 #include <mach/pinmux.h>
 #include "gpio-names.h"
+#include "pm.h"
 
 #define SET_DRIVE_PINGROUP(pg_name, r, drv_down_offset, drv_down_mask, drv_up_offset, drv_up_mask,	\
 	slew_rise_offset, slew_rise_mask, slew_fall_offset, slew_fall_mask)	\
@@ -195,9 +196,9 @@ const struct tegra_drive_pingroup_desc tegra_soc_drive_pingroups[TEGRA_MAX_DRIVE
 	PINGROUP(LM0,	PW0,		LCD,	DISPLAYA,	DISPLAYB,	SPI3,		RSVD,		RSVD4,		0x1C,	24,	0x90,	26,	0xAC,	22),\
 	PINGROUP(LM1,	PW1,		LCD,	DISPLAYA,	DISPLAYB,	RSVD,		CRT,		RSVD3,		0x1C,	25,	0x90,	28,	0xAC,	22),\
 	PINGROUP(LPP,	PM7,		LCD,	DISPLAYA,	DISPLAYB,	RSVD,		RSVD,		RSVD4,		0x20,	8,	0x98,	14,	0xAC,	18),\
-	PINGROUP(LPW0,	PB2,		LCD,	DISPLAYA,	DISPLAYB,	SPI3,		HDMI,		DISPLAYB,	0x20,	3,	0x90,	0,	0xAC,	20),\
+	PINGROUP(LPW0,	PB2,		LCD,	DISPLAYA,	DISPLAYB,	SPI3,		HDMI,		DISPLAYA,	0x20,	3,	0x90,	0,	0xAC,	20),\
 	PINGROUP(LPW1,	PC1,		LCD,	DISPLAYA,	DISPLAYB,	RSVD,		RSVD,		RSVD4,		0x20,	4,	0x90,	2,	0xAC,	20),\
-	PINGROUP(LPW2,	PC6,		LCD,	DISPLAYA,	DISPLAYB,	SPI3,		HDMI,		DISPLAYB,	0x20,	5,	0x90,	4,	0xAC,	20),\
+	PINGROUP(LPW2,	PC6,		LCD,	DISPLAYA,	DISPLAYB,	SPI3,		HDMI,		DISPLAYA,	0x20,	5,	0x90,	4,	0xAC,	20),\
 	PINGROUP(LSC0,	PB3,		LCD,	DISPLAYA,	DISPLAYB,	XIO,		RSVD,		RSVD4,		0x1C,	27,	0x90,	18,	0xAC,	22),\
 	PINGROUP(LSC1,	PZ3,		LCD,	DISPLAYA,	DISPLAYB,	SPI3,		HDMI,		DISPLAYA,	0x1C,	28,	0x90,	20,	0xAC,	20),\
 	PINGROUP(LSCK,	PZ4,		LCD,	DISPLAYA,	DISPLAYB,	SPI3,		HDMI,		DISPLAYA,	0x1C,	29,	0x90,	16,	0xAC,	20),\
@@ -289,6 +290,9 @@ static int tegra_pinmux_suspend(void)
 	unsigned int i;
 	u32 *ctx = pinmux_reg;
 
+	if (tegra_get_current_suspend_mode() != TEGRA_SUSPEND_LP0)
+		return 0;
+
 	for (i = 0; i < PIN_MUX_CTL_REG_NUM; i++)
 		*ctx++ = pg_readl(PIN_MUX_CTL_REG_A + i*4);
 
@@ -308,6 +312,9 @@ static void tegra_pinmux_resume(void)
 {
 	unsigned int i;
 	u32 *ctx = pinmux_reg;
+
+	if (tegra_get_current_suspend_mode() != TEGRA_SUSPEND_LP0)
+		return;
 
 	for (i = 0; i < PIN_MUX_CTL_REG_NUM; i++)
 		pg_writel(*ctx++, PIN_MUX_CTL_REG_A + i*4);

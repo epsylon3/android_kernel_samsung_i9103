@@ -72,6 +72,13 @@
 
 static void scsi_done(struct scsi_cmnd *cmd);
 
+#ifdef SCSI_PATCH_AGAINST_RACE_CONDITION
+/*
+ * Utility multithreaded workqueue for SCSI.
+ */
+struct workqueue_struct *scsi_wq;
+#endif
+
 /*
  * Definitions and constants.
  */
@@ -1306,11 +1313,24 @@ MODULE_PARM_DESC(scsi_logging_level, "a bit mask of logging levels");
 
 static int __init init_scsi(void)
 {
+#ifdef SCSI_PATCH_AGAINST_RACE_CONDITION
+	int error = -ENOMEM;
+
+	scsi_wq = alloc_workqueue("scsi", 0, 0);
+	if (!scsi_wq)
+		return error;
+#else
 	int error;
+#endif
 
 	error = scsi_init_queue();
 	if (error)
+#ifdef SCSI_PATCH_AGAINST_RACE_CONDITION
+		goto cleanup_wq;
+#else
 		return error;
+#endif
+
 	error = scsi_init_procfs();
 	if (error)
 		goto cleanup_queue;
@@ -1342,6 +1362,10 @@ cleanup_procfs:
 	scsi_exit_procfs();
 cleanup_queue:
 	scsi_exit_queue();
+#ifdef SCSI_PATCH_AGAINST_RACE_CONDITION
+cleanup_wq:
+	destroy_workqueue(scsi_wq);
+#endif
 	printk(KERN_ERR "SCSI subsystem failed to initialize, error = %d\n",
 	       -error);
 	return error;
@@ -1356,6 +1380,9 @@ static void __exit exit_scsi(void)
 	scsi_exit_devinfo();
 	scsi_exit_procfs();
 	scsi_exit_queue();
+#ifdef SCSI_PATCH_AGAINST_RACE_CONDITION
+	destroy_workqueue(scsi_wq);
+#endif
 }
 
 subsys_initcall(init_scsi);

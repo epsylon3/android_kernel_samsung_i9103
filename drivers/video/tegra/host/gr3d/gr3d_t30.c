@@ -145,7 +145,7 @@ static void save_push_v1(struct nvhost_hwctx *nctx, struct nvhost_cdma *cdma)
 	/* gather the save buffer */
 	nvhost_cdma_push_gather(cdma,
 			nvhost_get_host(nctx->channel->dev)->nvmap,
-			p->save_buf,
+			p->save_buf->handle,
 			0,
 			nvhost_opcode_gather(p->save_size),
 			p->save_phys);
@@ -426,8 +426,6 @@ struct nvhost_hwctx_handler *nvhost_gr3d_t30_ctxhandler_init(
 	p->save_phys = nvmap_pin(nvmap, p->save_buf);
 
 	setup_save(p, save_ptr);
-
-	nvmap_munmap(p->save_buf, save_ptr);
 
 	p->h.alloc = ctx3d_alloc_v1;
 	p->h.save_push = save_push_v1;

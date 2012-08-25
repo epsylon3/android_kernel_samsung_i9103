@@ -7,5 +7,4 @@ obj-y += edid.o
 obj-y += nvsd.o
 obj-y += dsi.o
 obj-y += dc_sysfs.o
-obj-y += dc_config.o
 obj-$(CONFIG_TEGRA_DC_EXTENSIONS) += ext/

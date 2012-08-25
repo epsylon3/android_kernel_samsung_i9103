@@ -704,11 +704,11 @@ skip_init_apply:
 				val |= (SD_SR_100 << SD_SR_SHIFT);
 		}
 
-		mask |= SD_FPWM_MASK;
+			mask |= SD_FPWM_MASK;
 		if (pdata->flags & SD_FORCED_PWM_MODE)
 			val |= SD_FPWM_MASK;
 
-		mask |= SD_FSRADE_MASK;
+			mask |= SD_FSRADE_MASK;
 		if (pdata->flags & SD_FSRADE_DISABLE)
 			val |= SD_FSRADE_MASK;
 

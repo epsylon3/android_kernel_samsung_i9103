@@ -1326,7 +1326,7 @@ int hci_blacklist_add(struct hci_dev *hdev, bdaddr_t *bdaddr)
 
 	entry = kzalloc(sizeof(struct bdaddr_list), GFP_KERNEL);
 	if (!entry) {
-		err = -ENOMEM;
+		return -ENOMEM;
 		goto err;
 	}
 
@@ -1770,7 +1770,7 @@ int hci_recv_fragment(struct hci_dev *hdev, int type, void *data, int count)
 
 		data += (count - rem);
 		count = rem;
-	}
+	};
 
 	return rem;
 }
@@ -1805,7 +1805,7 @@ int hci_recv_stream_fragment(struct hci_dev *hdev, void *data, int count)
 
 		data += (count - rem);
 		count = rem;
-	}
+	};
 
 	return rem;
 }
@@ -1903,9 +1903,6 @@ static int hci_send_frame(struct sk_buff *skb)
 
 	/* Get rid of skb owner, prior to sending to the driver. */
 	skb_orphan(skb);
-
-	/* Notify the registered devices about a new send */
-	hci_notify(hdev, HCI_DEV_WRITE);
 
 	return hdev->send(skb);
 }

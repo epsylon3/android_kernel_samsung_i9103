@@ -313,6 +313,124 @@ power_attr(pm_trace_dev_match);
 power_attr(wake_lock);
 power_attr(wake_unlock);
 #endif
+#ifdef CONFIG_TEGRA_CPU_FREQ_LOCK
+static int cpufreq_min_limit_val = -1;
+static int cpufreq_max_limit_val = -1;
+static int cpufreq_min_locked;
+DEFINE_MUTEX(cpufreq_min_mutex);
+
+static void cpufreq_min_limit(const char *buf, size_t count)
+{
+	int ret, temp;
+	unsigned int cpu_lv;
+
+	mutex_lock(&cpufreq_min_mutex);
+
+	temp = cpufreq_min_limit_val;
+	ret = sscanf(buf, "%d", &cpufreq_min_limit_val);
+	if (ret != 1) {
+		pr_warn("%s: invalid format(%d)\n", __func__, ret);
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (cpufreq_min_limit_val == -1) {
+		if (cpufreq_min_locked) {
+			tegra_cpu_unlock_speed();
+			cpufreq_min_locked = 0;
+			ret = 0;
+		} else {
+			pr_warn("%s: there is no min limit!\n", __func__);
+			ret = -EINVAL;
+		}
+		goto out;
+	}
+
+	pr_debug("%s: limit freq=%d\n", __func__, cpufreq_min_limit_val);
+	cpu_lv = tegra_cpu_round(cpufreq_min_limit_val);
+	cpufreq_min_limit_val = cpu_lv;
+
+	if (cpu_lv < 0)
+		goto out;
+
+	if (cpufreq_min_locked)
+		tegra_cpu_unlock_speed();
+
+	tegra_cpu_lock_speed(cpu_lv, 0);
+	cpufreq_min_locked = 1;
+
+out:
+	if (ret < 0)
+		cpufreq_min_limit_val = temp;
+
+	mutex_unlock(&cpufreq_min_mutex);
+	return;
+}
+
+static ssize_t cpufreq_min_limit_show(struct kobject *kobj,
+		struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", cpufreq_min_limit_val);
+}
+
+static ssize_t cpufreq_min_limit_store(struct kobject *kobj,
+					struct kobj_attribute *attr,
+					const char *buf, size_t n)
+{
+	cpufreq_min_limit(buf, 0);
+	return n;
+}
+
+static ssize_t cpufreq_max_limit_show(struct kobject *kobj,
+		struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", cpufreq_max_limit_val);
+}
+
+static ssize_t cpufreq_max_limit_store(struct kobject *kobj,
+					struct kobj_attribute *attr,
+					const char *buf, size_t n)
+{
+	pr_warn("%s: Not supported\n", __func__);
+	return n;
+}
+
+static ssize_t cpufreq_table_show(struct kobject *kobj,
+			struct kobj_attribute *attr, char *buf)
+{
+	ssize_t len = 0;
+	int i;
+	int cpu_idx = 0;
+	struct cpufreq_frequency_table *table;
+
+	table = cpufreq_frequency_get_table(0);
+
+	while (table[cpu_idx].frequency != CPUFREQ_TABLE_END)
+		cpu_idx++;
+
+	for (i = cpu_idx-1; table[i].frequency != CPUFREQ_TABLE_END; i--) {
+		unsigned int freq = table[i].frequency;
+		len += sprintf(buf + len, "%u ", freq);
+	}
+	if (i < 0)
+		len--;
+
+	len += sprintf(buf + len, "\n");
+	return len;
+}
+
+static ssize_t cpufreq_table_store(struct kobject *kobj,
+					struct kobj_attribute *attr,
+					const char *buf, size_t n)
+{
+	pr_warn("%s: Not supported\n", __func__);
+	return n;
+}
+
+power_attr(cpufreq_min_limit);
+power_attr(cpufreq_max_limit);
+power_attr(cpufreq_table);
+#endif
 
 static struct attribute * g[] = {
 	&state_attr.attr,
@@ -330,6 +448,11 @@ static struct attribute * g[] = {
 	&wake_lock_attr.attr,
 	&wake_unlock_attr.attr,
 #endif
+#endif
+#ifdef CONFIG_TEGRA_CPU_FREQ_LOCK
+		&cpufreq_min_limit_attr.attr,
+		&cpufreq_max_limit_attr.attr,
+		&cpufreq_table_attr.attr,
 #endif
 	NULL,
 };

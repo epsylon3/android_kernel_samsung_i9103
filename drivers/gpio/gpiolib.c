@@ -1170,6 +1170,19 @@ struct gpio_chip *gpiochip_find(void *data,
 	return chip;
 }
 EXPORT_SYMBOL_GPL(gpiochip_find);
+#if 1
+// N1_ICS
+const char * gpio_is_requested(unsigned gpio)
+{
+	if (!gpio_is_valid(gpio))
+		return NULL;
+	if (test_bit(FLAG_REQUESTED, &gpio_desc[gpio].flags) == 0)
+		return NULL;
+
+	return gpio_desc[gpio].label;
+}
+EXPORT_SYMBOL_GPL(gpio_is_requested);
+#endif
 
 /* These "optional" allocation calls help prevent drivers from stomping
  * on each other, and help provide better diagnostics in debugfs.
@@ -1202,6 +1215,11 @@ int gpio_request(unsigned gpio, const char *label)
 		desc_set_label(desc, label ? : "?");
 		status = 0;
 	} else {
+#if 1
+// N1_ICS
+		printk(KERN_ERR "%s: held by %s(%d)\n", __func__,
+			gpio_is_requested(gpio), gpio);
+#endif
 		status = -EBUSY;
 		module_put(chip->owner);
 		goto done;

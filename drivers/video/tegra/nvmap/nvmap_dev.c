@@ -39,7 +39,7 @@
 #include <asm/tlbflush.h>
 
 #include <mach/iovmm.h>
-#include <linux/nvmap.h>
+#include <mach/nvmap.h>
 
 #include "nvmap.h"
 #include "nvmap_ioctl.h"
@@ -1141,6 +1141,96 @@ static const struct file_operations debug_iovmm_allocations_fops = {
 	.llseek = seq_lseek,
 	.release = single_release,
 };
+
+static void direct_client_stringify(struct nvmap_client *client)
+{
+	char task_comm[TASK_COMM_LEN];
+	if (!client->task) {
+		printk("%-16s %16s %8u", client->name, "kernel", 0);
+		return;
+	}
+	get_task_comm(task_comm, client->task);
+	printk("%-16s %16s %8u", client->name, task_comm,
+			client->task->pid);
+}
+
+void direct_allocations_stringify(struct nvmap_client *client)
+{
+	struct rb_node *n = rb_first(&client->handle_refs);
+
+	for (; n != NULL; n = rb_next(n)) {
+		struct nvmap_handle_ref *ref =
+			rb_entry(n, struct nvmap_handle_ref, node);
+		struct nvmap_handle *handle = ref->handle;
+		if (handle->alloc && !handle->heap_pgalloc) {
+			printk("%-16s %-16s %8lx %10u\n", "", "",
+				handle->carveout->base,
+				handle->size);
+		}
+	}
+}
+
+void dump_allocations_nvmap()
+{
+	if (nvmap_dev) {
+		int i;
+		for (i = 0; i < nvmap_dev->nr_carveouts; i++) {
+			struct nvmap_carveout_node *node = &nvmap_dev->heaps[i];
+			struct nvmap_carveout_commit *commit;
+			unsigned long flags;
+			unsigned int total = 0;
+
+			spin_lock_irqsave(&node->clients_lock, flags);
+			list_for_each_entry(commit, &node->clients, list) {
+				struct nvmap_client *client =
+					get_client_from_carveout_commit(node, commit);
+				direct_client_stringify(client);
+				printk(" %10u\n", commit->commit);
+				direct_allocations_stringify(client);
+				printk("\n");
+				total += commit->commit;
+			}
+			printk("%-16s %-16s %8u %10u\n", "total", "", 0, total);
+			spin_unlock_irqrestore(&node->clients_lock, flags);
+		}
+	} else {
+		printk("Cannot dump the nvmap because nvmap_dev is NULL!!! ");
+	}
+}
+
+void dump_client_nvmap()
+{
+	if (nvmap_dev) {
+		int i;
+		for (i = 0; i < nvmap_dev->nr_carveouts; i++) {
+			struct nvmap_carveout_node *node = &nvmap_dev->heaps[i];
+			struct nvmap_carveout_commit *commit;
+			unsigned long flags;
+			unsigned int total = 0;
+
+			spin_lock_irqsave(&node->clients_lock, flags);
+			list_for_each_entry(commit, &node->clients, list) {
+				struct nvmap_client *client =
+				get_client_from_carveout_commit(node, commit);
+				direct_client_stringify(client);
+				printk(" %10u\n", commit->commit);
+				total += commit->commit;
+			}
+			printk("%-16s %-16s %8u %10u\n", "total", "", 0, total);
+			spin_unlock_irqrestore(&node->clients_lock, flags);
+		}
+	} else {
+		printk("Cannot dump the nvmap because nvmap_dev is NULL!!! ");
+	}
+}
+
+void dump_nvmap()
+{
+	printk("================== allocations ==================\n");
+	dump_allocations_nvmap();
+	printk("================== clients ==================\n");
+	dump_client_nvmap();
+}
 
 static int nvmap_probe(struct platform_device *pdev)
 {

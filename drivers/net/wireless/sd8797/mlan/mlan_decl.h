@@ -27,7 +27,7 @@ Change log:
 #define _MLAN_DECL_H_
 
 /** MLAN release version */
-#define MLAN_RELEASE_VERSION		"311"
+#define MLAN_RELEASE_VERSION		"303"
 
 /** Re-define generic data types for MLAN/MOAL */
 /** Signed char (1-byte) */
@@ -136,18 +136,10 @@ typedef t_s32 t_sval;
 /** This is current limit on Maximum Rx AMPDU allowed */
 #define MLAN_MAX_RX_BASTREAM_SUPPORTED     16
 
-#ifdef STA_SUPPORT
 /** Default Win size attached during ADDBA request */
-#define MLAN_STA_AMPDU_DEF_TXWINSIZE       16
+#define MLAN_AMPDU_DEF_TXWINSIZE        32
 /** Default Win size attached during ADDBA response */
-#define MLAN_STA_AMPDU_DEF_RXWINSIZE       32
-#endif /* STA_SUPPORT */
-#ifdef UAP_SUPPORT
-/** Default Win size attached during ADDBA request */
-#define MLAN_UAP_AMPDU_DEF_TXWINSIZE       32
-/** Default Win size attached during ADDBA response */
-#define MLAN_UAP_AMPDU_DEF_RXWINSIZE       16
-#endif /* UAP_SUPPORT */
+#define MLAN_AMPDU_DEF_RXWINSIZE        16
 /** Block ack timeout value */
 #define MLAN_DEFAULT_BLOCK_ACK_TIMEOUT  0xffff
 /** Maximum Tx Win size configured for ADDBA request [10 bits] */
@@ -634,8 +626,6 @@ typedef MLAN_PACK_START struct _custom_ie
     t_u8 ie_buffer[MAX_IE_SIZE];
 } MLAN_PACK_END custom_ie;
 
-/** Max IE index to FW */
-#define MAX_MGMT_IE_INDEX_TO_FW         4
 /** Max IE index per BSS */
 #define MAX_MGMT_IE_INDEX               16
 
@@ -669,7 +659,7 @@ typedef MLAN_PACK_START struct _tlvbuf_custom_ie
     /** Length */
     t_u16 len;
     /** IE data */
-    custom_ie ie_data_list[MAX_MGMT_IE_INDEX_TO_FW];
+    custom_ie ie_data_list[MAX_MGMT_IE_INDEX];
     /** Max mgmt IE TLV */
     tlvbuf_max_mgmt_ie max_mgmt_ie;
 } MLAN_PACK_END mlan_ds_misc_custom_ie;

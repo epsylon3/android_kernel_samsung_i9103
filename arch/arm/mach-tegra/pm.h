@@ -56,11 +56,17 @@ struct tegra_suspend_platform_data {
 	unsigned long cpu_off_timer;	/* CPU power off time us, LP2/LP1 */
 	unsigned long core_timer;  /* core power good time in ticks,  LP0 */
 	unsigned long core_off_timer;	/* core power off time ticks, LP0 */
+	unsigned long wake_enb;    /* mask of enabled wake pads */
+	unsigned long wake_high;   /* high-level-triggered wake pads */
+	unsigned long wake_low;    /* low-level-triggered wake pads */
+	unsigned long wake_any;    /* any-edge-triggered wake pads */
 	bool corereq_high;         /* Core power request active-high */
 	bool sysclkreq_high;       /* System clock request is active-high */
-	bool combined_req;         /* if core & CPU power requests are combined */
+	bool separate_req;         /* Core & CPU power request are separate */
 	enum tegra_suspend_mode suspend_mode;
-	unsigned long cpu_lp2_min_residency; /* Min LP2 state residency in us */
+	/* TODO: Remove the following after proper merge with TOT HC */
+	bool combined_req;         /* Combined core & CPU power requests. */
+	unsigned long cpu_lp2_min_residency; /* Min LP2 state residency(us) */
 	void (*board_suspend)(int lp_state, enum suspend_stage stg);
 	/* lp_state = 0 for LP0 state, 1 for LP1 state, 2 for LP2 state */
 	void (*board_resume)(int lp_state, enum resume_stage stg);
@@ -80,6 +86,7 @@ unsigned long tegra_cpu_lp2_min_residency(void);
 void tegra_clear_cpu_in_lp2(int cpu);
 bool tegra_set_cpu_in_lp2(int cpu);
 
+unsigned int tegra_get_jack_current_suspend_mode(void);
 int tegra_suspend_dram(enum tegra_suspend_mode mode, unsigned int flags);
 
 #define FLOW_CTRL_CLUSTER_CONTROL \
@@ -234,5 +241,8 @@ extern unsigned long  debug_uart_port_base;
 extern struct clk *debug_uart_clk;
 void tegra_console_uart_suspend(void);
 void tegra_console_uart_resume(void);
+int tegra_get_current_suspend_mode(void);
+extern int Is_call_active(void);
 
 #endif /* _MACH_TEGRA_PM_H_ */
+

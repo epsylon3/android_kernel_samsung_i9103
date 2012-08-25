@@ -25,7 +25,7 @@
 #include <linux/semaphore.h>
 
 #include <linux/nvhost.h>
-#include <linux/nvmap.h>
+#include <mach/nvmap.h>
 #include <linux/list.h>
 
 struct nvhost_syncpt;
@@ -48,7 +48,7 @@ struct nvhost_job;
 
 struct nvmap_client_handle {
 	struct nvmap_client *client;
-	struct nvmap_handle_ref *handle;
+	struct nvmap_handle *handle;
 };
 
 struct push_buffer {
@@ -95,6 +95,7 @@ struct nvhost_cdma {
 	unsigned int first_get;		/* DMAGET value, where submit begins */
 	unsigned int last_put;		/* last value written to DMAPUT */
 	struct push_buffer push_buffer;	/* channel's push buffer */
+	struct syncpt_buffer syncpt_buffer; /* syncpt incr buffer */
 	struct list_head sync_queue;	/* job queue */
 	struct buffer_timeout timeout;	/* channel's timeout state/wq */
 	bool running;
@@ -103,8 +104,10 @@ struct nvhost_cdma {
 
 #define cdma_to_channel(cdma) container_of(cdma, struct nvhost_channel, cdma)
 #define cdma_to_dev(cdma) nvhost_get_host(cdma_to_channel(cdma)->dev)
+#define cdma_op(cdma) (cdma_to_dev(cdma)->op.cdma)
 #define cdma_to_nvmap(cdma) ((cdma_to_dev(cdma))->nvmap)
 #define pb_to_cdma(pb) container_of(pb, struct nvhost_cdma, push_buffer)
+#define cdma_pb_op(cdma) (cdma_to_dev(cdma)->op.push_buffer)
 
 int	nvhost_cdma_init(struct nvhost_cdma *cdma);
 void	nvhost_cdma_deinit(struct nvhost_cdma *cdma);
@@ -113,7 +116,7 @@ int	nvhost_cdma_begin(struct nvhost_cdma *cdma, struct nvhost_job *job);
 void	nvhost_cdma_push(struct nvhost_cdma *cdma, u32 op1, u32 op2);
 void	nvhost_cdma_push_gather(struct nvhost_cdma *cdma,
 		struct nvmap_client *client,
-		struct nvmap_handle_ref *handle, u32 offset, u32 op1, u32 op2);
+		struct nvmap_handle *handle, u32 offset, u32 op1, u32 op2);
 void	nvhost_cdma_end(struct nvhost_cdma *cdma,
 		struct nvhost_job *job);
 void	nvhost_cdma_update(struct nvhost_cdma *cdma);

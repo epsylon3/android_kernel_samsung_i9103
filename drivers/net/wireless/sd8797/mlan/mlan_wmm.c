@@ -946,6 +946,8 @@ wlan_dequeue_tx_packet(pmlan_adapter pmadapter)
     t_u8 ra[MLAN_MAC_ADDR_LENGTH];
     int tid_del = 0;
     int tid = 0;
+    t_u8 avail_ports = 0;
+    int i;
 
     ENTER();
 
@@ -972,6 +974,24 @@ wlan_dequeue_tx_packet(pmlan_adapter pmadapter)
     tid = wlan_get_tid(priv->adapter, ptr);
     if (tid >= MAX_NUM_TID)
         tid = wlan_wmm_downgrade_tid(priv, tid);
+
+    for (i = 1; i < pmadapter->mp_end_port; i++) {
+        if ((pmadapter->mp_wr_bitmap >> i) & 1)
+            avail_ports++;
+    }
+
+    PRINTM(MINFO,
+           "mp_wr_bitmap=0x%08x avail_ports=%d tid=%d tx_eligibility[%d]=%d\n",
+           pmadapter->mp_wr_bitmap, avail_ports,
+           tid, tid, pmadapter->tx_eligibility[tid]);
+
+    if (avail_ports < pmadapter->tx_eligibility[tid]) {
+        pmadapter->callbacks.moal_spin_unlock(pmadapter->pmoal_handle,
+                                              priv->wmm.ra_list_spinlock);
+        pmadapter->data_sent = MTRUE;
+        LEAVE();
+        return MLAN_STATUS_FAILURE;
+    }
 
     if (wlan_is_ptr_processed(priv, ptr)) {
         wlan_send_processed_packet(priv, ptr, ptrindex);
@@ -1387,22 +1407,8 @@ wlan_wmm_init(pmlan_adapter pmadapter)
                 = priv->aggr_prio_tbl[7].ampdu_user = BA_STREAM_NOT_ALLOWED;
 
             priv->add_ba_param.timeout = MLAN_DEFAULT_BLOCK_ACK_TIMEOUT;
-#ifdef STA_SUPPORT
-            if (priv->bss_type == MLAN_BSS_TYPE_STA) {
-                priv->add_ba_param.tx_win_size = MLAN_STA_AMPDU_DEF_TXWINSIZE;
-                priv->add_ba_param.rx_win_size = MLAN_STA_AMPDU_DEF_RXWINSIZE;
-            }
-#endif
-#ifdef UAP_SUPPORT
-            if (priv->bss_type == MLAN_BSS_TYPE_UAP
-#ifdef WIFI_DIRECT_SUPPORT
-                || priv->bss_type == MLAN_BSS_TYPE_WIFIDIRECT
-#endif
-                ) {
-                priv->add_ba_param.tx_win_size = MLAN_UAP_AMPDU_DEF_TXWINSIZE;
-                priv->add_ba_param.rx_win_size = MLAN_UAP_AMPDU_DEF_RXWINSIZE;
-            }
-#endif
+            priv->add_ba_param.tx_win_size = MLAN_AMPDU_DEF_TXWINSIZE;
+            priv->add_ba_param.rx_win_size = MLAN_AMPDU_DEF_RXWINSIZE;
             priv->add_ba_param.tx_amsdu = MTRUE;
             priv->add_ba_param.rx_amsdu = MTRUE;
             memset(priv->adapter, priv->rx_seq, 0xff, sizeof(priv->rx_seq));
@@ -1879,7 +1885,8 @@ wlan_wmm_process_association_req(pmlan_private priv,
 
     if ((priv->wmm_required
          || (pHTCap && (pHTCap->ieee_hdr.element_id == HT_CAPABILITY)
-             && (priv->config_bands & BAND_GN || priv->config_bands & BAND_AN))
+             && (priv->adapter->config_bands & BAND_GN
+                 || priv->adapter->config_bands & BAND_AN))
         )
         && pWmmIE->vend_hdr.element_id == WMM_IE) {
         pwmm_tlv = (MrvlIEtypes_WmmParamSet_t *) * ppAssocBuf;
@@ -2008,12 +2015,14 @@ wlan_wmm_select_queue(mlan_private * pmpriv, t_u8 tid)
  *  @param priv			Pointer to the mlan_private driver data struct
  *  @param ra_list_head	ra list header
  *  @param tid          tid
+ *  @param tx_pause     tx_pause flag
  *
  *  @return		N/A
  */
 static INLINE t_u8
 wlan_del_tx_pkts_in_ralist(pmlan_private priv,
-                           mlan_list_head * ra_list_head, int tid)
+                           mlan_list_head * ra_list_head,
+                           int tid, t_u8 tx_pause)
 {
     raListTbl *ra_list = MNULL;
     pmlan_adapter pmadapter = priv->adapter;
@@ -2025,14 +2034,15 @@ wlan_del_tx_pkts_in_ralist(pmlan_private priv,
                                      MNULL, MNULL);
     while (ra_list && ra_list != (raListTbl *) ra_list_head) {
         if (ra_list->total_pkts && (ra_list->tx_pause ||
-                                    (ra_list->total_pkts > RX_LOW_THRESHOLD))) {
+                                    (!tx_pause &&
+                                     ra_list->total_pkts > RX_LOW_THRESHOLD))) {
             if ((pmbuf =
                  (pmlan_buffer) util_dequeue_list(pmadapter->pmoal_handle,
                                                   &ra_list->buf_head, MNULL,
                                                   MNULL))) {
                 PRINTM(MDATA,
                        "Drop pkts: tid=%d tx_pause=%d pkts=%d brd_pkts=%d %02x:%02x:%02x:%02x:%02x:%02x\n",
-                       tid, ra_list->tx_pause, ra_list->total_pkts,
+                       tid, tx_pause, ra_list->total_pkts,
                        pmadapter->pending_bridge_pkts, ra_list->ra[0],
                        ra_list->ra[1], ra_list->ra[2], ra_list->ra[3],
                        ra_list->ra[4], ra_list->ra[5]);
@@ -2067,14 +2077,17 @@ wlan_drop_tx_pkts(pmlan_private priv)
 {
     int j;
     static int i = 0;
+    t_u8 tx_pause = 0;
     pmlan_adapter pmadapter = priv->adapter;
     pmadapter->callbacks.moal_spin_lock(pmadapter->pmoal_handle,
                                         priv->wmm.ra_list_spinlock);
+    if (wlan_get_tx_pause_station_entry(priv))
+        tx_pause = 1;
     for (j = 0; j < MAX_NUM_TID; j++, i++) {
         if (i == MAX_NUM_TID)
             i = 0;
         if (wlan_del_tx_pkts_in_ralist
-            (priv, &priv->wmm.tid_tbl_ptr[i].ra_list, i)) {
+            (priv, &priv->wmm.tid_tbl_ptr[i].ra_list, i, tx_pause)) {
             i++;
             break;
         }

@@ -27,8 +27,6 @@ Change log:
 #ifndef _MLAN_IEEE_H_
 #define _MLAN_IEEE_H_
 
-/** FIX IES size in beacon buffer */
-#define WLAN_802_11_FIXED_IE_SIZE 			12
 /** WLAN supported rates */
 #define WLAN_SUPPORTED_RATES                14
 
@@ -1181,8 +1179,6 @@ typedef MLAN_PACK_START struct
     t_u8 rssi_threshold;
     /** SNR threshold */
     t_u8 snr_threshold;
-    /** repeat count */
-    t_u16 repeat_count;
     /** SSID filter list used in the to limit the scan results */
     wlan_user_scan_ssid ssid_list[MRVDRV_MAX_SSID_LIST_LENGTH];
     /** Variable number (fixed maximum) of channels to scan up */

@@ -28,7 +28,7 @@
 #include <linux/slab.h>
 #include <linux/err.h>
 
-#include <linux/nvmap.h>
+#include <mach/nvmap.h>
 #include "nvmap.h"
 #include "nvmap_heap.h"
 #include "nvmap_common.h"
@@ -159,6 +159,8 @@ static inline unsigned int order_of(size_t len, size_t min_shift)
 	len = 2 * DIV_ROUND_UP(len, (1 << min_shift)) - 1;
 	return fls(len)-1;
 }
+
+extern void dump_nvmap();
 
 /* returns the free size in bytes of the buddy heap; must be called while
  * holding the parent heap's lock. */
@@ -866,6 +868,10 @@ struct nvmap_heap_block *nvmap_heap_alloc(struct nvmap_heap *h,
 			pr_err("Full compaction triggered!\n");
 			nvmap_heap_compact(h, len, false);
 			b = do_heap_alloc(h, len, align, prot, 0);
+			if (!b) {
+				pr_err("Full compaction failed!!!!\n");
+				dump_nvmap();
+			}
 		}
 	}
 #else

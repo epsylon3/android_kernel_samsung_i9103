@@ -519,7 +519,7 @@ tegra3_cpu_clk32k:
 
 	/* enable PLLM via PMC in LP0 */
 	ldr	r0, [r4, #PMC_PLLP_WB0_OVERRIDE]
-	orr	r0, r0, #((1 << 12) | (1 << 11))
+	orr	r0, r0, #((1<<12) | (1 << 11))
 	str	r0, [r4, #PMC_PLLP_WB0_OVERRIDE]
 	mov	pc, lr
 
@@ -549,7 +549,7 @@ lp1_clocks_prepare:
 
 	/* disable PLLM via PMC in LP1 */
 	ldr	r0, [r4, #PMC_PLLP_WB0_OVERRIDE]
-	bic	r0, r0, #(1 << 12)
+	bic	r0, r0, #(1<<12)
 	str	r0, [r4, #PMC_PLLP_WB0_OVERRIDE]
 	b	powerdown_pll_pcx
 

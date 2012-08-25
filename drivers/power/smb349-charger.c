@@ -170,28 +170,17 @@ static int smb349_configure_otg(struct i2c_client *client, int enable)
 	}
 
 	if (enable) {
-		/* Configure PGOOD to be active low if no 5V on VBUS */
-		ret = smb349_read(client, SMB349_STS_REG_C);
+		/* Configure PGOOD to be active low */
+		ret = smb349_read(client, SMB349_SYSOK_USB3);
 		if (ret < 0) {
 			dev_err(&client->dev, "%s: err %d\n", __func__, ret);
 			goto error;
 		}
 
-		if (!(ret & 0x01)) {
-			ret = smb349_read(client, SMB349_SYSOK_USB3);
-			if (ret < 0) {
-				dev_err(&client->dev, "%s: err %d\n",
-					__func__, ret);
-				goto error;
-			}
-
-			ret = smb349_write(client, SMB349_SYSOK_USB3,
-						(ret & (~(1))));
-			if (ret < 0) {
-				dev_err(&client->dev, "%s: err %d\n",
-					__func__, ret);
-				goto error;
-			}
+		ret = smb349_write(client, SMB349_SYSOK_USB3, (ret & (~(1))));
+		if (ret < 0) {
+			dev_err(&client->dev, "%s: err %d\n", __func__, ret);
+			goto error;
 		}
 
 		/* Enable OTG */
@@ -398,7 +387,7 @@ static int smb349_enable_charging(struct regulator_dev *rdev,
 			dev_err(&client->dev, "%s() error in configuring"
 				"charger..\n", __func__);
 			return ret;
-		}
+	}
 		charger->chrg_type = NONE;
 	} else {
 		ret =  smb349_read(client, SMB349_STS_REG_D);
@@ -515,8 +504,8 @@ static int __devinit smb349_probe(struct i2c_client *client,
 		if (ret < 0) {
 			dev_err(&client->dev, "%s() error in configuring"
 				"charger..\n", __func__);
-			goto error;
-		}
+		goto error;
+	}
 	} else {
 		/* disable charger */
 		ret = smb349_configure_charger(client, 0);

@@ -36,10 +36,13 @@
 #include <asm/pgtable.h>
 
 #include <mach/iovmm.h>
-#include <linux/nvmap.h>
+#include <mach/nvmap.h>
 
+#include <linux/vmstat.h>
+#include <linux/swap.h>
 #include <linux/shrinker.h>
 #include <linux/moduleparam.h>
+
 #include "nvmap.h"
 #include "nvmap_mru.h"
 #include "nvmap_common.h"
@@ -173,7 +176,7 @@ static int nvmap_page_pool_get_unused_pages(void)
 		total += nvmap_page_pool_get_available_count(&share->pools[i]);
 
 	return total;
-}
+		}
 
 static void nvmap_page_pool_resize(struct nvmap_page_pool *pool, int size)
 {
@@ -192,7 +195,7 @@ repeat:
 		nvmap_page_pool_unlock(pool);
 		pages_to_release = available_pages - size;
 		goto repeat;
-	}
+		}
 
 	if (size == 0) {
 		vfree(pool->page_array);
@@ -223,7 +226,7 @@ fail:
 	pr_err("failed");
 exit:
 	nvmap_page_pool_unlock(pool);
-}
+	}
 
 static int nvmap_page_pool_shrink(struct shrinker *shrinker,
 				  struct shrink_control *sc)
@@ -277,9 +280,9 @@ static int shrink_set(const char *arg, const struct kernel_param *kp)
 	param_set_bool(arg, kp);
 
 	if (shrink_pp) {
-		t1 = cpu_clock(cpu);
+	t1 = cpu_clock(cpu);
 		shrink_page_pools(&total_pages, &available_pages);
-		t2 = cpu_clock(cpu);
+	t2 = cpu_clock(cpu);
 		pr_info("shrink page pools: time=%lldns, "
 			"total_pages_released=%d, free_pages_available=%d",
 			t2-t1, total_pages, available_pages);
@@ -399,8 +402,8 @@ int nvmap_page_pool_init(struct nvmap_page_pool *pool, int flags)
 	if (!pool_size[flags] && !CONFIG_NVMAP_PAGE_POOL_SIZE)
 		/* Use 3/8th of total ram for page pools.
 		 * 1/8th for uc, 1/8th for wc and 1/8th for iwb.
-		 */
-		pool->max_pages = info.totalram >> 3;
+	 */
+	pool->max_pages = info.totalram >> 3;
 	else
 		pool->max_pages = CONFIG_NVMAP_PAGE_POOL_SIZE;
 
@@ -498,12 +501,12 @@ void _nvmap_handle_free(struct nvmap_handle *h)
 	if (h->flags < NVMAP_NUM_POOLS)
 		pool = &share->pools[h->flags];
 
-	while (page_index < nr_page) {
-		if (!nvmap_page_pool_release(pool,
-		    h->pgalloc.pages[page_index]))
-			break;
-		page_index++;
-	}
+		while (page_index < nr_page) {
+			if (!nvmap_page_pool_release(pool,
+			    h->pgalloc.pages[page_index]))
+				break;
+			page_index++;
+		}
 #endif
 
 	if (page_index == nr_page)
@@ -748,6 +751,10 @@ static const unsigned int heap_policy_large[] = {
 	0,
 };
 
+/* Do not override single page policy if there is not much space to
+avoid invoking system oom killer. */
+#define NVMAP_SMALL_POLICY_SYSMEM_THRESHOLD 50000000
+
 int nvmap_alloc_handle_id(struct nvmap_client *client,
 			  unsigned long id, unsigned int heap_mask,
 			  size_t align, unsigned int flags)
@@ -785,7 +792,15 @@ int nvmap_alloc_handle_id(struct nvmap_client *client,
 		if (heap_mask & NVMAP_HEAP_IOVMM)
 			heap_mask |= NVMAP_HEAP_SYSMEM;
 		else if (heap_mask & NVMAP_HEAP_CARVEOUT_GENERIC) {
-			heap_mask |= NVMAP_HEAP_SYSMEM;
+			/* Calculate size of free physical pages
+			 * managed by kernel */
+			unsigned long freeMem =
+				(global_page_state(NR_FREE_PAGES) +
+				global_page_state(NR_FILE_PAGES) -
+				total_swapcache_pages) << PAGE_SHIFT;
+
+			if (freeMem > NVMAP_SMALL_POLICY_SYSMEM_THRESHOLD)
+				heap_mask |= NVMAP_HEAP_SYSMEM;
 		}
 	}
 #endif
@@ -873,11 +888,11 @@ void nvmap_free_handle_id(struct nvmap_client *client, unsigned long id)
 	}
 
 	nvmap_ref_unlock(client);
-
+/*
 	if (pins)
 		nvmap_err(client, "%s freeing pinned handle %p\n",
 			  current->group_leader->comm, h);
-
+*/
 	while (pins--)
 		nvmap_unpin_handles(client, &ref->handle, 1);
 

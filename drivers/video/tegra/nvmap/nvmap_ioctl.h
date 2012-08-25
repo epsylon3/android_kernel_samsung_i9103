@@ -27,7 +27,7 @@
 
 #ifdef  __KERNEL__
 #include <linux/file.h>
-#include <linux/nvmap.h>
+#include <mach/nvmap.h>
 #endif
 
 enum {

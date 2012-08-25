@@ -1454,7 +1454,7 @@ static int __xipram do_write_buffer(struct map_info *map, struct flchip *chip,
 			datum = map_word_load_partial(map, edat,
 					buf, 0, epilog);
 		else
-			datum = map_word_load(map, buf);
+		datum = map_word_load(map, buf);
 		map_write(map, datum, adr + z);
 
 		z += map_bankwidth(map);

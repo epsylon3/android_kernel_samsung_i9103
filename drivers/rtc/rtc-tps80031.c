@@ -64,7 +64,7 @@ struct tps80031_rtc {
 	unsigned long		epoch_start;
 	int			irq;
 	struct rtc_device	*rtc;
-	u8 			alarm_irq_enabled;
+	u8			alarm_irq_enabled;
 };
 
 static int tps80031_read_regs(struct device *dev, int reg, int len,

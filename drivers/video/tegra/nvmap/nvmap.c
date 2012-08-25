@@ -32,7 +32,7 @@
 #include <asm/tlbflush.h>
 
 #include <mach/iovmm.h>
-#include <linux/nvmap.h>
+#include <mach/nvmap.h>
 
 #include "nvmap.h"
 #include "nvmap_mru.h"
@@ -230,9 +230,11 @@ void nvmap_unpin_ids(struct nvmap_client *client,
 			nvmap_ref_unlock(client);
 
 			if (!e) {
+				/*
 				nvmap_err(client, "%s unpinning unpinned "
 					  "handle %08lx\n",
 					  current->group_leader->comm, ids[i]);
+				  */
 			} else {
 				do_wake |= handle_unpin(client, h, false);
 			}

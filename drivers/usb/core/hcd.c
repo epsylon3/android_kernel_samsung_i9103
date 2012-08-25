@@ -2012,7 +2012,11 @@ int hcd_bus_resume(struct usb_device *rhdev, pm_message_t msg)
 	clear_bit(HCD_FLAG_WAKEUP_PENDING, &hcd->flags);
 	if (status == 0) {
 		/* TRSMRCY = 10 msec */
+#if defined(CONFIG_LINK_DEVICE_HSIC)
+		usleep_range(5000, 10000);
+#else
 		msleep(10);
+#endif
 		spin_lock_irq(&hcd_root_hub_lock);
 		if (!HCD_DEAD(hcd)) {
 			usb_set_device_state(rhdev, rhdev->actconfig

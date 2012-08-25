@@ -36,7 +36,7 @@
 #include <linux/nvhost.h>
 #include <linux/nvhost_ioctl.h>
 
-#include <linux/nvmap.h>
+#include <mach/nvmap.h>
 #include <mach/gpufuse.h>
 #include <mach/hardware.h>
 #include <mach/iomap.h>
@@ -50,10 +50,28 @@
 #include "nvhost_job.h"
 #include "nvhost_hwctx.h"
 
-void nvhost_read_module_regs(struct nvhost_device *ndev,
+static int validate_reg(struct nvhost_device *ndev, u32 offset, int count)
+{
+	struct resource *r = nvhost_get_resource(ndev, IORESOURCE_MEM, 0);
+	int err = 0;
+
+	if (offset + 4 * count > resource_size(r)
+			|| (offset + 4 * count < offset))
+		err = -EPERM;
+
+	return err;
+}
+
+int nvhost_read_module_regs(struct nvhost_device *ndev,
 			u32 offset, int count, u32 *values)
 {
 	void __iomem *p = ndev->aperture + offset;
+	int err;
+
+	/* verify offset */
+	err = validate_reg(ndev, offset, count);
+	if (err)
+		return err;
 
 	nvhost_module_busy(ndev);
 	while (count--) {
@@ -62,12 +80,20 @@ void nvhost_read_module_regs(struct nvhost_device *ndev,
 	}
 	rmb();
 	nvhost_module_idle(ndev);
+
+	return 0;
 }
 
-void nvhost_write_module_regs(struct nvhost_device *ndev,
+int nvhost_write_module_regs(struct nvhost_device *ndev,
 			u32 offset, int count, const u32 *values)
 {
 	void __iomem *p = ndev->aperture + offset;
+	int err;
+
+	/* verify offset */
+	err = validate_reg(ndev, offset, count);
+	if (err)
+		return err;
 
 	nvhost_module_busy(ndev);
 	while (count--) {
@@ -76,6 +102,8 @@ void nvhost_write_module_regs(struct nvhost_device *ndev,
 	}
 	wmb();
 	nvhost_module_idle(ndev);
+
+	return 0;
 }
 
 struct nvhost_channel_userctx {
@@ -140,7 +168,11 @@ static int nvhost_channelopen(struct inode *inode, struct file *filp)
 	priv->priority = NVHOST_PRIORITY_MEDIUM;
 	priv->clientid = atomic_add_return(1,
 			&nvhost_get_host(ch->dev)->clientid);
-	priv->timeout = MAX_STUCK_CHECK_COUNT * SYNCPT_CHECK_PERIOD;
+
+	priv->job = nvhost_job_alloc(ch, priv->hwctx, &priv->hdr,
+			NULL, priv->priority, priv->clientid);
+	if (!priv->job)
+		goto fail;
 
 	return 0;
 fail:
@@ -161,7 +193,7 @@ static int set_submit(struct nvhost_channel_userctx *ctx)
 		return -EFAULT;
 	}
 
-	ctx->job = nvhost_job_alloc(ctx->ch,
+	ctx->job = nvhost_job_realloc(ctx->job,
 			ctx->hwctx,
 			&ctx->hdr,
 			ctx->nvmap,
@@ -183,11 +215,6 @@ static void reset_submit(struct nvhost_channel_userctx *ctx)
 	ctx->hdr.num_relocs = 0;
 	ctx->num_relocshifts = 0;
 	ctx->hdr.num_waitchks = 0;
-
-	if (ctx->job) {
-		nvhost_job_put(ctx->job);
-		ctx->job = NULL;
-	}
 }
 
 static ssize_t nvhost_channelwrite(struct file *filp, const char __user *buf,
@@ -241,17 +268,13 @@ static ssize_t nvhost_channelwrite(struct file *filp, const char __user *buf,
 			consumed = sizeof(struct nvhost_reloc);
 			if (remaining < consumed)
 				break;
-			if (copy_from_user(&job->pinarray[job->num_relocs],
+			if (copy_from_user(&job->pinarray[job->num_pins],
 					buf, consumed)) {
 				err = -EFAULT;
 				break;
 			}
-			trace_nvhost_channel_write_reloc(chname,
-				job->pinarray[job->num_relocs].patch_mem,
-				job->pinarray[job->num_relocs].patch_offset,
-				job->pinarray[job->num_relocs].pin_mem,
-				job->pinarray[job->num_relocs].pin_offset);
-			job->num_relocs++;
+			trace_nvhost_channel_write_reloc(chname);
+			job->num_pins++;
 			hdr->num_relocs--;
 		} else if (hdr->num_waitchks) {
 			int numwaitchks =
@@ -273,7 +296,7 @@ static ssize_t nvhost_channelwrite(struct file *filp, const char __user *buf,
 			hdr->num_waitchks -= numwaitchks;
 		} else if (priv->num_relocshifts) {
 			int next_shift =
-				job->num_relocs - priv->num_relocshifts;
+				job->num_pins - priv->num_relocshifts;
 			consumed = sizeof(struct nvhost_reloc_shift);
 			if (remaining < consumed)
 				break;
@@ -341,17 +364,15 @@ static int nvhost_ioctl_channel_flush(
 	if (err)
 		nvhost_job_unpin(ctx->job);
 
-	nvhost_job_put(ctx->job);
-	ctx->job = NULL;
-
 	return err;
 }
 
-static int nvhost_ioctl_channel_read_3d_reg(struct nvhost_channel_userctx *ctx,
+static int nvhost_ioctl_channel_read_3d_reg(
+	struct nvhost_channel_userctx *ctx,
 	struct nvhost_read_3d_reg_args *args)
 {
-	BUG_ON(!channel_op().read3dreg);
-	return channel_op().read3dreg(ctx->ch, ctx->hwctx,
+	BUG_ON(!channel_op(ctx->ch).read3dreg);
+	return channel_op(ctx->ch).read3dreg(ctx->ch, ctx->hwctx,
 			args->offset, &args->value);
 }
 
@@ -540,11 +561,7 @@ int nvhost_client_device_init(struct nvhost_device *dev)
 {
 	int err;
 	struct nvhost_master *nvhost_master = nvhost_get_host(dev);
-	struct nvhost_channel *ch;
-
-	ch = nvhost_alloc_channel(dev->index);
-	if (ch == NULL)
-		return -ENODEV;
+	struct nvhost_channel *ch = &nvhost_master->channels[dev->index];
 
 	/* store the pointer to this device for channel */
 	ch->dev = dev;
@@ -567,7 +584,6 @@ int nvhost_client_device_init(struct nvhost_device *dev)
 
 fail:
 	/* Add clean-up */
-	nvhost_free_channel(ch);
 	return err;
 }
 
